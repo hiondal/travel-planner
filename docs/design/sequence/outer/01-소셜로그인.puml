@@ -1,0 +1,96 @@
+@startuml
+!theme mono
+
+actor "여행자" as user
+participant "프론트엔드\n(React Native)" as fe
+participant "API Gateway" as gw
+participant "AUTH 서비스" as auth
+participant "Google OAuth" as goauth
+participant "Apple Sign In" as aauth
+
+user -> fe: 앱 실행 (로그인 화면)
+activate fe
+
+alt Google 로그인
+    user -> fe: Google 로그인 버튼 탭
+    activate fe
+    fe -> goauth: OAuth 인증 요청\n(client_id, redirect_uri, scope)
+    activate goauth
+    goauth -> user: Google 인증 화면 표시
+    activate user
+    user -> goauth: 계정 선택 및 인증
+    deactivate user
+    goauth --> fe: Authorization Code 반환
+    deactivate goauth
+
+    fe -> gw: POST /auth/login\n(provider=google, auth_code)
+    activate gw
+    gw -> auth: 요청 전달\n(로그인 타입: Google)
+    activate auth
+    auth -> goauth: Authorization Code 검증\n(code, client_id, client_secret)
+    activate goauth
+    goauth --> auth: Google 사용자 정보\n(id, email, name, picture)
+    deactivate goauth
+
+    auth -> auth: 사용자 신규 등록\n또는 기존 사용자 조회
+    auth -> auth: JWT Access Token(30분)\n+ Refresh Token(7일) 발급\n+ 닉네임/프로필 이미지 저장
+    auth --> gw: 200 OK\n(access_token, refresh_token, user_info)
+    deactivate auth
+    gw --> fe: JWT Token + 사용자 정보
+    deactivate gw
+
+    fe -> fe: 로컬 스토리지에 Token 저장
+    fe --> user: 로그인 완료\n(메인 화면으로 이동)
+    deactivate fe
+
+else Apple 로그인
+    user -> fe: Apple 로그인 버튼 탭
+    activate fe
+    fe -> aauth: Sign In with Apple 요청
+    activate aauth
+    aauth -> user: Apple 인증 화면 표시
+    activate user
+    user -> aauth: 계정 인증\n(+ Hide My Email 옵션)
+    deactivate user
+    aauth --> fe: Identity Token(JWT) + User 정보 반환
+    deactivate aauth
+
+    fe -> gw: POST /auth/login\n(provider=apple, identity_token)
+    activate gw
+    gw -> auth: 요청 전달\n(로그인 타입: Apple)
+    activate auth
+    auth -> auth: Identity Token 검증\n(Apple 공개키 기반)
+    auth -> auth: 사용자 신규 등록\n또는 기존 사용자 조회
+    auth -> auth: JWT Access Token(30분)\n+ Refresh Token(7일) 발급\n+ 닉네임/프로필 이미지 저장
+    auth --> gw: 200 OK\n(access_token, refresh_token, user_info)
+    deactivate auth
+    gw --> fe: JWT Token + 사용자 정보
+    deactivate gw
+
+    fe -> fe: 로컬 스토리지에 Token 저장
+    fe --> user: 로그인 완료\n(메인 화면으로 이동)
+    deactivate fe
+
+else 로그인 실패
+    user -> fe: 로그인 시도
+    activate fe
+    fe -> gw: 요청 (잘못된 Credential)
+    activate gw
+    gw -> auth: 요청 전달
+    activate auth
+    auth -> auth: 인증 실패 처리
+    auth --> gw: 401 Unauthorized
+    deactivate auth
+    gw --> fe: 인증 실패
+    deactivate gw
+
+    alt 인증 실패
+        fe --> user: "로그인에 실패했습니다.\n다시 시도해주세요" 에러
+    else 네트워크 오류
+        fe --> user: "인터넷 연결을 확인해주세요" 안내
+    end
+    deactivate fe
+
+end
+
+@enduml

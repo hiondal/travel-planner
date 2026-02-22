@@ -1,0 +1,766 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Travel Planner - 사용자 플로우 스크립트</title>
+  <style>
+    :root {
+      --bg: #0A0A0A;
+      --bg-card: #1A1A1A;
+      --bg-card-hover: #242424;
+      --bg-active: #2A1A1A;
+      --text-primary: #F0F0F0;
+      --text-secondary: #8A8A8A;
+      --text-dim: #555;
+      --accent-red: #FF2D2D;
+      --accent-blue: #4A9EFF;
+      --accent-green: #34C759;
+      --accent-yellow: #FFD60A;
+      --accent-purple: #BF5AF2;
+      --radius: 12px;
+      --radius-sm: 8px;
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: var(--bg);
+      color: var(--text-primary);
+      height: 100vh;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* ── Top Bar ── */
+    .top-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px 24px;
+      background: var(--bg-card);
+      border-bottom: 1px solid #222;
+      flex-shrink: 0;
+    }
+    .top-bar__title {
+      font-size: 16px;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .top-bar__title span { color: var(--accent-red); }
+    .top-bar__info {
+      font-size: 12px;
+      color: var(--text-secondary);
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+    .top-bar__keys kbd {
+      background: #333;
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-size: 11px;
+      margin: 0 2px;
+      border: 1px solid #444;
+    }
+
+    /* ── Flow Tabs ── */
+    .flow-tabs {
+      display: flex;
+      gap: 4px;
+      padding: 8px 24px;
+      background: #111;
+      border-bottom: 1px solid #222;
+      overflow-x: auto;
+      flex-shrink: 0;
+    }
+    .flow-tab {
+      padding: 8px 16px;
+      border-radius: 20px;
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      white-space: nowrap;
+      border: 1px solid transparent;
+      background: transparent;
+      color: var(--text-secondary);
+      transition: all 0.2s;
+    }
+    .flow-tab:hover { background: var(--bg-card); color: var(--text-primary); }
+    .flow-tab.active {
+      background: var(--accent-red);
+      color: #fff;
+      border-color: var(--accent-red);
+    }
+    .flow-tab .tab-num {
+      display: inline-block;
+      width: 18px;
+      height: 18px;
+      line-height: 18px;
+      text-align: center;
+      border-radius: 50%;
+      background: rgba(255,255,255,0.15);
+      font-size: 11px;
+      margin-right: 6px;
+    }
+
+    /* ── Main Layout ── */
+    .main {
+      flex: 1;
+      display: flex;
+      overflow: hidden;
+    }
+
+    /* ── Left: Step List ── */
+    .step-list {
+      width: 280px;
+      flex-shrink: 0;
+      background: #111;
+      border-right: 1px solid #222;
+      overflow-y: auto;
+      padding: 16px 0;
+    }
+    .step-list__header {
+      padding: 0 16px 12px;
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--text-dim);
+      text-transform: uppercase;
+      letter-spacing: 1px;
+    }
+    .step-item {
+      display: flex;
+      align-items: flex-start;
+      gap: 12px;
+      padding: 10px 16px;
+      cursor: pointer;
+      transition: all 0.15s;
+      position: relative;
+    }
+    .step-item:hover { background: var(--bg-card); }
+    .step-item.active { background: var(--bg-active); }
+    .step-item.active::before {
+      content: '';
+      position: absolute;
+      left: 0;
+      top: 0;
+      bottom: 0;
+      width: 3px;
+      background: var(--accent-red);
+      border-radius: 0 2px 2px 0;
+    }
+    .step-item__num {
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 12px;
+      font-weight: 700;
+      flex-shrink: 0;
+      background: #2A2A2A;
+      color: var(--text-secondary);
+      border: 1px solid #333;
+    }
+    .step-item.active .step-item__num {
+      background: var(--accent-red);
+      color: #fff;
+      border-color: var(--accent-red);
+    }
+    .step-item.visited .step-item__num {
+      background: #1A2A1A;
+      color: var(--accent-green);
+      border-color: #2A3A2A;
+    }
+    .step-item__text { flex: 1; min-width: 0; }
+    .step-item__name {
+      font-size: 13px;
+      font-weight: 600;
+      margin-bottom: 2px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .step-item__action {
+      font-size: 11px;
+      color: var(--text-secondary);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    /* Arrow between steps */
+    .step-arrow {
+      display: flex;
+      align-items: center;
+      padding: 2px 0 2px 22px;
+      color: var(--text-dim);
+      font-size: 11px;
+      gap: 6px;
+    }
+    .step-arrow svg { flex-shrink: 0; }
+    .step-arrow span {
+      font-size: 10px;
+      color: var(--text-dim);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    /* ── Center: Screenshot ── */
+    .screen-area {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+      position: relative;
+      background: #080808;
+    }
+    .phone-frame {
+      width: 375px;
+      height: 700px;
+      border-radius: 24px;
+      overflow: hidden;
+      border: 2px solid #333;
+      box-shadow: 0 8px 40px rgba(0,0,0,0.5);
+      position: relative;
+      background: var(--bg);
+    }
+    .phone-frame img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      object-position: top;
+      display: block;
+    }
+    .phone-frame .no-img {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      height: 100%;
+      color: var(--text-dim);
+      font-size: 14px;
+    }
+
+    /* Nav Buttons */
+    .nav-btn {
+      position: absolute;
+      top: 50%;
+      transform: translateY(-50%);
+      width: 48px;
+      height: 48px;
+      border-radius: 50%;
+      background: var(--bg-card);
+      border: 1px solid #333;
+      color: var(--text-primary);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.2s;
+      z-index: 10;
+    }
+    .nav-btn:hover { background: var(--bg-card-hover); border-color: var(--accent-red); }
+    .nav-btn:disabled { opacity: 0.3; cursor: default; border-color: #333; }
+    .nav-btn--prev { left: 24px; }
+    .nav-btn--next { right: 24px; }
+
+    /* ── Right: Description ── */
+    .desc-panel {
+      width: 320px;
+      flex-shrink: 0;
+      background: #111;
+      border-left: 1px solid #222;
+      padding: 24px;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+    }
+    .desc-panel__screen-num {
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--accent-red);
+      text-transform: uppercase;
+      letter-spacing: 1px;
+    }
+    .desc-panel__screen-name {
+      font-size: 22px;
+      font-weight: 700;
+      margin-top: 4px;
+    }
+    .desc-panel__divider {
+      height: 1px;
+      background: #222;
+    }
+    .desc-panel__section-title {
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--text-dim);
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      margin-bottom: 8px;
+    }
+    .desc-panel__narration {
+      font-size: 14px;
+      line-height: 1.7;
+      color: var(--text-secondary);
+    }
+    .desc-panel__narration strong { color: var(--text-primary); font-weight: 600; }
+    .desc-panel__action-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 12px;
+      border-radius: 6px;
+      font-size: 12px;
+      font-weight: 600;
+      background: #1A1A2A;
+      color: var(--accent-blue);
+      border: 1px solid #2A2A3A;
+    }
+    .desc-panel__action-badge svg { flex-shrink: 0; }
+    .desc-panel__next-screen {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 14px;
+      border-radius: var(--radius-sm);
+      background: var(--bg-card);
+      border: 1px solid #2A2A2A;
+      cursor: pointer;
+      transition: all 0.2s;
+      font-size: 13px;
+      color: var(--text-primary);
+    }
+    .desc-panel__next-screen:hover {
+      border-color: var(--accent-red);
+      background: var(--bg-card-hover);
+    }
+    .desc-panel__next-label {
+      font-size: 10px;
+      color: var(--text-dim);
+      margin-bottom: 4px;
+    }
+
+    /* ── Bottom: Progress ── */
+    .progress-bar {
+      height: 3px;
+      background: #222;
+      flex-shrink: 0;
+    }
+    .progress-bar__fill {
+      height: 100%;
+      background: var(--accent-red);
+      transition: width 0.3s;
+    }
+
+    /* ── Responsive ── */
+    @media (max-width: 1100px) {
+      .desc-panel { width: 260px; }
+      .step-list { width: 240px; }
+    }
+    @media (max-width: 900px) {
+      .step-list { display: none; }
+    }
+    @media (max-width: 700px) {
+      .desc-panel { display: none; }
+      .phone-frame { width: 300px; height: 560px; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- Top Bar -->
+<div class="top-bar">
+  <div class="top-bar__title">
+    <span>&#9673;</span> Travel Planner &mdash; 사용자 플로우 스크립트
+  </div>
+  <div class="top-bar__info">
+    <span id="stepCounter">1 / 5</span>
+    <span class="top-bar__keys">
+      <kbd>&larr;</kbd> <kbd>&rarr;</kbd> 이동 &nbsp;
+      <kbd>1</kbd>~<kbd>5</kbd> 플로우 전환
+    </span>
+  </div>
+</div>
+
+<!-- Flow Tabs -->
+<div class="flow-tabs" id="flowTabs"></div>
+
+<!-- Main -->
+<div class="main">
+  <!-- Step List (Left) -->
+  <div class="step-list" id="stepList"></div>
+
+  <!-- Screenshot (Center) -->
+  <div class="screen-area">
+    <button class="nav-btn nav-btn--prev" id="btnPrev" onclick="goStep(-1)" aria-label="이전">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m15 18-6-6 6-6"/></svg>
+    </button>
+
+    <div class="phone-frame" id="phoneFrame">
+      <img id="screenImg" src="" alt="화면 스크린샷">
+    </div>
+
+    <button class="nav-btn nav-btn--next" id="btnNext" onclick="goStep(1)" aria-label="다음">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 18 6-6-6-6"/></svg>
+    </button>
+  </div>
+
+  <!-- Description (Right) -->
+  <div class="desc-panel" id="descPanel"></div>
+</div>
+
+<!-- Progress -->
+<div class="progress-bar"><div class="progress-bar__fill" id="progressFill"></div></div>
+
+<script>
+// ─── Flow Data ───
+var FLOWS = [
+  {
+    id: 'onboarding',
+    name: '신규 사용자 온보딩',
+    icon: '&#128075;',
+    steps: [
+      {
+        screen: '05', file: '05-소셜로그인', name: '소셜 로그인',
+        action: 'Google 또는 Apple 버튼 탭',
+        narration: '사용자가 앱을 처음 실행하면 <strong>소셜 로그인</strong> 화면이 나타납니다. Google 또는 Apple 계정으로 <strong>원탭 로그인</strong>이 가능합니다. 별도 회원가입 없이 바로 시작할 수 있어 진입 장벽을 최소화했습니다.',
+        nextLabel: '로그인 완료 →'
+      },
+      {
+        screen: '06', file: '06-온보딩', name: '온보딩 (3단계)',
+        action: '좌우 스와이프 후 "시작하기" 탭',
+        narration: '로그인 후 <strong>3단계 온보딩</strong>을 통해 서비스 핵심 가치를 전달합니다.<br><br>1️ 실시간 상태 모니터링<br>2️ AI 대안 추천<br>3️ 스마트 브리핑<br><br>마지막 단계에서 <strong>"시작하기"</strong> 버튼이 활성화됩니다.',
+        nextLabel: '시작하기 →'
+      },
+      {
+        screen: '13', file: '13-권한동의', name: '권한 동의',
+        action: '"동의하고 계속" 버튼 탭',
+        narration: '위치 기반 서비스를 위해 <strong>위치정보 수집 동의</strong>를 받습니다. 수집 항목, 이용 목적, 보유 기간을 <strong>투명하게 공개</strong>하여 사용자 신뢰를 확보합니다.',
+        nextLabel: '동의 완료 →'
+      },
+      {
+        screen: '07', file: '07-여행일정생성', name: '여행 일정 생성',
+        action: '도시·날짜·동행 유형 입력 후 "생성하기"',
+        narration: '<strong>여행 도시, 날짜, 동행 유형</strong>을 입력하면 AI가 최적 일정을 자동으로 생성합니다. 최소한의 입력으로 완성도 높은 여행 일정을 바로 받아볼 수 있습니다.',
+        nextLabel: '일정 생성 완료 →'
+      },
+      {
+        screen: '01', file: '01-일정표', name: '일정표 (메인)',
+        action: '메인 대시보드 도착',
+        narration: '온보딩이 완료되면 <strong>메인 일정표</strong>에 도착합니다. 타임라인 형태로 오늘의 일정이 표시되며, 각 장소마다 <strong>4색 상태 배지</strong>(초록·노랑·빨강·회색)로 실시간 상황을 한눈에 파악할 수 있습니다.',
+        nextLabel: null
+      }
+    ]
+  },
+  {
+    id: 'monitoring',
+    name: '일정 모니터링 & 대안',
+    icon: '&#128200;',
+    steps: [
+      {
+        screen: '01', file: '01-일정표', name: '일정표 (메인)',
+        action: '상태가 노랑/빨강인 장소 카드 탭',
+        narration: '메인 일정표에서 <strong>노랑(주의) 또는 빨강(위험)</strong> 상태 배지가 표시된 장소를 발견합니다. 해당 장소 카드를 탭하여 <strong>상태 상세 정보</strong>를 확인합니다.',
+        nextLabel: '장소 카드 탭 →'
+      },
+      {
+        screen: '02', file: '02-상태상세', name: '상태 상세',
+        action: '"대안 보기" 버튼 탭',
+        narration: '<strong>바텀시트</strong>로 장소 상세 상태가 올라옵니다. 날씨·혼잡도·교통·영업시간 <strong>4가지 항목</strong>의 실시간 데이터와 종합 판정 사유를 확인할 수 있습니다. 문제가 있다면 <strong>"대안 보기"</strong> 버튼으로 대안을 탐색합니다.',
+        nextLabel: '대안 보기 →'
+      },
+      {
+        screen: '04', file: '04-대안카드', name: '대안 카드',
+        action: '마음에 드는 대안의 "이 장소로 변경" 탭',
+        narration: 'AI가 추천한 <strong>3개 대안 장소</strong>가 카드 형태로 나타납니다. 각 카드에는 거리, 평점, 예상 이동시간이 표시됩니다. 마음에 드는 대안을 선택하여 <strong>"이 장소로 변경"</strong>을 탭합니다.',
+        nextLabel: '장소 변경 →'
+      },
+      {
+        screen: '14', file: '14-일정교체결과', name: '일정 교체 결과',
+        action: '"일정 확인" 버튼 탭',
+        narration: '변경 결과 화면에서 <strong>원래 장소 → 대안 장소</strong>의 비교를 확인합니다. 이동시간 변화, 일정 영향도를 한눈에 볼 수 있습니다. <strong>"일정 확인"</strong>을 탭하면 변경된 일정표로 돌아갑니다.',
+        nextLabel: '일정표로 →'
+      },
+      {
+        screen: '01', file: '01-일정표', name: '일정표 (업데이트)',
+        action: '변경된 일정 확인',
+        narration: '대안 장소로 <strong>일정이 업데이트</strong>되어 메인 일정표에 반영됩니다. 해당 장소의 상태 배지가 <strong>초록(정상)</strong>으로 변경된 것을 확인할 수 있습니다.',
+        nextLabel: null
+      }
+    ]
+  },
+  {
+    id: 'briefing',
+    name: '브리핑 확인',
+    icon: '&#128276;',
+    steps: [
+      {
+        screen: '01', file: '01-일정표', name: '일정표 (메인)',
+        action: '하단 "브리핑" 탭 탭',
+        narration: '메인 일정표 하단의 <strong>3탭 네비게이션</strong>에서 브리핑 탭을 탭합니다. 브리핑은 AI가 주기적으로 보내는 <strong>일정 상태 알림</strong>입니다.',
+        nextLabel: '브리핑 탭 →'
+      },
+      {
+        screen: '11', file: '11-브리핑목록', name: '브리핑 목록',
+        action: '관심 있는 브리핑 카드 탭',
+        narration: '오늘 수신한 <strong>브리핑 카드 리스트</strong>가 표시됩니다. 안심(초록)과 주의(노랑/빨강) 유형으로 구분되며, Free 플랜 사용자는 <strong>일일 한도</strong>가 표시됩니다. 상세 확인이 필요한 카드를 탭합니다.',
+        nextLabel: '브리핑 카드 탭 →'
+      },
+      {
+        screen: '03', file: '03-브리핑상세', name: '브리핑 상세',
+        action: '"대안 보기" 버튼 탭',
+        narration: '선택한 브리핑의 <strong>상세 분석 결과</strong>를 확인합니다. 날씨·혼잡도·교통·영업시간 4개 항목별 상태와 <strong>판정 사유</strong>가 표시됩니다. 주의/위험 항목이 있으면 <strong>"대안 보기"</strong>로 이동할 수 있습니다.',
+        nextLabel: '대안 보기 →'
+      },
+      {
+        screen: '04', file: '04-대안카드', name: '대안 카드',
+        action: '대안 선택 또는 "기존 일정 유지"',
+        narration: '브리핑에서도 동일하게 <strong>AI 대안 추천</strong>을 받을 수 있습니다. 대안으로 변경하거나, 현재 상황이 괜찮다고 판단되면 <strong>"기존 일정 유지"</strong>를 선택하여 일정표로 돌아갑니다.',
+        nextLabel: null
+      }
+    ]
+  },
+  {
+    id: 'add-place',
+    name: '장소 추가',
+    icon: '&#128205;',
+    steps: [
+      {
+        screen: '01', file: '01-일정표', name: '일정표 (메인)',
+        action: '"+ 장소 추가" 버튼 탭',
+        narration: '일정표 하단의 <strong>점선 "장소 추가" 버튼</strong>을 탭합니다. 현재 일정에 새로운 방문 장소를 추가할 수 있습니다.',
+        nextLabel: '장소 추가 →'
+      },
+      {
+        screen: '08', file: '08-장소검색', name: '장소 검색',
+        action: '검색 후 원하는 장소 탭',
+        narration: '여행 도시 내 <strong>장소를 검색</strong>합니다. 키워드를 입력하면 로딩 후 결과가 나타납니다. 원하는 장소를 탭하면 <strong>상세 바텀시트</strong>가 올라와 영업시간, 평점, 위치를 확인할 수 있습니다.',
+        nextLabel: '"일정에 추가" 탭 →'
+      },
+      {
+        screen: '12', file: '12-시간지정', name: '시간 지정',
+        action: '날짜·시간 설정 후 "추가 완료"',
+        narration: '장소를 일정에 추가하기 전 <strong>방문 날짜와 시간</strong>을 지정합니다. 해당 장소의 영업시간 외 시간을 선택하면 <strong>경고 메시지</strong>가 표시되어 실수를 방지합니다.',
+        nextLabel: '일정표로 →'
+      },
+      {
+        screen: '01', file: '01-일정표', name: '일정표 (업데이트)',
+        action: '추가된 장소 확인',
+        narration: '새로 추가된 장소가 <strong>타임라인에 반영</strong>됩니다. AI가 자동으로 이동 경로와 시간을 계산하여 기존 일정과의 <strong>최적 배치</strong>를 조정합니다.',
+        nextLabel: null
+      }
+    ]
+  },
+  {
+    id: 'settings',
+    name: '설정 & 구독',
+    icon: '&#9881;',
+    steps: [
+      {
+        screen: '01', file: '01-일정표', name: '일정표 (메인)',
+        action: '하단 "마이" 탭 탭',
+        narration: '하단 네비게이션의 <strong>"마이" 탭</strong>을 탭하여 개인 설정 화면으로 이동합니다.',
+        nextLabel: '마이 탭 →'
+      },
+      {
+        screen: '10', file: '10-마이페이지', name: '마이페이지',
+        action: '"구독 관리" 메뉴 탭',
+        narration: '마이페이지에서 <strong>프로필 정보, 구독 상태, 알림 설정, 위치정보 동의</strong> 등을 관리합니다. 현재 Free 플랜으로 표시되며, <strong>"구독 관리"</strong>를 탭하여 업그레이드를 진행합니다.',
+        nextLabel: '구독 관리 →'
+      },
+      {
+        screen: '09', file: '09-Paywall', name: 'Paywall (구독)',
+        action: '원하는 플랜 선택',
+        narration: '<strong>두 가지 유료 플랜</strong>이 제공됩니다.<br><br>&#10095; <strong>Trip Pass</strong> (7,900원/건) — 여행 1건 전체 기능<br>&#10095; <strong>Pro</strong> (4,900원/월) — 무제한 여행 + 프리미엄 기능<br><br>각 플랜의 기능 비교표로 <strong>합리적 선택</strong>을 유도합니다.',
+        nextLabel: null
+      }
+    ]
+  }
+];
+
+// ─── State ───
+var currentFlowIdx = 0;
+var currentStepIdx = 0;
+var visitedSteps = {};
+
+// ─── Render ───
+function renderFlowTabs() {
+  var html = '';
+  FLOWS.forEach(function(flow, idx) {
+    html += '<div class="flow-tab' + (idx === currentFlowIdx ? ' active' : '') +
+      '" onclick="switchFlow(' + idx + ')">' +
+      '<span class="tab-num">' + (idx + 1) + '</span>' +
+      flow.icon + ' ' + flow.name + '</div>';
+  });
+  document.getElementById('flowTabs').innerHTML = html;
+}
+
+function renderStepList() {
+  var flow = FLOWS[currentFlowIdx];
+  var html = '<div class="step-list__header">' + flow.name + ' (' + flow.steps.length + '단계)</div>';
+
+  flow.steps.forEach(function(step, idx) {
+    var isActive = idx === currentStepIdx;
+    var isVisited = visitedSteps[currentFlowIdx + '-' + idx];
+    var cls = 'step-item';
+    if (isActive) cls += ' active';
+    else if (isVisited) cls += ' visited';
+
+    html += '<div class="' + cls + '" onclick="goToStep(' + idx + ')">';
+    html += '<div class="step-item__num">' + (isVisited && !isActive ? '&#10003;' : (idx + 1)) + '</div>';
+    html += '<div class="step-item__text">';
+    html += '<div class="step-item__name">' + step.screen + '. ' + step.name + '</div>';
+    html += '<div class="step-item__action">' + step.action + '</div>';
+    html += '</div></div>';
+
+    if (idx < flow.steps.length - 1) {
+      html += '<div class="step-arrow">' +
+        '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14"/><path d="m19 12-7 7-7-7"/></svg>' +
+        '<span>' + step.action + '</span></div>';
+    }
+  });
+
+  document.getElementById('stepList').innerHTML = html;
+}
+
+function renderScreen() {
+  var flow = FLOWS[currentFlowIdx];
+  var step = flow.steps[currentStepIdx];
+  var img = document.getElementById('screenImg');
+  img.src = 'screenshots/' + step.file + '.png';
+  img.alt = step.screen + '. ' + step.name;
+}
+
+function renderDescription() {
+  var flow = FLOWS[currentFlowIdx];
+  var step = flow.steps[currentStepIdx];
+
+  var html = '<div>' +
+    '<div class="desc-panel__screen-num">SCREEN ' + step.screen + '</div>' +
+    '<div class="desc-panel__screen-name">' + step.name + '</div>' +
+    '</div>';
+
+  html += '<div class="desc-panel__divider"></div>';
+
+  // User Action
+  html += '<div>' +
+    '<div class="desc-panel__section-title">사용자 액션</div>' +
+    '<div class="desc-panel__action-badge">' +
+    '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 3h6v6"/><path d="M10 14 21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/></svg>' +
+    step.action + '</div></div>';
+
+  // Narration
+  html += '<div>' +
+    '<div class="desc-panel__section-title">나레이션</div>' +
+    '<div class="desc-panel__narration">' + step.narration + '</div></div>';
+
+  html += '<div class="desc-panel__divider"></div>';
+
+  // Next Step
+  if (step.nextLabel) {
+    var nextStep = flow.steps[currentStepIdx + 1];
+    html += '<div>' +
+      '<div class="desc-panel__next-label">다음 단계</div>' +
+      '<div class="desc-panel__next-screen" onclick="goStep(1)">' +
+      '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="' + 'var(--accent-red)' + '" stroke-width="2"><path d="m9 18 6-6-6-6"/></svg>' +
+      '<span>' + step.nextLabel + ' <strong>' + nextStep.name + '</strong></span>' +
+      '</div></div>';
+  } else {
+    // Flow complete
+    if (currentFlowIdx < FLOWS.length - 1) {
+      html += '<div>' +
+        '<div class="desc-panel__next-label">플로우 완료</div>' +
+        '<div class="desc-panel__next-screen" onclick="switchFlow(' + (currentFlowIdx + 1) + ')">' +
+        '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--accent-green)" stroke-width="2"><path d="M20 6 9 17l-5-5"/></svg>' +
+        '<span>다음 플로우: <strong>' + FLOWS[currentFlowIdx + 1].name + '</strong></span>' +
+        '</div></div>';
+    } else {
+      html += '<div>' +
+        '<div class="desc-panel__next-label">모든 플로우 완료</div>' +
+        '<div class="desc-panel__action-badge" style="background:#1A2A1A;color:var(--accent-green);border-color:#2A3A2A;">' +
+        '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 6 9 17l-5-5"/></svg>' +
+        '전체 플로우 스크립트 완료</div></div>';
+    }
+  }
+
+  document.getElementById('descPanel').innerHTML = html;
+}
+
+function updateNavButtons() {
+  var flow = FLOWS[currentFlowIdx];
+  document.getElementById('btnPrev').disabled = (currentStepIdx === 0 && currentFlowIdx === 0);
+  document.getElementById('btnNext').disabled = (currentStepIdx === flow.steps.length - 1 && currentFlowIdx === FLOWS.length - 1);
+}
+
+function updateCounter() {
+  var flow = FLOWS[currentFlowIdx];
+  document.getElementById('stepCounter').textContent =
+    (currentStepIdx + 1) + ' / ' + flow.steps.length;
+}
+
+function updateProgress() {
+  var flow = FLOWS[currentFlowIdx];
+  var pct = ((currentStepIdx + 1) / flow.steps.length) * 100;
+  document.getElementById('progressFill').style.width = pct + '%';
+}
+
+function render() {
+  visitedSteps[currentFlowIdx + '-' + currentStepIdx] = true;
+  renderFlowTabs();
+  renderStepList();
+  renderScreen();
+  renderDescription();
+  updateNavButtons();
+  updateCounter();
+  updateProgress();
+}
+
+// ─── Navigation ───
+function switchFlow(idx) {
+  currentFlowIdx = idx;
+  currentStepIdx = 0;
+  render();
+}
+
+function goToStep(idx) {
+  currentStepIdx = idx;
+  render();
+}
+
+function goStep(delta) {
+  var flow = FLOWS[currentFlowIdx];
+  var newIdx = currentStepIdx + delta;
+  if (newIdx >= 0 && newIdx < flow.steps.length) {
+    currentStepIdx = newIdx;
+    render();
+  } else if (delta > 0 && currentFlowIdx < FLOWS.length - 1) {
+    switchFlow(currentFlowIdx + 1);
+  } else if (delta < 0 && currentFlowIdx > 0) {
+    currentFlowIdx--;
+    currentStepIdx = FLOWS[currentFlowIdx].steps.length - 1;
+    render();
+  }
+}
+
+// ─── Keyboard ───
+document.addEventListener('keydown', function(e) {
+  if (e.key === 'ArrowRight' || e.key === ' ') { e.preventDefault(); goStep(1); }
+  else if (e.key === 'ArrowLeft') { e.preventDefault(); goStep(-1); }
+  else if (e.key >= '1' && e.key <= '5') { switchFlow(parseInt(e.key) - 1); }
+});
+
+// ─── Init ───
+render();
+</script>
+</body>
+</html>

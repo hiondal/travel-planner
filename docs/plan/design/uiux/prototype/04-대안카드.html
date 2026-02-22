@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>대안 카드 - travel-planner</title>
+  <link rel="stylesheet" href="common.css">
+  <style>
+    .alt-header-text {
+      padding: var(--space-base);
+    }
+
+    .alt-header-text__target {
+      font-size: var(--font-body1);
+      color: var(--text-secondary);
+      margin-bottom: var(--space-xs);
+    }
+
+    .alt-header-text__count {
+      font-size: var(--font-h2);
+      font-weight: var(--font-weight-semibold);
+    }
+
+    .alt-cards {
+      padding: 0 var(--space-base);
+    }
+
+    .alt-card {
+      background-color: var(--bg-card);
+      border-radius: var(--radius-md);
+      overflow: hidden;
+      margin-bottom: var(--space-md);
+      transition: all var(--anim-normal);
+    }
+
+    .alt-card.selected {
+      outline: 2px solid var(--accent-red);
+    }
+
+    .alt-card__image {
+      width: 100%;
+      height: 160px;
+      position: relative;
+      display: flex;
+      align-items: flex-end;
+    }
+
+    .alt-card__image-bg {
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: rgba(255, 255, 255, 0.3);
+    }
+
+    .alt-card__image::after {
+      content: '';
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      height: 80px;
+      background: var(--gradient-card-overlay);
+    }
+
+    .alt-card__image-badge {
+      position: absolute;
+      top: var(--space-md);
+      left: var(--space-md);
+      z-index: 2;
+    }
+
+    .alt-card__image-status-label {
+      position: absolute;
+      top: var(--space-md);
+      right: var(--space-md);
+      z-index: 2;
+      font-size: var(--font-overline);
+      font-weight: var(--font-weight-semibold);
+      color: var(--status-yellow);
+      background-color: rgba(0, 0, 0, 0.6);
+      padding: 2px 8px;
+      border-radius: var(--radius-sm);
+    }
+
+    .alt-card__image-name {
+      position: relative;
+      z-index: 2;
+      padding: var(--space-base);
+      font-size: var(--font-h2);
+      font-weight: var(--font-weight-semibold);
+    }
+
+    .alt-card__body {
+      padding: var(--space-base);
+    }
+
+    .alt-card__meta {
+      display: flex;
+      align-items: center;
+      gap: var(--space-sm);
+      font-size: var(--font-body2);
+      color: var(--text-secondary);
+      margin-bottom: var(--space-sm);
+      flex-wrap: wrap;
+    }
+
+    .alt-card__meta-divider {
+      color: var(--text-disabled);
+    }
+
+    .alt-card__transit {
+      font-size: var(--font-caption);
+      color: var(--text-disabled);
+      margin-bottom: var(--space-sm);
+    }
+
+    .alt-card__reason {
+      font-size: var(--font-body2);
+      color: var(--text-secondary);
+      line-height: 1.5;
+      margin-bottom: var(--space-base);
+    }
+
+    .alt-card__reason-label {
+      color: var(--text-disabled);
+      font-size: var(--font-caption);
+    }
+
+    .keep-btn {
+      padding: var(--space-base);
+      padding-bottom: calc(var(--space-base) + var(--safe-area-bottom));
+    }
+  </style>
+</head>
+<body>
+  <div class="page-container">
+    <app-top-nav back title="대안 추천" close></app-top-nav>
+
+    <main class="page-content page-content--no-tab" role="main">
+      <div class="alt-header-text">
+        <p class="alt-header-text__target" id="targetPlace">이치란 라멘 시부야 대신</p>
+        <h1 class="alt-header-text__count">추천 대안 3곳</h1>
+      </div>
+
+      <div class="alt-cards" id="altCards" role="list" aria-label="대안 장소 목록">
+        <!-- JS 렌더링 -->
+      </div>
+
+      <div class="keep-btn">
+        <button class="btn btn--secondary" onclick="keepOriginal()">기존 일정 유지</button>
+      </div>
+    </main>
+  </div>
+
+  <script src="common.js"></script>
+  <script>
+    'use strict';
+
+    // Get place data
+    var pageData = getPageData();
+    var placeId = pageData ? pageData.placeId : 'place-002';
+    var targetPlace = SAMPLE_DATA.places.find(function(p) { return p.id === placeId; });
+
+    if (targetPlace) {
+      document.getElementById('targetPlace').textContent = targetPlace.name + ' 대신';
+    }
+
+    var alternatives = SAMPLE_DATA.alternatives;
+
+    function renderAlternatives() {
+      var container = document.getElementById('altCards');
+      var html = '';
+
+      alternatives.forEach(function(alt, idx) {
+        html += '<article class="alt-card" role="listitem" aria-label="대안 ' + (idx + 1) + ': ' + alt.name + '">' +
+          '<div class="alt-card__image" style="background-color: ' + alt.imageColor + '">' +
+          '<div class="alt-card__image-bg" aria-hidden="true">' +
+          '<svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>' +
+          '</div>' +
+          '<span class="alt-card__image-badge">' + getStatusBadge(alt.status, 'sm') + '</span>';
+
+        if (alt.statusLabel) {
+          html += '<span class="alt-card__image-status-label">' + alt.statusLabel + '</span>';
+        }
+
+        html += '<span class="alt-card__image-name">' + alt.name + '</span>' +
+          '</div>' +
+          '<div class="alt-card__body">' +
+          '<div class="alt-card__meta">' +
+          '<span>' + alt.distance + '</span>' +
+          '<span class="alt-card__meta-divider">|</span>' +
+          '<span>' + alt.walkTime + '</span>' +
+          '<span class="alt-card__meta-divider">|</span>' +
+          '<span style="color:var(--accent-amber)">' + alt.rating + '</span>' +
+          '<span class="alt-card__meta-divider">|</span>' +
+          '<span>' + alt.crowdLevel + '</span>' +
+          '</div>';
+
+        if (alt.transitTime) {
+          html += '<p class="alt-card__transit">' + alt.transitTime + '</p>';
+        }
+
+        html += '<p class="alt-card__reason"><span class="alt-card__reason-label">추천 이유: </span>' + alt.reason + '</p>' +
+          '<button class="btn btn--primary" onclick="selectAlternative(\'' + alt.id + '\', \'' + alt.name.replace(/'/g, "\\'") + '\')">이 장소로 변경</button>' +
+          '</div></article>';
+      });
+
+      container.innerHTML = html;
+    }
+
+    function selectAlternative(altId, altName) {
+      var originalName = targetPlace ? targetPlace.name : '이치란 라멘 시부야';
+      navigateTo('14-일정교체결과.html', {
+        originalPlace: originalName,
+        newPlace: altName,
+        altId: altId,
+      });
+    }
+
+    function keepOriginal() {
+      showToast('기존 일정을 유지합니다.');
+      setTimeout(function() {
+        navigateTo('01-일정표.html');
+      }, 800);
+    }
+
+    renderAlternatives();
+  </script>
+</body>
+</html>

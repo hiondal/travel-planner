@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>소셜 로그인 - travel-planner</title>
+  <link rel="stylesheet" href="common.css">
+  <style>
+    /* ---- 로그인 전용 레이아웃 ---- */
+    .login-page {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: space-between;
+      min-height: 100vh;
+      padding: 60px var(--space-base) calc(var(--space-4xl) + var(--space-base));
+    }
+
+    /* ---- 브랜드 영역 ---- */
+    .login-brand {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      text-align: center;
+      flex: 1;
+      justify-content: center;
+      padding-bottom: var(--space-4xl);
+    }
+
+    .login-logo {
+      width: 80px;
+      height: 80px;
+      border-radius: var(--radius-lg);
+      background: var(--gradient-premium);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-bottom: var(--space-xl);
+      box-shadow: 0 8px 32px rgba(123, 63, 224, 0.35);
+    }
+
+    .login-brand__name {
+      font-size: var(--font-h1);
+      font-weight: var(--font-weight-bold);
+      color: var(--text-primary);
+      letter-spacing: -0.3px;
+      margin-bottom: var(--space-sm);
+    }
+
+    .login-brand__desc {
+      font-size: var(--font-body2);
+      color: var(--text-secondary);
+      line-height: 1.5;
+    }
+
+    /* ---- 버튼 그룹 영역 ---- */
+    .login-actions {
+      width: 100%;
+      max-width: 343px;
+      display: flex;
+      flex-direction: column;
+      gap: var(--space-md);
+    }
+
+    /* ---- 소셜 버튼 아이콘 ---- */
+    .btn__icon {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 20px;
+      height: 20px;
+      flex-shrink: 0;
+    }
+
+    /* ---- 약관 안내 ---- */
+    .login-terms {
+      margin-top: var(--space-xl);
+      text-align: center;
+      font-size: var(--font-caption);
+      color: var(--text-disabled);
+      line-height: 1.6;
+    }
+
+    .login-terms a {
+      color: var(--text-secondary);
+      text-decoration: underline;
+      text-underline-offset: 2px;
+    }
+
+    .login-terms a:hover {
+      color: var(--text-primary);
+    }
+  </style>
+</head>
+<body>
+  <main class="login-page" role="main" aria-label="소셜 로그인">
+
+    <!-- 브랜드 영역 -->
+    <section class="login-brand" aria-label="앱 브랜드">
+      <div class="login-logo" aria-hidden="true">
+        <!-- Globe / Compass 스타일 여행 앱 로고 SVG -->
+        <svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 24 24"
+             fill="none" stroke="#FFFFFF" stroke-width="1.5"
+             stroke-linecap="round" stroke-linejoin="round"
+             aria-hidden="true" focusable="false">
+          <circle cx="12" cy="12" r="10"/>
+          <path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"/>
+          <path d="M2 12h20"/>
+        </svg>
+      </div>
+
+      <h1 class="login-brand__name">travel-planner</h1>
+      <p class="login-brand__desc">여행 중 실시간 일정 최적화 가이드</p>
+    </section>
+
+    <!-- 버튼 + 약관 묶음 -->
+    <div class="login-actions">
+      <!-- Google 로그인 버튼 -->
+      <button
+        type="button"
+        class="btn btn--social btn--social-google"
+        onclick="handleGoogleLogin()"
+        aria-label="Google 계정으로 계속하기"
+      >
+        <span class="btn__icon" aria-hidden="true">
+          <!-- Google "G" 컬러 로고 SVG -->
+          <svg viewBox="0 0 24 24" width="20" height="20"
+               xmlns="http://www.w3.org/2000/svg"
+               aria-hidden="true" focusable="false">
+            <path fill="#4285F4"
+              d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z"/>
+            <path fill="#34A853"
+              d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+            <path fill="#FBBC05"
+              d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
+            <path fill="#EA4335"
+              d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
+          </svg>
+        </span>
+        Google로 계속하기
+      </button>
+
+      <!-- Apple 로그인 버튼 -->
+      <button
+        type="button"
+        class="btn btn--social btn--social-apple"
+        onclick="handleAppleLogin()"
+        aria-label="Apple 계정으로 계속하기"
+      >
+        <span class="btn__icon" aria-hidden="true">
+          <!-- Apple 로고 SVG -->
+          <svg viewBox="0 0 24 24" width="20" height="20"
+               xmlns="http://www.w3.org/2000/svg"
+               fill="#FFFFFF"
+               aria-hidden="true" focusable="false">
+            <path d="M17.05 20.28c-.98.95-2.05.88-3.08.4-1.09-.5-2.08-.48-3.24 0-1.44.62-2.2.44-3.06-.4C2.79 15.25 3.51 7.59 9.05 7.31c1.35.07 2.29.74 3.08.8 1.18-.24 2.31-.93 3.57-.84 1.51.12 2.65.72 3.4 1.8-3.12 1.87-2.38 5.98.48 7.13-.57 1.5-1.31 2.99-2.54 4.09zM12.03 7.25c-.15-2.23 1.66-4.07 3.74-4.25.29 2.58-2.34 4.5-3.74 4.25z"/>
+          </svg>
+        </span>
+        Apple로 계속하기
+      </button>
+
+      <!-- 약관 안내 텍스트 -->
+      <p class="login-terms">
+        계속 진행 시
+        <a href="#" onclick="event.preventDefault();" aria-label="이용약관 보기">이용약관</a>
+        및
+        <a href="#" onclick="event.preventDefault();" aria-label="개인정보처리방침 보기">개인정보처리방침</a>에
+        동의합니다.
+      </p>
+    </div>
+
+  </main>
+
+  <script src="common.js"></script>
+  <script>
+    function handleGoogleLogin() {
+      showToast('Google 로그인 처리 중...');
+      setTimeout(function () {
+        navigateTo('06-온보딩.html');
+      }, 800);
+    }
+
+    function handleAppleLogin() {
+      showToast('Apple 로그인 처리 중...');
+      setTimeout(function () {
+        navigateTo('06-온보딩.html');
+      }, 800);
+    }
+  </script>
+</body>
+</html>

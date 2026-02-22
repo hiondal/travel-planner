@@ -1,0 +1,85 @@
+@startuml
+!theme mono
+
+actor "여행자" as user
+participant "프론트엔드\n(React Native)" as fe
+participant "API Gateway" as gw
+participant "SCHD 서비스" as schd
+participant "MNTR 서비스" as mntr
+database "Redis Cache" as cache
+
+user -> fe: 앱 열기 또는 일정표 탭
+activate fe
+
+fe -> gw: GET /trips/{tripId}/schedules\n(Authorization: JWT Access Token)
+activate gw
+
+gw -> gw: JWT 토큰 검증\n(API Gateway 레벨)
+activate gw
+gw -> gw: user_id, tier 추출
+deactivate gw
+
+gw -> schd: 일정 목록 조회 요청\n(trip_id, user_id)
+activate schd
+
+schd -> schd: 일정 목록 조회\n(schedule_id, place_id, scheduled_time, place_name)
+schd -> schd: 시간순 정렬
+
+schd -> gw: 일정 목록\n([{schedule_id, place_id, place_name, scheduled_time}, ...])
+deactivate schd
+
+gw -> mntr: GET /monitoring/status\n(place_ids=[...], trip_id)
+activate mntr
+
+alt 캐시 히트
+    mntr -> cache: 배지 상태 조회\n(key=badge:place_id:trip_id)
+    activate cache
+    cache --> mntr: 배지 데이터\n(status, icon, label, reason)
+    deactivate cache
+
+else 캐시 미스 (또는 5분 이상 경과)
+    mntr -> mntr: DB 조회\n(최근 상태 배지 조회)
+    mntr -> cache: 배지 데이터 캐싱\n(TTL=5분)
+    activate cache
+    cache --> mntr: OK
+    deactivate cache
+
+end
+
+mntr -> mntr: 배지 데이터 합성\n(place_id별 status, icon, label 매핑)
+mntr --> gw: 배지 목록\n([{place_id, status, icon, label, reason}, ...])
+deactivate mntr
+
+gw --> fe: 일정 목록 + 배지 정보\n({schedules: [...], badges: [...]})
+deactivate gw
+
+fe -> fe: 일정표 UI 렌더링\n(시간순 정렬)\n(각 장소명 옆에 배지 표시)\n(색상 + 아이콘 조합)
+
+fe -> fe: 색약 사용자 지원 렌더링\n(색상만 사용 X)\n(색상 + 아이콘 + 라벨 병행)
+
+alt 초록 배지 (안심)
+    fe --> user: 초록 배지 + 체크 아이콘\n(라벨: "안심")
+
+else 노랑 배지 (주의)
+    fe --> user: 노랑 배지 + 느낌표 아이콘\n(라벨: "주의")
+
+else 빨강 배지 (위험)
+    fe --> user: 빨강 배지 + X 아이콘\n(라벨: "위험")
+
+else 회색 배지 (미확인)
+    fe --> user: 회색 배지 + 물음표 아이콘\n(라벨: "데이터 미확인")
+
+end
+
+deactivate fe
+
+note over user, cache
+  최종 일정표 표시 (장소명 + 시간 + 상태배지)
+  예시:
+  12:00 이치란 라멘 시부야     🟢 안심
+  14:30 센소지 사찰           🟡 주의
+  17:00 이디오트 카페          🔴 위험
+  19:30 시부야 스카이         ⚪ 미확인
+end note
+
+@enduml

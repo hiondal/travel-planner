@@ -1,0 +1,138 @@
+@startuml
+!theme mono
+
+title MNTR 서비스: 수집 데이터 기반 상태 배지 판정 (UFR-MNTR-020)
+
+participant "MonitoringService" as svc
+participant "StatusBadgeService" as badgeSvc
+participant "StatusHistoryRepository" as histRepo
+database "DB" as db
+database "Redis Cache" as cache
+queue "Event Bus(E)" as bus
+
+== 수집 데이터 기반 판정 ==
+svc -> badgeSvc: 상태 배지 판정 요청\n(place_id, 수집데이터)
+activate badgeSvc
+
+badgeSvc -> badgeSvc: 판정 데이터 추출\n- 영업상태: open/closed/unknown\n- 강수확률: %\n- 혼잡도: popular_times 값\n- 이동시간: 초 단위
+
+== 임계값 기반 판정 로직 ==
+badgeSvc -> badgeSvc: 각 항목별 상태 판정\n(설정 파일 참조)
+
+alt 영업상태 판정
+    badgeSvc -> badgeSvc: opening_hours 검증\nif opening_now == false\n  → status=CLOSED (위험)\nelse → status=OPEN (정상)
+end
+
+alt 날씨 판정
+    badgeSvc -> badgeSvc: 강수확률 확인\nif rain_probability >= 70%\n  → status=DANGER (위험)\nelse if rain_probability >= 40%\n  → status=WARNING (주의)\nelse → status=OK (정상)
+end
+
+alt 혼잡도 판정
+    badgeSvc -> badgeSvc: popular_times 확인\nif current_popularity == null\n  → status=UNKNOWN (미확인)\n  제외 처리\nelse if current_popularity >= 80%\n  → status=DANGER (위험)\nelse if current_popularity >= 60%\n  → status=WARNING (주의)\nelse → status=OK (정상)
+end
+
+alt 이동시간 판정
+    badgeSvc -> badgeSvc: 기준 이동시간 대비 배수\nif travel_time >= baseline * 2.0\n  → status=DANGER (위험)\nelse if travel_time >= baseline * 1.5\n  → status=WARNING (주의)\nelse → status=OK (정상)
+end
+
+== 종합 상태 판정 ==
+badgeSvc -> badgeSvc: 각 항목 상태 종합\nscores = [영업상태, 날씨, 혼잡도, 이동시간]\n\nif 모든 항목 == OK\n  → final_status=GREEN (초록)\nelse if 1개 이상 WARNING\n  → final_status=YELLOW (노랑)\nelse if 1개 이상 DANGER\n  → final_status=RED (빨강)\nelse if 모든 항목 == UNKNOWN\n  → final_status=GRAY (회색)
+
+== 판정 사유 생성 ==
+badgeSvc -> badgeSvc: 판정 근거 텍스트 생성\nreason = []\nif 영업상태 == CLOSED\n  reason.append("임시 휴업 중")\nif 날씨 >= WARNING\n  reason.append("강수확률 {n}%")\nif 혼잡도 >= WARNING\n  reason.append("혼잡도 높음")\nif 이동시간 >= WARNING\n  reason.append("이동시간 {n}분 지연")\n\njudgment_reason = reason.join(", ")
+
+== 상태 변경 여부 판정 ==
+badgeSvc -> badgeSvc: 이전 상태 확인\nif previous_status != final_status\n  → state_changed=true\n  → trigger_alert=(초록→노랑 또는\n    초록→빨강 또는 노랑→빨강)\nelse\n  → state_changed=false\n  → trigger_alert=false
+
+== 캐시 갱신 ==
+badgeSvc -> cache: SET status_badge\n{place_id,\nstatus_color,\nicon,\njudgment_reason,\nchanged_at,\nconfidence_score=null}\n(TTL=5분)
+activate cache
+cache --> badgeSvc: 저장 완료
+deactivate cache
+
+== 상태 이력 저장 ==
+badgeSvc -> histRepo: 상태 판정 이력 저장\n(INSERT status_history)
+activate histRepo
+
+histRepo -> db: INSERT\nplace_id, status_color,\njudgment_reason,\nprevious_status,\nchanged_at,\ncollected_at
+activate db
+db --> histRepo: 저장 완료\n(6개월 이상 보존)
+deactivate db
+deactivate histRepo
+
+== 상태 변경 이벤트 발행 ==
+alt state_changed && trigger_alert
+    badgeSvc -> badgeSvc: StatusBadgeUpdated 이벤트 생성\n{place_id, place_name,\nstatus_color, previous_status,\njudgment_reason,\ntimestamp}
+
+    badgeSvc -> bus: 발행 StatusBadgeUpdated\n(Event Bus)\n→ SCHD, BRIF, ALTN 구독
+    activate bus
+
+    par SCHD 구독 (캐시 갱신)
+        bus -> bus: 배지 색상 업데이트 이벤트 처리
+    else BRIF 구독 (주의/위험 브리핑)
+        bus -> bus: 상태 악화 감지\n→ 주의 브리핑 생성 트리거
+    else ALTN 구독 (대안 검색)
+        bus -> bus: 배지 상태 갱신\n→ 대안 스코어링 영향
+    end
+    deactivate bus
+
+else state_changed && !trigger_alert
+    badgeSvc -> badgeSvc: 호전 방향 변경\n(빨강→노랑, 노랑→초록)\n→ 알림 발행 안 함
+    badgeSvc -> cache: 캐시만 갱신\n(이벤트 발행 스킵)
+
+else !state_changed
+    badgeSvc -> badgeSvc: 상태 변경 없음\n→ 이벤트 발행 안 함\n→ 캐시만 갱신
+end
+
+badgeSvc --> svc: 판정 완료\n(status_color, reason)
+deactivate badgeSvc
+
+svc --> svc: 판정 결과 처리
+deactivate svc
+
+note right of badgeSvc
+임계값 (설정 파일로 관리):
+- 날씨: 강수확률 40%(주의),\n  70%(위험)
+- 혼잡도: 60%(주의),\n  80%(위험)
+- 이동시간: 1.5배(주의),\n  2배(위험)
+
+혼잡도 미확인:
+- current_popularity=null 시
+- 판정 대상에서 제외
+- "혼잡도 정보 없음"으로 표시
+- 노랑 배지 트리거 안 함
+end note
+
+note right of histRepo
+상태 이력 저장:
+- 최소 6개월 보존
+- 덮어쓰기 금지
+- AI 학습 데이터셋
+- 판정 이력 추적
+- confidence_score=null
+  (향후 AI 모델용)
+
+테이블 구조:
+- place_id
+- status_color (GREEN/YELLOW/RED/GRAY)
+- judgment_reason
+- previous_status
+- changed_at
+- collected_at
+end note
+
+note right of bus
+이벤트 구독자:
+1. SCHD: 배지 색상 캐시 갱신
+2. BRIF: 주의/위험 시
+   브리핑 생성 트리거
+3. ALTN: 배지 상태 기반
+   스코어링 영향
+
+발행 조건:
+- 상태 변경 발생 && 악화 방향
+  (초록→노랑/빨강, 노랑→빨강)
+- 호전 방향은 이벤트 발행 안 함
+end note
+
+@enduml

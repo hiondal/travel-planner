@@ -1,0 +1,422 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1400 1800" font-family="'Segoe UI', 'Noto Sans KR', Arial, sans-serif">
+  <defs>
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#f8f9fa;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#e9ecef;stop-opacity:1" />
+    </linearGradient>
+    <linearGradient id="emotionLine" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#4CAF50;stop-opacity:1" />
+      <stop offset="20%" style="stop-color:#4CAF50;stop-opacity:1" />
+      <stop offset="35%" style="stop-color:#F44336;stop-opacity:1" />
+      <stop offset="55%" style="stop-color:#F44336;stop-opacity:1" />
+      <stop offset="75%" style="stop-color:#FF9800;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#4CAF50;stop-opacity:1" />
+    </linearGradient>
+    <filter id="shadow" x="-2%" y="-2%" width="104%" height="104%">
+      <feDropShadow dx="0" dy="2" stdDeviation="3" flood-color="#00000020"/>
+    </filter>
+    <filter id="shadowLight" x="-1%" y="-1%" width="102%" height="102%">
+      <feDropShadow dx="0" dy="1" stdDeviation="2" flood-color="#00000015"/>
+    </filter>
+  </defs>
+
+  <!-- Background -->
+  <rect width="1400" height="1800" fill="url(#bgGrad)" rx="0"/>
+
+  <!-- Title Section -->
+  <rect x="40" y="25" width="1320" height="90" rx="12" fill="#1a237e" filter="url(#shadow)"/>
+  <text x="700" y="65" text-anchor="middle" fill="white" font-size="26" font-weight="bold">User Journey Map</text>
+  <text x="700" y="92" text-anchor="middle" fill="#b3b8f0" font-size="14">여행 중 실시간 일정 최적화 가이드 앱 -- 효율 추구형 솔로 트래블러 (25~34세)</text>
+
+  <!-- Persona Section -->
+  <rect x="40" y="135" width="1320" height="75" rx="10" fill="white" filter="url(#shadowLight)"/>
+  <circle cx="90" cy="172" r="25" fill="#e8eaf6" stroke="#3949ab" stroke-width="2"/>
+  <text x="90" y="168" text-anchor="middle" fill="#3949ab" font-size="20">M</text>
+  <text x="90" y="182" text-anchor="middle" fill="#3949ab" font-size="9">민준</text>
+  <text x="130" y="162" fill="#1a237e" font-size="15" font-weight="bold">김민준 (28세) -- IT 스타트업 개발자, 연 2~3회 솔로 해외여행</text>
+  <text x="130" y="182" fill="#546e7a" font-size="12">핵심 Job: "돌발 상황에서 검색/고민에 시간 낭비 없이 최적 대안을 즉시 찾아 여행의 흐름을 이어가고 싶다"</text>
+  <text x="130" y="198" fill="#78909c" font-size="11">불안: "매일 30분씩 대안 찾느라 날리면 하루치 일정이 사라진다" | "구글맵 영업 중을 100% 믿을 수 없다" | "혼자라 검증해줄 사람이 없다"</text>
+
+  <!-- Stage Headers -->
+  <g transform="translate(40, 230)">
+    <!-- Stage boxes -->
+    <rect x="0" y="0" width="210" height="50" rx="8" fill="#4CAF50" filter="url(#shadowLight)"/>
+    <text x="105" y="22" text-anchor="middle" fill="white" font-size="12" font-weight="bold">1단계</text>
+    <text x="105" y="39" text-anchor="middle" fill="white" font-size="13">일정 준비</text>
+
+    <rect x="222" y="0" width="210" height="50" rx="8" fill="#2196F3" filter="url(#shadowLight)"/>
+    <text x="327" y="22" text-anchor="middle" fill="white" font-size="12" font-weight="bold">2단계</text>
+    <text x="327" y="39" text-anchor="middle" fill="white" font-size="13">일정 실행</text>
+
+    <rect x="444" y="0" width="210" height="50" rx="8" fill="#F44336" filter="url(#shadowLight)"/>
+    <text x="549" y="22" text-anchor="middle" fill="white" font-size="12" font-weight="bold">3단계</text>
+    <text x="549" y="39" text-anchor="middle" fill="white" font-size="13">돌발 상황 인지</text>
+
+    <rect x="666" y="0" width="210" height="50" rx="8" fill="#E53935" filter="url(#shadowLight)"/>
+    <text x="771" y="22" text-anchor="middle" fill="white" font-size="12" font-weight="bold">4단계</text>
+    <text x="771" y="39" text-anchor="middle" fill="white" font-size="13">대안 탐색</text>
+
+    <rect x="888" y="0" width="210" height="50" rx="8" fill="#FF9800" filter="url(#shadowLight)"/>
+    <text x="993" y="22" text-anchor="middle" fill="white" font-size="12" font-weight="bold">5단계</text>
+    <text x="993" y="39" text-anchor="middle" fill="white" font-size="12">대안 선택/일정 재조정</text>
+
+    <rect x="1110" y="0" width="210" height="50" rx="8" fill="#66BB6A" filter="url(#shadowLight)"/>
+    <text x="1215" y="22" text-anchor="middle" fill="white" font-size="12" font-weight="bold">6단계</text>
+    <text x="1215" y="39" text-anchor="middle" fill="white" font-size="12">변경 일정 실행/평가</text>
+
+    <!-- Arrow connectors -->
+    <polygon points="213,25 222,25 218,20 222,25 218,30" fill="#666"/>
+    <polygon points="435,25 444,25 440,20 444,25 440,30" fill="#666"/>
+    <polygon points="657,25 666,25 662,20 666,25 662,30" fill="#666"/>
+    <polygon points="879,25 888,25 884,20 888,25 884,30" fill="#666"/>
+    <polygon points="1101,25 1110,25 1106,20 1110,25 1106,30" fill="#666"/>
+  </g>
+
+  <!-- Emotion Curve Section -->
+  <rect x="40" y="300" width="1320" height="220" rx="10" fill="white" filter="url(#shadow)"/>
+  <text x="60" y="325" fill="#1a237e" font-size="15" font-weight="bold">감정 곡선 (체험 10회 평균 만족도, 5점 만점)</text>
+
+  <!-- Y-axis labels -->
+  <text x="75" y="348" fill="#999" font-size="10" text-anchor="end">5.0</text>
+  <text x="75" y="378" fill="#999" font-size="10" text-anchor="end">4.0</text>
+  <text x="75" y="408" fill="#999" font-size="10" text-anchor="end">3.0</text>
+  <text x="75" y="438" fill="#999" font-size="10" text-anchor="end">2.0</text>
+  <text x="75" y="468" fill="#999" font-size="10" text-anchor="end">1.0</text>
+  <text x="75" y="498" fill="#999" font-size="10" text-anchor="end">0.0</text>
+
+  <!-- Grid lines -->
+  <line x1="85" y1="345" x2="1330" y2="345" stroke="#eee" stroke-width="1"/>
+  <line x1="85" y1="375" x2="1330" y2="375" stroke="#eee" stroke-width="1"/>
+  <line x1="85" y1="405" x2="1330" y2="405" stroke="#eee" stroke-width="1" stroke-dasharray="4,4"/>
+  <line x1="85" y1="435" x2="1330" y2="435" stroke="#eee" stroke-width="1"/>
+  <line x1="85" y1="465" x2="1330" y2="465" stroke="#eee" stroke-width="1"/>
+  <line x1="85" y1="495" x2="1330" y2="495" stroke="#ddd" stroke-width="1"/>
+
+  <!-- Stage vertical guides -->
+  <line x1="290" y1="340" x2="290" y2="500" stroke="#eee" stroke-width="1" stroke-dasharray="3,3"/>
+  <line x1="500" y1="340" x2="500" y2="500" stroke="#eee" stroke-width="1" stroke-dasharray="3,3"/>
+  <line x1="710" y1="340" x2="710" y2="500" stroke="#eee" stroke-width="1" stroke-dasharray="3,3"/>
+  <line x1="920" y1="340" x2="920" y2="500" stroke="#eee" stroke-width="1" stroke-dasharray="3,3"/>
+  <line x1="1130" y1="340" x2="1130" y2="500" stroke="#eee" stroke-width="1" stroke-dasharray="3,3"/>
+
+  <!-- Emotion area fill -->
+  <polygon points="185,411 395,387 605,447 815,438 1025,420 1235,393 1235,495 185,495"
+           fill="#e3f2fd" opacity="0.4"/>
+
+  <!-- Emotion curve line -->
+  <polyline points="185,411 395,387 605,447 815,438 1025,420 1235,393"
+            fill="none" stroke="url(#emotionLine)" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+
+  <!-- Data points with values -->
+  <!-- Point 1: 3.1 -->
+  <circle cx="185" cy="411" r="8" fill="#4CAF50" stroke="white" stroke-width="3"/>
+  <rect x="160" y="388" width="50" height="20" rx="4" fill="#4CAF50"/>
+  <text x="185" y="402" text-anchor="middle" fill="white" font-size="12" font-weight="bold">3.1</text>
+
+  <!-- Point 2: 3.6 (highest) -->
+  <circle cx="395" cy="387" r="10" fill="#2196F3" stroke="white" stroke-width="3"/>
+  <rect x="370" y="362" width="50" height="22" rx="4" fill="#2196F3"/>
+  <text x="395" y="377" text-anchor="middle" fill="white" font-size="13" font-weight="bold">3.6</text>
+  <text x="395" y="355" text-anchor="middle" fill="#2196F3" font-size="9" font-weight="bold">최고점</text>
+
+  <!-- Drop indicator arrow -->
+  <line x1="500" y1="392" x2="500" y2="442" stroke="#F44336" stroke-width="2" stroke-dasharray="4,3"/>
+  <polygon points="497,440 500,448 503,440" fill="#F44336"/>
+  <text x="520" y="420" fill="#F44336" font-size="9" font-weight="bold">-2.0</text>
+  <text x="520" y="432" fill="#F44336" font-size="8">감정 절벽</text>
+
+  <!-- Point 3: 1.6 (lowest area) -->
+  <circle cx="605" cy="447" r="8" fill="#F44336" stroke="white" stroke-width="3"/>
+  <rect x="580" y="453" width="50" height="20" rx="4" fill="#F44336"/>
+  <text x="605" y="467" text-anchor="middle" fill="white" font-size="12" font-weight="bold">1.6</text>
+
+  <!-- Point 4: 1.9 -->
+  <circle cx="815" cy="438" r="9" fill="#E53935" stroke="white" stroke-width="3"/>
+  <rect x="790" y="444" width="50" height="20" rx="4" fill="#E53935"/>
+  <text x="815" y="458" text-anchor="middle" fill="white" font-size="12" font-weight="bold">1.9</text>
+  <text x="815" y="478" text-anchor="middle" fill="#E53935" font-size="9" font-weight="bold">최저점</text>
+
+  <!-- Point 5: 2.5 -->
+  <circle cx="1025" cy="420" r="8" fill="#FF9800" stroke="white" stroke-width="3"/>
+  <rect x="1000" y="397" width="50" height="20" rx="4" fill="#FF9800"/>
+  <text x="1025" y="411" text-anchor="middle" fill="white" font-size="12" font-weight="bold">2.5</text>
+
+  <!-- Point 6: 3.4 -->
+  <circle cx="1235" cy="393" r="8" fill="#66BB6A" stroke="white" stroke-width="3"/>
+  <rect x="1210" y="370" width="50" height="20" rx="4" fill="#66BB6A"/>
+  <text x="1235" y="384" text-anchor="middle" fill="white" font-size="12" font-weight="bold">3.4</text>
+
+  <!-- MOT labels -->
+  <rect x="560" y="335" width="90" height="16" rx="3" fill="#F44336" opacity="0.15"/>
+  <text x="605" y="347" text-anchor="middle" fill="#F44336" font-size="9" font-weight="bold">MOT #1</text>
+  <rect x="770" y="335" width="90" height="16" rx="3" fill="#E53935" opacity="0.15"/>
+  <text x="815" y="347" text-anchor="middle" fill="#E53935" font-size="9" font-weight="bold">MOT #2</text>
+  <rect x="1190" y="335" width="90" height="16" rx="3" fill="#66BB6A" opacity="0.15"/>
+  <text x="1235" y="347" text-anchor="middle" fill="#66BB6A" font-size="9" font-weight="bold">MOT #3</text>
+
+  <!-- X-axis stage labels -->
+  <text x="185" y="510" text-anchor="middle" fill="#666" font-size="10">일정 준비</text>
+  <text x="395" y="510" text-anchor="middle" fill="#666" font-size="10">일정 실행</text>
+  <text x="605" y="510" text-anchor="middle" fill="#666" font-size="10">돌발 상황 인지</text>
+  <text x="815" y="510" text-anchor="middle" fill="#666" font-size="10">대안 탐색</text>
+  <text x="1025" y="510" text-anchor="middle" fill="#666" font-size="10">대안 선택/재조정</text>
+  <text x="1235" y="510" text-anchor="middle" fill="#666" font-size="10">변경 일정 실행</text>
+
+  <!-- KEY ACTIONS Row -->
+  <rect x="40" y="535" width="1320" height="22" rx="4" fill="#37474f"/>
+  <text x="55" y="550" fill="white" font-size="11" font-weight="bold">주요 행동</text>
+
+  <!-- Stage 1 actions -->
+  <rect x="40" y="560" width="210" height="95" rx="6" fill="#E8F5E9" filter="url(#shadowLight)"/>
+  <text x="50" y="577" fill="#2E7D32" font-size="10">- 구글맵 별표로 방문지 선정</text>
+  <text x="50" y="592" fill="#2E7D32" font-size="10">- 노션/메모에 시간별 일정 정리</text>
+  <text x="50" y="607" fill="#2E7D32" font-size="10">- 날씨 앱으로 실내/실외 조절</text>
+  <text x="50" y="622" fill="#2E7D32" font-size="10">- 영업시간 교차 확인 (블로그 3+)</text>
+  <text x="50" y="637" fill="#2E7D32" font-size="10">- 이동 경로 시뮬레이션</text>
+  <text x="50" y="650" fill="#999" font-size="9">소요 시간: 15~40분</text>
+
+  <!-- Stage 2 actions -->
+  <rect x="262" y="560" width="210" height="95" rx="6" fill="#E3F2FD" filter="url(#shadowLight)"/>
+  <text x="272" y="577" fill="#1565C0" font-size="10">- 구글맵 내비로 목적지 이동</text>
+  <text x="272" y="592" fill="#1565C0" font-size="10">- 계획된 활동 수행 (관광/식사)</text>
+  <text x="272" y="607" fill="#1565C0" font-size="10">- 다음 일정까지 시간 체크</text>
+  <text x="272" y="622" fill="#1565C0" font-size="10">- 지도+일정 앱 번갈아 확인</text>
+  <text x="272" y="637" fill="#1565C0" font-size="10">- 사진 촬영/SNS 기록</text>
+
+  <!-- Stage 3 actions -->
+  <rect x="484" y="560" width="210" height="95" rx="6" fill="#FFEBEE" filter="url(#shadowLight)"/>
+  <text x="494" y="577" fill="#C62828" font-size="10">- 도착 후 문제 인지 (사후 인지)</text>
+  <text x="494" y="592" fill="#C62828" font-size="10">- 즉시 스마트폰 꺼내 확인</text>
+  <text x="494" y="607" fill="#C62828" font-size="10">- 날씨 급변 / 임시 휴업 발견</text>
+  <text x="494" y="622" fill="#C62828" font-size="10">- 대기줄 60~100명 마주함</text>
+  <text x="494" y="637" fill="#C62828" font-size="10">- 교통수단 운행 중단 확인</text>
+  <text x="494" y="650" fill="#999" font-size="9">4/5명이 도착 후에야 인지</text>
+
+  <!-- Stage 4 actions -->
+  <rect x="706" y="560" width="210" height="95" rx="6" fill="#FFF3E0" filter="url(#shadowLight)"/>
+  <text x="716" y="577" fill="#BF360C" font-size="10">- 구글맵 "근처 OO" 검색</text>
+  <text x="716" y="592" fill="#BF360C" font-size="10">- 네이버 블로그 한국어 리뷰 교차</text>
+  <text x="716" y="607" fill="#BF360C" font-size="10">- 인스타 해시태그 탐색</text>
+  <text x="716" y="622" fill="#BF360C" font-size="10">- 후보별 별점/거리/영업 비교</text>
+  <text x="716" y="637" fill="#BF360C" font-size="10">- 앱 5~6개 탭 오가며 정보 조합</text>
+  <text x="716" y="650" fill="#E53935" font-size="9" font-weight="bold">평균 소요: 23.5분</text>
+
+  <!-- Stage 5 actions -->
+  <rect x="928" y="560" width="210" height="95" rx="6" fill="#FFF8E1" filter="url(#shadowLight)"/>
+  <text x="938" y="577" fill="#E65100" font-size="10">- 거리/평점/영업 기준 최종 선택</text>
+  <text x="938" y="592" fill="#E65100" font-size="10">- 나머지 일정 머릿속 재계산</text>
+  <text x="938" y="607" fill="#E65100" font-size="10">- 일부 일정 포기/다음날 이월</text>
+  <text x="938" y="622" fill="#E65100" font-size="10">- 노션/메모에 수동 수정</text>
+  <text x="938" y="637" fill="#E65100" font-size="10">- 이동 경로 재검색 후 출발</text>
+  <text x="938" y="650" fill="#999" font-size="9">재조정 소요: 5~15분</text>
+
+  <!-- Stage 6 actions -->
+  <rect x="1150" y="560" width="210" height="95" rx="6" fill="#E8F5E9" filter="url(#shadowLight)"/>
+  <text x="1160" y="577" fill="#2E7D32" font-size="10">- 대안 장소에서 새로운 경험</text>
+  <text x="1160" y="592" fill="#2E7D32" font-size="10">- 나머지 코스 순서대로 진행</text>
+  <text x="1160" y="607" fill="#2E7D32" font-size="10">- 숙소에서 하루 회고</text>
+  <text x="1160" y="622" fill="#2E7D32" font-size="10">- 내일 일정 수정/보완</text>
+  <text x="1160" y="637" fill="#2E7D32" font-size="10">- SNS에 "플랜B" 후기 공유</text>
+
+  <!-- PAIN POINTS Row -->
+  <rect x="40" y="670" width="1320" height="22" rx="4" fill="#c62828"/>
+  <text x="55" y="685" fill="white" font-size="11" font-weight="bold">Pain Points</text>
+
+  <!-- Stage 1 pains -->
+  <rect x="40" y="695" width="210" height="80" rx="6" fill="#FFEBEE" filter="url(#shadowLight)"/>
+  <text x="50" y="712" fill="#C62828" font-size="10" font-weight="bold">정보 파편화</text>
+  <text x="50" y="726" fill="#C62828" font-size="9">3개+ 앱 오가며 리서치 노동</text>
+  <text x="50" y="742" fill="#C62828" font-size="10" font-weight="bold">정보 신뢰도</text>
+  <text x="50" y="756" fill="#C62828" font-size="9">2~3년 전 블로그 정보 의존</text>
+  <text x="50" y="770" fill="#C62828" font-size="9">영업시간 일일이 교차 확인</text>
+
+  <!-- Stage 2 pains -->
+  <rect x="262" y="695" width="210" height="80" rx="6" fill="#FFEBEE" filter="url(#shadowLight)"/>
+  <text x="272" y="712" fill="#C62828" font-size="10" font-weight="bold">이동 시간 초과</text>
+  <text x="272" y="726" fill="#C62828" font-size="9">예상보다 오래 걸려 일정 밀림</text>
+  <text x="272" y="742" fill="#C62828" font-size="10" font-weight="bold">이중 확인 패턴</text>
+  <text x="272" y="756" fill="#C62828" font-size="9">지도 + 일정 앱 반복 전환 (3/5명)</text>
+
+  <!-- Stage 3 pains -->
+  <rect x="484" y="695" width="210" height="80" rx="6" fill="#FFCDD2" filter="url(#shadowLight)"/>
+  <text x="494" y="712" fill="#B71C1C" font-size="10" font-weight="bold">사후 인지 (헛걸음)</text>
+  <text x="494" y="726" fill="#B71C1C" font-size="9">도착해서야 문제 인지 (4/5명)</text>
+  <text x="494" y="742" fill="#B71C1C" font-size="10" font-weight="bold">심리적 충격</text>
+  <text x="494" y="756" fill="#B71C1C" font-size="9">연쇄 영향 불안 (4/5명)</text>
+  <text x="494" y="770" fill="#B71C1C" font-size="9">혼자 감당 부담 (솔로 3/5명)</text>
+
+  <!-- Stage 4 pains -->
+  <rect x="706" y="695" width="210" height="80" rx="6" fill="#FFCDD2" filter="url(#shadowLight)"/>
+  <text x="716" y="712" fill="#B71C1C" font-size="10" font-weight="bold">시간 손실 23.5분 (5/5명)</text>
+  <text x="716" y="726" fill="#B71C1C" font-size="9">삼각 동선: 구글맵-네이버-인스타</text>
+  <text x="716" y="742" fill="#B71C1C" font-size="10" font-weight="bold">현지어 장벽 (4/5명)</text>
+  <text x="716" y="756" fill="#B71C1C" font-size="9">리뷰 번역 어려움, 정보 접근 제한</text>
+  <text x="716" y="770" fill="#B71C1C" font-size="9">선택지 과다로 결정 마비 (3/5명)</text>
+
+  <!-- Stage 5 pains -->
+  <rect x="928" y="695" width="210" height="80" rx="6" fill="#FFE0B2" filter="url(#shadowLight)"/>
+  <text x="938" y="712" fill="#E65100" font-size="10" font-weight="bold">확신 부족 (5/5명 전원)</text>
+  <text x="938" y="726" fill="#E65100" font-size="9">"이게 정말 최선인가?"</text>
+  <text x="938" y="742" fill="#E65100" font-size="10" font-weight="bold">도미노 효과 (4/5명)</text>
+  <text x="938" y="756" fill="#E65100" font-size="9">1곳 변경 -> 2~3곳 연쇄 변경</text>
+  <text x="938" y="770" fill="#E65100" font-size="9">수동 재계산 인지적 부담</text>
+
+  <!-- Stage 6 pains -->
+  <rect x="1150" y="695" width="210" height="80" rx="6" fill="#FFF3E0" filter="url(#shadowLight)"/>
+  <text x="1160" y="712" fill="#E65100" font-size="10" font-weight="bold">피로 누적 (4/5명)</text>
+  <text x="1160" y="726" fill="#E65100" font-size="9">탐색 에너지 소모 -> 오후 만족도 하락</text>
+  <text x="1160" y="742" fill="#E65100" font-size="10" font-weight="bold">기대 불일치</text>
+  <text x="1160" y="756" fill="#E65100" font-size="9">리뷰와 다를 때 이중 실망 (3/5명)</text>
+  <text x="1160" y="770" fill="#E65100" font-size="9">포기 장소에 대한 미련 (3/5명)</text>
+
+  <!-- GAIN POINTS Row -->
+  <rect x="40" y="790" width="1320" height="22" rx="4" fill="#2E7D32"/>
+  <text x="55" y="805" fill="white" font-size="11" font-weight="bold">Gain Points</text>
+
+  <!-- Stage 1 gains -->
+  <rect x="40" y="815" width="210" height="48" rx="6" fill="#C8E6C9" filter="url(#shadowLight)"/>
+  <text x="50" y="832" fill="#1B5E20" font-size="10">+ 일정 정리 완료 시 기대감</text>
+  <text x="50" y="848" fill="#1B5E20" font-size="10">+ 계획 세우는 과정의 설렘</text>
+
+  <!-- Stage 2 gains -->
+  <rect x="262" y="815" width="210" height="48" rx="6" fill="#C8E6C9" filter="url(#shadowLight)"/>
+  <text x="272" y="832" fill="#1B5E20" font-size="10">+ 계획대로 진행되는 뿌듯함</text>
+  <text x="272" y="848" fill="#1B5E20" font-size="10">+ 새로운 장소 경험의 설렘</text>
+
+  <!-- Stage 3 gains -->
+  <rect x="484" y="815" width="210" height="48" rx="6" fill="#FFEBEE" filter="url(#shadowLight)"/>
+  <text x="494" y="832" fill="#999" font-size="10">긍정적 감정 거의 없음</text>
+  <text x="494" y="848" fill="#999" font-size="9">(리피터: "이럴 줄 알았지" 수용)</text>
+
+  <!-- Stage 4 gains -->
+  <rect x="706" y="815" width="210" height="48" rx="6" fill="#FFF9C4" filter="url(#shadowLight)"/>
+  <text x="716" y="832" fill="#F57F17" font-size="10">+ 검색 중 좋은 곳 발견 기대감</text>
+  <text x="716" y="848" fill="#F57F17" font-size="9">(인터뷰 3/5명)</text>
+
+  <!-- Stage 5 gains -->
+  <rect x="928" y="815" width="210" height="48" rx="6" fill="#C8E6C9" filter="url(#shadowLight)"/>
+  <text x="938" y="832" fill="#1B5E20" font-size="10">+ 결정 후 해방감 (4/5명)</text>
+  <text x="938" y="848" fill="#1B5E20" font-size="10">+ 커플 합의 성공 시 분위기 회복</text>
+
+  <!-- Stage 6 gains -->
+  <rect x="1150" y="815" width="210" height="48" rx="6" fill="#A5D6A7" filter="url(#shadowLight)"/>
+  <text x="1160" y="832" fill="#1B5E20" font-size="10" font-weight="bold">+ "뜻밖의 발견" 강한 만족</text>
+  <text x="1160" y="848" fill="#1B5E20" font-size="10">+ 자기 효능감 (3/5명)</text>
+
+  <!-- TOUCHPOINTS Row -->
+  <rect x="40" y="878" width="1320" height="22" rx="4" fill="#455a64"/>
+  <text x="55" y="893" fill="white" font-size="11" font-weight="bold">터치포인트</text>
+
+  <rect x="40" y="903" width="210" height="40" rx="6" fill="#ECEFF1" filter="url(#shadowLight)"/>
+  <text x="50" y="918" fill="#455a64" font-size="9">구글맵 | 노션 | 블로그 | 날씨앱</text>
+  <text x="50" y="932" fill="#455a64" font-size="9">인스타그램 | 트리플 | 카카오톡</text>
+
+  <rect x="262" y="903" width="210" height="40" rx="6" fill="#ECEFF1" filter="url(#shadowLight)"/>
+  <text x="272" y="918" fill="#455a64" font-size="9">구글맵 내비 | 일정 앱 | 교통수단</text>
+  <text x="272" y="932" fill="#455a64" font-size="9">관광지/식당/카페 현장</text>
+
+  <rect x="484" y="903" width="210" height="40" rx="6" fill="#ECEFF1" filter="url(#shadowLight)"/>
+  <text x="494" y="918" fill="#455a64" font-size="9">현장 안내문(현지어) | 날씨 앱</text>
+  <text x="494" y="932" fill="#455a64" font-size="9">구글맵 | 교통 전광판 | 주변 사람</text>
+
+  <rect x="706" y="903" width="210" height="40" rx="6" fill="#ECEFF1" filter="url(#shadowLight)"/>
+  <text x="716" y="918" fill="#455a64" font-size="9">구글맵 | 네이버 | 인스타그램</text>
+  <text x="716" y="932" fill="#455a64" font-size="9">구글 번역 | Tabelog | 트립어드바이저</text>
+
+  <rect x="928" y="903" width="210" height="40" rx="6" fill="#ECEFF1" filter="url(#shadowLight)"/>
+  <text x="938" y="918" fill="#455a64" font-size="9">구글맵 | 노션/메모(수동 수정)</text>
+  <text x="938" y="932" fill="#455a64" font-size="9">카카오톡 | 그랩/택시 앱</text>
+
+  <rect x="1150" y="903" width="210" height="40" rx="6" fill="#ECEFF1" filter="url(#shadowLight)"/>
+  <text x="1160" y="918" fill="#455a64" font-size="9">대안 장소 현장 | SNS (인스타/X)</text>
+  <text x="1160" y="932" fill="#455a64" font-size="9">구글맵 저장 | 노션 내일 일정</text>
+
+  <!-- SERVICE OPPORTUNITY Row -->
+  <rect x="40" y="958" width="1320" height="22" rx="4" fill="#1565C0"/>
+  <text x="55" y="973" fill="white" font-size="11" font-weight="bold">서비스 개입 기회</text>
+
+  <rect x="40" y="983" width="210" height="55" rx="6" fill="#E3F2FD" stroke="#1565C0" stroke-width="1.5" stroke-dasharray="4,2"/>
+  <text x="50" y="1000" fill="#0D47A1" font-size="10" font-weight="bold">사전 리스크 감지</text>
+  <text x="50" y="1015" fill="#0D47A1" font-size="9">영업시간/휴무일 자동 검증</text>
+  <text x="50" y="1028" fill="#0D47A1" font-size="9">날씨 기반 일정 자동 조절 제안</text>
+
+  <rect x="262" y="983" width="210" height="55" rx="6" fill="#E3F2FD" stroke="#1565C0" stroke-width="1.5" stroke-dasharray="4,2"/>
+  <text x="272" y="1000" fill="#0D47A1" font-size="10" font-weight="bold">실시간 모니터링</text>
+  <text x="272" y="1015" fill="#0D47A1" font-size="9">다음 장소 상태 자동 감시</text>
+  <text x="272" y="1028" fill="#0D47A1" font-size="9">선제적 알림 (도착 전 경고)</text>
+
+  <rect x="484" y="983" width="210" height="55" rx="6" fill="#E8EAF6" stroke="#283593" stroke-width="2"/>
+  <text x="494" y="1000" fill="#1A237E" font-size="10" font-weight="bold">즉각 상황 안내</text>
+  <text x="494" y="1015" fill="#1A237E" font-size="9">돌발 원인/지속시간 안내</text>
+  <text x="494" y="1028" fill="#1A237E" font-size="9">"이렇게 하세요" 단계별 가이드</text>
+
+  <rect x="706" y="983" width="210" height="55" rx="6" fill="#C5CAE9" stroke="#1A237E" stroke-width="2.5"/>
+  <text x="716" y="1000" fill="#0D47A1" font-size="10" font-weight="bold">AI 즉시 대안 제시 (핵심)</text>
+  <text x="716" y="1015" fill="#0D47A1" font-size="9">맞춤 3개 추천 + 추천 이유</text>
+  <text x="716" y="1028" fill="#0D47A1" font-size="9">통합 비교 화면: 30분->3분</text>
+
+  <rect x="928" y="983" width="210" height="55" rx="6" fill="#E8EAF6" stroke="#283593" stroke-width="2"/>
+  <text x="938" y="1000" fill="#1A237E" font-size="10" font-weight="bold">자동 일정 재조정</text>
+  <text x="938" y="1015" fill="#1A237E" font-size="9">원터치로 전체 일정 재배치</text>
+  <text x="938" y="1028" fill="#1A237E" font-size="9">도미노 효과 자동 해소</text>
+
+  <rect x="1150" y="983" width="210" height="55" rx="6" fill="#E3F2FD" stroke="#1565C0" stroke-width="1.5" stroke-dasharray="4,2"/>
+  <text x="1160" y="1000" fill="#0D47A1" font-size="10" font-weight="bold">학습 및 기록</text>
+  <text x="1160" y="1015" fill="#0D47A1" font-size="9">경험 자동 기록, 추천 품질 학습</text>
+  <text x="1160" y="1028" fill="#0D47A1" font-size="9">"뜻밖의 발견" 스토리 생성</text>
+
+  <!-- Key Insights Section -->
+  <rect x="40" y="1060" width="1320" height="280" rx="10" fill="white" filter="url(#shadow)"/>
+  <text x="60" y="1085" fill="#1a237e" font-size="15" font-weight="bold">핵심 인사이트</text>
+
+  <!-- Insight 1 -->
+  <rect x="60" y="1098" width="400" height="110" rx="8" fill="#FFF3E0" filter="url(#shadowLight)"/>
+  <rect x="60" y="1098" width="400" height="26" rx="8" fill="#E65100"/>
+  <rect x="60" y="1110" width="400" height="14" fill="#E65100"/>
+  <text x="70" y="1116" fill="white" font-size="12" font-weight="bold">Top 1. "30분의 고통" -- 대안 탐색 시간 소모</text>
+  <text x="70" y="1140" fill="#BF360C" font-size="11" font-weight="bold">심각도: 5.0/5 | 빈도: 5/5명 전원</text>
+  <text x="70" y="1158" fill="#4E342E" font-size="10">평균 23.5분 소요 (최소 12분 ~ 최대 40분)</text>
+  <text x="70" y="1173" fill="#4E342E" font-size="10">3박4일 매일 발생 시 하루 일정 1개 분량 손실</text>
+  <text x="70" y="1190" fill="#4E342E" font-size="9" font-style="italic">"매일 30분씩 날리면 하루치 일정이 사라지는 거예요" -- 준혁</text>
+
+  <!-- Insight 2 -->
+  <rect x="480" y="1098" width="400" height="110" rx="8" fill="#FFEBEE" filter="url(#shadowLight)"/>
+  <rect x="480" y="1098" width="400" height="26" rx="8" fill="#C62828"/>
+  <rect x="480" y="1110" width="400" height="14" fill="#C62828"/>
+  <text x="490" y="1116" fill="white" font-size="12" font-weight="bold">Top 2. "헛걸음의 충격" -- 도착 후 사후 인지</text>
+  <text x="490" y="1140" fill="#B71C1C" font-size="11" font-weight="bold">심각도: 4.8/5 | 빈도: 4/5명</text>
+  <text x="490" y="1158" fill="#4E342E" font-size="10">4/5명이 도착 후에야 문제 인지 (이동 시간 매몰)</text>
+  <text x="490" y="1173" fill="#4E342E" font-size="10">감정 곡선 -2.0점 급락의 직접적 트리거</text>
+  <text x="490" y="1190" fill="#4E342E" font-size="9" font-style="italic">"영업 중이라 해서 믿고 갔다가 헛걸음하면 신뢰 문제" -- 준혁</text>
+
+  <!-- Insight 3 -->
+  <rect x="900" y="1098" width="440" height="110" rx="8" fill="#FFF8E1" filter="url(#shadowLight)"/>
+  <rect x="900" y="1098" width="440" height="26" rx="8" fill="#E65100"/>
+  <rect x="900" y="1110" width="440" height="14" fill="#E65100"/>
+  <text x="910" y="1116" fill="white" font-size="12" font-weight="bold">Top 3. "퍼즐 맞추기" -- 수동 재조정 도미노 효과</text>
+  <text x="910" y="1140" fill="#E65100" font-size="11" font-weight="bold">심각도: 4.4/5 | 빈도: 4/5명</text>
+  <text x="910" y="1158" fill="#4E342E" font-size="10">1곳 변경 -> 평균 2~3곳 연쇄 변경 발생</text>
+  <text x="910" y="1173" fill="#4E342E" font-size="10">당일 + 익일 일정까지 도미노 영향</text>
+  <text x="910" y="1190" fill="#4E342E" font-size="9" font-style="italic">"마지막 날에 첫째 날 일정을 하게 됐어요. 퍼즐 맞추기가 피곤" -- 소윤</text>
+
+  <!-- Emotion summary -->
+  <rect x="60" y="1220" width="600" height="105" rx="8" fill="#F3E5F5" filter="url(#shadowLight)"/>
+  <text x="70" y="1240" fill="#4A148C" font-size="12" font-weight="bold">감정 고점/저점 및 이탈 위험</text>
+  <text x="70" y="1260" fill="#4A148C" font-size="10">최고점: 2단계 일정 실행 (3.6) -- "계획대로 진행되는 뿌듯함"</text>
+  <text x="70" y="1278" fill="#4A148C" font-size="10">최저점: 4단계 대안 탐색 (1.9) -- "검색만 하고 있다는 좌절감"</text>
+  <text x="70" y="1296" fill="#4A148C" font-size="10">감정 절벽: 2->3단계 (-2.0) -- 가장 큰 낙차, 서비스 개입 최대 효과 구간</text>
+  <text x="70" y="1314" fill="#C62828" font-size="10">이탈 위험: 초보 자유여행 포기 | 일정 축소/숙소 복귀 | 커플 관계 손상</text>
+
+  <!-- Key value -->
+  <rect x="680" y="1220" width="660" height="105" rx="8" fill="#E8F5E9" filter="url(#shadowLight)"/>
+  <text x="690" y="1240" fill="#1B5E20" font-size="12" font-weight="bold">핵심 서비스 기대 가치</text>
+  <text x="690" y="1260" fill="#1B5E20" font-size="10">1. 시간 해방 -- "30분을 3분으로" (5/5명)</text>
+  <text x="690" y="1278" fill="#1B5E20" font-size="10">2. 안심 여행 -- "도착해서 당황하지 않는다" (4/5명)</text>
+  <text x="690" y="1296" fill="#1B5E20" font-size="10">3. 일정 자동화 -- "퍼즐 맞추기를 대신 해준다" (4/5명 + 유료 전환 트리거)</text>
+  <text x="690" y="1314" fill="#1B5E20" font-size="10">4. 확신 있는 선택 -- "3개 추천 + 이유" (5/5명)</text>
+
+  <!-- Footer -->
+  <rect x="40" y="1355" width="1320" height="50" rx="8" fill="#37474f" filter="url(#shadow)"/>
+  <text x="700" y="1375" text-anchor="middle" fill="#b0bec5" font-size="11">데이터 기반: 관찰 조사 10회 + 체험 조사 10회 + 심층 인터뷰 5명 + 인터뷰 종합 분석 | 감정 곡선: 체험 10회 단계별 만족도 평균 (5점 만점)</text>
+  <text x="700" y="1395" text-anchor="middle" fill="#78909c" font-size="10">travel-planner | 여행 중 실시간 일정 최적화 가이드 앱 | 서비스 기획: 도그냥(이미준)</text>
+</svg>

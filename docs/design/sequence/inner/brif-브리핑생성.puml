@@ -1,0 +1,164 @@
+@startuml brif-브리핑생성
+!theme mono
+
+title BRIF 서비스 내부 - 브리핑 생성 플로우\n(UFR-BRIF-010, 020, 030)
+
+control "스케줄러" as scheduler
+participant "BriefingController" as ctrl
+participant "BriefingService" as svc
+participant "BriefingGenerator" as gen
+participant "BriefingRepository" as repo
+database "DB" as db
+database "Redis Cache" as cache
+queue "Event Bus" as bus
+participant "AUTH 서비스(E)" as auth
+participant "MNTR 서비스(E)" as mntr
+participant "PushService" as push
+participant "FCM(E)" as fcm
+
+== 스케줄러 트리거 (출발 15~30분 전) ==
+scheduler -> ctrl: POST /briefing/generate\n{user_id, place_id, schedule_id,\nscheduled_departure_time}
+activate ctrl
+
+ctrl -> svc: generateBriefing(요청 데이터)
+activate svc
+
+== 멱등성 키 확인 (UFR-BRIF-020) ==
+svc -> repo: findBriefingByIdempotencyKey\n(user_id, place_id,\nDATE(scheduled_departure_time))
+activate repo
+
+repo -> db: SELECT * FROM briefing\nWHERE user_id=? AND place_id=?\nAND DATE(scheduled_departure_time)=?
+activate db
+alt 기존 브리핑 존재
+    db -> repo: {briefing_id, type, content, created_at}
+    deactivate db
+    repo -> svc: 기존 브리핑 레코드 반환
+    deactivate repo
+    svc -> ctrl: {briefing_id, status: "SKIPPED"}\n(중복 방지)
+    deactivate svc
+    deactivate ctrl
+else 신규 브리핑 필요
+    db -> repo: nil
+    deactivate db
+
+    == 구독 티어 확인 (UFR-BRIF-030) ==
+    svc -> auth: GET /auth/subscription\n{user_id}
+    activate auth
+    auth -> svc: {tier, remaining_count}
+    deactivate auth
+
+    alt Free 티어 일일 한도 초과
+        svc -> ctrl: {status: "SKIPPED"}\n(한도 초과)
+        deactivate svc
+        deactivate ctrl
+        deactivate repo
+    else 유료 티어 또는 한도 내
+        deactivate repo
+
+        == 최신 상태 조회 (MNTR 캐시) ==
+        svc -> cache: GET status_badge:{place_id}
+        activate cache
+
+        alt 캐시 히트
+            cache -> svc: {color, operating_status,\nweather, crowdedness,\ntravel_time}
+            deactivate cache
+        else 캐시 미스
+            cache -> svc: nil
+            deactivate cache
+            svc -> mntr: GET /monitoring/status/{place_id}
+            activate mntr
+            mntr -> svc: 최신 상태 데이터
+            deactivate mntr
+        end
+
+        == 브리핑 생성 (BriefingGenerator) ==
+        svc -> gen: generateBriefing\n(status, place_info, user_tier)
+        activate gen
+
+        alt 상태 = 초록 (정상)
+            gen -> gen: 안심 브리핑 생성\n제목: "다음 목적지 준비 완료"\n내용: 영업상태, 날씨, 혼잡도,\n이동시간 포함\n총평: "모두 정상입니다"
+        else 상태 = 노랑 또는 빨강 (주의/위험)
+            gen -> gen: 주의 브리핑 생성\n제목: "다음 목적지 확인 필요"\n내용: 현재 상태 정보 + 주의사항\n총평: "상황을 확인해주세요"
+        end
+
+        gen -> svc: {type, title, content, summary}
+        deactivate gen
+
+        == 브리핑 저장 ==
+        svc -> repo: saveBriefing\n(user_id, place_id, schedule_id,\ntype, title, content, summary,\nstatus_color)
+        activate repo
+
+        repo -> db: INSERT INTO briefing\n(user_id, place_id, schedule_id,\nscheduled_departure_time,\ntype, title, content, summary,\nstatus_color, created_at)\nVALUES(...)
+        activate db
+        db -> repo: {briefing_id}
+        deactivate db
+
+        repo -> svc: 저장 완료, briefing_id 반환
+        deactivate repo
+
+        == 캐시 저장 ==
+        svc -> cache: SET briefing:{briefing_id}\n{type, title, content, summary}\nTTL=30분
+        activate cache
+        cache -> svc: OK
+        deactivate cache
+
+        == Push 발송 ==
+        svc -> push: sendPush\n(user_id, briefing_id, type)
+        activate push
+
+        push -> fcm: POST /send\n{user_id, device_tokens,\ntitle, body, data: {briefing_id}}
+        activate fcm
+        fcm -> push: {message_id, status: "ACCEPTED"}
+        deactivate fcm
+
+        push -> svc: Push 발송 완료
+        deactivate push
+
+        == 이벤트 발행 ==
+        svc -> bus: publish BriefingGenerated\n{briefing_id, place_id,\ntype, user_id}
+        activate bus
+        bus -> svc: 이벤트 발행 완료
+        deactivate bus
+
+        svc -> ctrl: {briefing_id, type,\nstatus: "COMPLETED"}
+        deactivate svc
+        deactivate ctrl
+    end
+end
+
+note right of svc
+**브리핑 생성 로직 흐름**
+1. 멱등성 키로 중복 체크
+   - (user_id, place_id,\n    DATE(scheduled_departure_time))
+2. 구독 티어 확인
+   - Free: 일일 1회 한도
+   - Trip Pass/Pro: 무제한
+3. MNTR 캐시에서 최신 상태 조회
+4. 상태 기반 브리핑 템플릿 선택
+   - 초록: 안심
+   - 노랑/빨강: 주의
+5. DB 저장 (멱등성 제약)
+6. 캐시 저장 (TTL 30분)
+7. FCM Push 발송
+8. 이벤트 발행
+end note
+
+note right of gen
+**브리핑 생성 인터페이스**
+- 템플릿 기반 생성
+- Phase 3 AI 전환 대비
+  추상화된 인터페이스 제공
+- 총평 생성: 외부 호출 가능
+end note
+
+note right of repo
+**Repository 처리**
+- 멱등성 보장:
+  DB 유니크 제약
+  (user_id, place_id,
+   DATE(scheduled_departure_time))
+- CRUD: 생성, 조회
+- 캐시 미스 시 DB 조회
+end note
+
+@enduml

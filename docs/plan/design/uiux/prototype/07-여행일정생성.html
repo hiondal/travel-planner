@@ -1,0 +1,579 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>새 여행 만들기 - travel-planner</title>
+  <link rel="stylesheet" href="common.css">
+  <style>
+    /* -----------------------------------------------
+       화면 07: 여행 일정 생성
+       UFR-SCHD-010 — 새 여행 만들기 폼
+       ----------------------------------------------- */
+
+    /* 스크롤 영역: 하단 고정 CTA 높이만큼 패딩 */
+    .create-trip-content {
+      padding: var(--space-xl) var(--space-base) 100px;
+    }
+
+    /* 폼 필드 그룹 */
+    .form-group {
+      margin-bottom: var(--space-xl);
+    }
+
+    /* 여행명 입력 래퍼: 카운터 포함 */
+    .trip-name-wrapper {
+      position: relative;
+    }
+
+    .trip-name-counter {
+      font-size: var(--font-caption);
+      color: var(--text-disabled);
+      text-align: right;
+      margin-top: var(--space-xs);
+      transition: color var(--anim-fast);
+    }
+
+    .trip-name-counter--warn {
+      color: var(--status-red);
+    }
+
+    /* 기간 선택: 시작일 / 종료일 나란히 */
+    .date-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: var(--space-sm);
+    }
+
+    .date-field-wrapper {
+      display: flex;
+      flex-direction: column;
+    }
+
+    .date-sublabel {
+      font-size: var(--font-caption);
+      color: var(--text-secondary);
+      margin-bottom: var(--space-xs);
+    }
+
+    /* date input: 공통 input-field 기반 + 날짜 아이콘 오버라이드 */
+    input[type="date"].input-field {
+      /* WebKit date picker 색상 통일 */
+      color-scheme: dark;
+      cursor: pointer;
+    }
+
+    input[type="date"].input-field::-webkit-calendar-picker-indicator {
+      filter: invert(0.5);
+      cursor: pointer;
+      opacity: 0.6;
+    }
+
+    input[type="date"].input-field::-webkit-date-and-time-value {
+      text-align: left;
+    }
+
+    /* 날짜 유효성 에러 메시지 */
+    .date-error {
+      font-size: var(--font-caption);
+      color: var(--status-red);
+      margin-top: var(--space-xs);
+      display: none;
+    }
+
+    .date-error.visible {
+      display: block;
+    }
+
+    /* 도시 선택 드롭다운 */
+    .city-select-wrapper {
+      position: relative;
+    }
+
+    .city-select {
+      width: 100%;
+      height: 48px;
+      padding: 0 44px 0 var(--space-base);
+      background-color: var(--bg-input);
+      color: var(--text-primary);
+      font-size: var(--font-body1);
+      font-family: var(--font-primary);
+      border: 1px solid transparent;
+      border-radius: var(--radius-sm);
+      transition: border-color var(--anim-fast);
+      /* 기본 화살표 제거 */
+      appearance: none;
+      -webkit-appearance: none;
+      -moz-appearance: none;
+      /* SVG 화살표 배경 이미지 */
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='20' height='20' viewBox='0 0 24 24' fill='none' stroke='%238A8A8A' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+      background-repeat: no-repeat;
+      background-position: right 12px center;
+      cursor: pointer;
+    }
+
+    .city-select:focus {
+      border-color: var(--accent-blue);
+      outline: none;
+    }
+
+    .city-select option {
+      background-color: var(--bg-card);
+      color: var(--text-primary);
+    }
+
+    .city-select option[value=""] {
+      color: var(--text-disabled);
+    }
+
+    /* 지원 도시 힌트 텍스트 */
+    .city-hint {
+      font-size: var(--font-caption);
+      color: var(--text-disabled);
+      margin-top: var(--space-xs);
+      line-height: 1.5;
+    }
+
+    /* 하단 고정 CTA 영역 */
+    .form-actions {
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      padding: var(--space-md) var(--space-base) calc(var(--space-md) + env(safe-area-inset-bottom, 0px));
+      background-color: var(--bg-primary);
+      border-top: 1px solid #1A1A1A;
+      z-index: 200;
+    }
+
+    /* 데스크탑: 최대폭 고정 */
+    @media (min-width: 768px) {
+      .form-actions {
+        max-width: 768px;
+        left: 50%;
+        transform: translateX(-50%);
+      }
+    }
+
+    @media (min-width: 1024px) {
+      .form-actions {
+        max-width: 480px;
+      }
+    }
+
+    /* CTA 버튼 비활성 시 시각 피드백 */
+    .btn--primary:disabled {
+      opacity: 0.35;
+      cursor: not-allowed;
+    }
+
+    /* 입력 필드 포커스 링 보완 */
+    .input-field:focus-visible,
+    .city-select:focus-visible {
+      outline: 2px solid var(--accent-blue);
+      outline-offset: 1px;
+    }
+  </style>
+</head>
+<body>
+  <div class="page-container">
+
+    <!-- 상단 네비게이션 -->
+    <app-top-nav back title="새 여행 만들기"></app-top-nav>
+
+    <!-- 폼 본문 -->
+    <main
+      class="page-content page-content--no-tab create-trip-content"
+      role="main"
+      aria-labelledby="create-trip-heading"
+    >
+      <!-- 시각적으로 숨긴 페이지 제목 (접근성) -->
+      <h1 id="create-trip-heading" class="sr-only">새 여행 만들기</h1>
+
+      <form
+        id="createTripForm"
+        novalidate
+        aria-describedby="form-status"
+        onsubmit="handleSubmit(event)"
+      >
+
+        <!-- 폼 상태 live region -->
+        <div
+          id="form-status"
+          role="status"
+          aria-live="polite"
+          aria-atomic="true"
+          class="sr-only"
+        ></div>
+
+        <!-- 1. 여행명 -->
+        <div class="form-group">
+          <label for="tripName" class="input-label">
+            여행명
+            <span class="sr-only">(필수, 1~50자)</span>
+          </label>
+          <div class="trip-name-wrapper">
+            <input
+              type="text"
+              id="tripName"
+              name="tripName"
+              class="input-field"
+              placeholder="예) 도쿄 3박4일"
+              maxlength="50"
+              autocomplete="off"
+              required
+              aria-required="true"
+              aria-describedby="tripNameCounter tripNameError"
+              oninput="handleNameInput(this)"
+            >
+          </div>
+          <div
+            id="tripNameCounter"
+            class="trip-name-counter"
+            aria-live="polite"
+            aria-label="여행명 글자 수"
+          >0/50자</div>
+          <div
+            id="tripNameError"
+            class="date-error"
+            role="alert"
+            aria-live="assertive"
+          >여행명을 1자 이상 입력해주세요.</div>
+        </div>
+
+        <!-- 2. 여행 기간 -->
+        <div class="form-group">
+          <fieldset style="border:none; padding:0; margin:0;">
+            <legend class="input-label">
+              여행 기간
+              <span class="sr-only">(필수)</span>
+            </legend>
+            <div class="date-row">
+              <!-- 시작일 -->
+              <div class="date-field-wrapper">
+                <span class="date-sublabel" id="startDateLabel">시작일</span>
+                <input
+                  type="date"
+                  id="startDate"
+                  name="startDate"
+                  class="input-field"
+                  required
+                  aria-required="true"
+                  aria-labelledby="startDateLabel"
+                  aria-describedby="dateRangeError"
+                  onchange="handleDateChange()"
+                >
+              </div>
+              <!-- 종료일 -->
+              <div class="date-field-wrapper">
+                <span class="date-sublabel" id="endDateLabel">종료일</span>
+                <input
+                  type="date"
+                  id="endDate"
+                  name="endDate"
+                  class="input-field"
+                  required
+                  aria-required="true"
+                  aria-labelledby="endDateLabel"
+                  aria-describedby="dateRangeError"
+                  onchange="handleDateChange()"
+                >
+              </div>
+            </div>
+            <!-- 날짜 범위 에러 -->
+            <div
+              id="dateRangeError"
+              class="date-error"
+              role="alert"
+              aria-live="assertive"
+            >종료일은 시작일 이후여야 합니다.</div>
+          </fieldset>
+        </div>
+
+        <!-- 3. 방문 도시 -->
+        <div class="form-group">
+          <label for="citySelect" class="input-label">
+            방문 도시
+            <span class="sr-only">(필수)</span>
+          </label>
+          <div class="city-select-wrapper">
+            <select
+              id="citySelect"
+              name="city"
+              class="city-select"
+              required
+              aria-required="true"
+              aria-describedby="cityHint"
+              onchange="handleCityChange()"
+            >
+              <option value="">도시를 선택하세요</option>
+            </select>
+          </div>
+          <p id="cityHint" class="city-hint">
+            지원 도시: 도쿄, 오사카, 교토, 방콕, 싱가포르
+          </p>
+        </div>
+
+      </form>
+    </main>
+
+    <!-- 하단 고정 CTA -->
+    <div class="form-actions" role="complementary" aria-label="여행 만들기 버튼 영역">
+      <button
+        id="ctaButton"
+        class="btn btn--primary w-full"
+        type="submit"
+        form="createTripForm"
+        disabled
+        aria-disabled="true"
+        aria-describedby="form-status"
+        onclick="handleSubmit(event)"
+      >
+        여행 만들기
+      </button>
+    </div>
+
+  </div>
+
+  <!-- Toast 컨테이너는 common.js가 동적 생성 -->
+
+  <script src="common.js"></script>
+  <script>
+    'use strict';
+
+    /* =============================================================
+       07-여행일정생성.html — 폼 로직
+       UFR-SCHD-010
+       ============================================================= */
+
+    var FORM_KEY = 'createTrip';
+
+    /* ----- 초기화 ----- */
+    document.addEventListener('DOMContentLoaded', function () {
+      initCityOptions();
+      initDateConstraints();
+      restoreForm();
+      validateForm();
+    });
+
+    /* 도시 드롭다운 옵션 생성 (SAMPLE_DATA.cities) */
+    function initCityOptions() {
+      var select = document.getElementById('citySelect');
+      SAMPLE_DATA.cities.forEach(function (city) {
+        var opt = document.createElement('option');
+        opt.value = city;
+        opt.textContent = city;
+        select.appendChild(opt);
+      });
+    }
+
+    /* 시작일 min = 오늘 */
+    function initDateConstraints() {
+      var today = getTodayString();
+      var startInput = document.getElementById('startDate');
+      startInput.setAttribute('min', today);
+    }
+
+    /* 오늘 날짜를 YYYY-MM-DD 형식으로 반환 */
+    function getTodayString() {
+      var now = new Date();
+      var y = now.getFullYear();
+      var m = String(now.getMonth() + 1).padStart(2, '0');
+      var d = String(now.getDate()).padStart(2, '0');
+      return y + '-' + m + '-' + d;
+    }
+
+    /* 저장된 폼 데이터 복원 */
+    function restoreForm() {
+      var saved = restoreFormData(FORM_KEY);
+      if (!saved) return;
+
+      var nameInput = document.getElementById('tripName');
+      var startInput = document.getElementById('startDate');
+      var endInput = document.getElementById('endDate');
+      var citySelect = document.getElementById('citySelect');
+
+      if (saved.name) {
+        nameInput.value = saved.name;
+        updateNameCounter(nameInput.value.length);
+      }
+      if (saved.startDate) startInput.value = saved.startDate;
+      if (saved.endDate) endInput.value = saved.endDate;
+      if (saved.city) citySelect.value = saved.city;
+
+      // 날짜 제약 재적용
+      if (saved.startDate) {
+        document.getElementById('endDate').setAttribute('min', saved.startDate);
+      }
+    }
+
+    /* 현재 폼 데이터를 sessionStorage에 저장 */
+    function persistForm() {
+      var data = getFormValues();
+      saveFormData(FORM_KEY, data);
+    }
+
+    /* 폼 값 수집 */
+    function getFormValues() {
+      return {
+        name:      document.getElementById('tripName').value.trim(),
+        startDate: document.getElementById('startDate').value,
+        endDate:   document.getElementById('endDate').value,
+        city:      document.getElementById('citySelect').value,
+      };
+    }
+
+    /* ----- 이벤트 핸들러 ----- */
+
+    /* 여행명 입력 */
+    function handleNameInput(input) {
+      var len = input.value.length;
+      updateNameCounter(len);
+
+      var errorEl = document.getElementById('tripNameError');
+      if (len === 0) {
+        errorEl.classList.add('visible');
+      } else {
+        errorEl.classList.remove('visible');
+      }
+
+      persistForm();
+      validateForm();
+    }
+
+    /* 글자 수 카운터 업데이트 */
+    function updateNameCounter(len) {
+      var counter = document.getElementById('tripNameCounter');
+      counter.textContent = len + '/50자';
+      if (len >= 45) {
+        counter.classList.add('trip-name-counter--warn');
+      } else {
+        counter.classList.remove('trip-name-counter--warn');
+      }
+    }
+
+    /* 날짜 변경 */
+    function handleDateChange() {
+      var startInput = document.getElementById('startDate');
+      var endInput   = document.getElementById('endDate');
+      var errorEl    = document.getElementById('dateRangeError');
+
+      var startVal = startInput.value;
+      var endVal   = endInput.value;
+
+      // 종료일 min을 시작일로 설정
+      if (startVal) {
+        endInput.setAttribute('min', startVal);
+        // 이미 선택된 종료일이 시작일보다 이전이면 초기화
+        if (endVal && endVal < startVal) {
+          endInput.value = '';
+          errorEl.classList.add('visible');
+        } else {
+          errorEl.classList.remove('visible');
+        }
+      }
+
+      // 두 날짜가 모두 있을 때 재검증
+      if (startVal && endVal) {
+        if (endVal < startVal) {
+          errorEl.classList.add('visible');
+          endInput.classList.add('input-field--error');
+        } else {
+          errorEl.classList.remove('visible');
+          endInput.classList.remove('input-field--error');
+        }
+      }
+
+      persistForm();
+      validateForm();
+    }
+
+    /* 도시 변경 */
+    function handleCityChange() {
+      persistForm();
+      validateForm();
+    }
+
+    /* ----- 폼 유효성 검사 ----- */
+
+    /*
+     * 규칙:
+     *   name.length >= 1
+     *   startDate 선택됨
+     *   endDate 선택됨
+     *   city 선택됨
+     *   endDate >= startDate
+     */
+    function isFormValid() {
+      var v = getFormValues();
+      if (!v.name || v.name.length < 1) return false;
+      if (!v.startDate) return false;
+      if (!v.endDate) return false;
+      if (!v.city) return false;
+      if (v.endDate < v.startDate) return false;
+      return true;
+    }
+
+    function validateForm() {
+      var valid = isFormValid();
+      var btn = document.getElementById('ctaButton');
+      btn.disabled = !valid;
+      btn.setAttribute('aria-disabled', String(!valid));
+
+      // 스크린 리더용 상태 알림 (디바운스 생략 — 단순 프로토타입)
+      var statusEl = document.getElementById('form-status');
+      statusEl.textContent = valid
+        ? '모든 항목이 입력되었습니다. 여행 만들기 버튼을 눌러주세요.'
+        : '';
+    }
+
+    /* ----- 폼 제출 ----- */
+    function handleSubmit(e) {
+      if (e) e.preventDefault();
+
+      if (!isFormValid()) {
+        showToast('모든 항목을 입력해주세요.');
+        return;
+      }
+
+      createTrip();
+    }
+
+    /* 여행 생성 처리 */
+    function createTrip() {
+      var values = getFormValues();
+
+      // 위치정보 동의 여부 확인
+      var consentRaw = sessionStorage.getItem('locationConsent');
+
+      if (!consentRaw) {
+        // 미동의 → 권한동의 화면으로 이동, 폼 데이터는 유지
+        persistForm();
+        navigateTo('13-권한동의.html', { returnTo: '07-여행일정생성.html' });
+        return;
+      }
+
+      // 동의 완료 → 여행 데이터 저장 후 일정표로 이동
+      var newTrip = {
+        id:        'trip-' + Date.now(),
+        name:      values.name,
+        city:      values.city,
+        startDate: values.startDate,
+        endDate:   values.endDate,
+        createdAt: new Date().toISOString(),
+      };
+
+      // 여행 데이터 세션에 저장
+      sessionStorage.setItem('currentTrip', JSON.stringify(newTrip));
+
+      // 폼 데이터 정리
+      clearFormData(FORM_KEY);
+
+      showToast('여행이 생성되었습니다!');
+      setTimeout(function () {
+        navigateTo('01-일정표.html', newTrip);
+      }, 800);
+    }
+  </script>
+</body>
+</html>

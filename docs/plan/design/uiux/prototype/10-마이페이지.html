@@ -1,0 +1,539 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>마이페이지 - travel-planner</title>
+  <link rel="stylesheet" href="common.css">
+  <style>
+    /* -----------------------------------------------
+       화면 10: 마이페이지
+       UFR-AUTH-010, UFR-PAY-010, UFR-SCHD-005, NFR-SEC-020
+       ----------------------------------------------- */
+
+    /* 페이지 레이아웃 */
+    .my-page {
+      display: flex;
+      flex-direction: column;
+      min-height: 100vh;
+    }
+
+    /* 상단 네비게이션 */
+    .my-top-nav {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      height: var(--nav-height);
+      padding: 0 var(--space-base);
+      background-color: var(--bg-primary);
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+
+    .my-top-nav__title {
+      font-size: var(--font-h2);
+      font-weight: var(--font-weight-semibold);
+      color: var(--text-primary);
+    }
+
+    /* 스크롤 영역 */
+    .my-content {
+      flex: 1;
+      padding: var(--space-base) var(--space-base)
+               calc(var(--tab-bar-height) + var(--safe-area-bottom) + var(--space-base));
+      overflow-y: auto;
+    }
+
+    /* 프로필 카드 */
+    .profile-card {
+      display: flex;
+      align-items: center;
+      gap: var(--space-base);
+      background-color: var(--bg-card);
+      border-radius: var(--radius-md);
+      padding: var(--space-lg) var(--space-base);
+      margin-bottom: var(--space-xl);
+    }
+
+    .profile-card__avatar {
+      width: 56px;
+      height: 56px;
+      border-radius: 50%;
+      background-color: var(--bg-input);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      color: var(--text-secondary);
+      overflow: hidden;
+    }
+
+    .profile-card__avatar svg {
+      width: 32px;
+      height: 32px;
+    }
+
+    .profile-card__info {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .profile-card__nickname {
+      font-size: var(--font-h3);
+      font-weight: var(--font-weight-semibold);
+      color: var(--text-primary);
+      margin-bottom: 2px;
+    }
+
+    .profile-card__email {
+      font-size: var(--font-caption);
+      color: var(--text-secondary);
+      margin-bottom: var(--space-sm);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .plan-badge {
+      display: inline-flex;
+      align-items: center;
+      padding: 3px var(--space-sm);
+      border-radius: var(--radius-sm);
+      font-size: var(--font-caption);
+      font-weight: var(--font-weight-semibold);
+    }
+
+    .plan-badge--free {
+      background-color: rgba(142, 142, 147, 0.18);
+      color: var(--status-gray);
+    }
+
+    .plan-badge--premium {
+      background: var(--gradient-premium);
+      color: #FFFFFF;
+    }
+
+    /* 섹션 공통 */
+    .settings-section {
+      margin-bottom: var(--space-xl);
+    }
+
+    .settings-section__title {
+      font-size: var(--font-caption);
+      font-weight: var(--font-weight-semibold);
+      color: var(--text-secondary);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      padding: 0 var(--space-xs) var(--space-sm);
+    }
+
+    /* 설정 목록 */
+    .settings-list {
+      background-color: var(--bg-card);
+      border-radius: var(--radius-md);
+      overflow: hidden;
+    }
+
+    .settings-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      min-height: 52px;
+      padding: 0 var(--space-base);
+      cursor: pointer;
+      transition: background-color var(--anim-fast);
+      border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+      background: none;
+      border-left: none;
+      border-right: none;
+      border-top: none;
+      width: 100%;
+      text-align: left;
+      font-family: var(--font-primary);
+    }
+
+    .settings-item:last-child {
+      border-bottom: none;
+    }
+
+    .settings-item:hover,
+    .settings-item:focus-visible {
+      background-color: var(--bg-hover);
+    }
+
+    .settings-item:active {
+      background-color: var(--bg-hover);
+    }
+
+    .settings-item__label {
+      font-size: var(--font-body1);
+      color: var(--text-primary);
+      flex: 1;
+    }
+
+    .settings-item__value {
+      font-size: var(--font-body2);
+      color: var(--text-secondary);
+      margin-right: var(--space-sm);
+    }
+
+    .settings-item__arrow {
+      width: 20px;
+      height: 20px;
+      color: var(--text-disabled);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+
+    .settings-item__arrow svg {
+      width: 20px;
+      height: 20px;
+    }
+
+    /* 위험 아이템 (탈퇴) */
+    .settings-item--danger .settings-item__label {
+      color: var(--status-red);
+    }
+
+    /* 로그아웃 / 탈퇴 버튼 영역 */
+    .danger-section {
+      margin-bottom: var(--space-xl);
+      display: flex;
+      flex-direction: column;
+      gap: var(--space-sm);
+    }
+
+    .btn--logout {
+      width: 100%;
+      height: 52px;
+      background-color: var(--bg-card);
+      color: var(--text-primary);
+      font-size: var(--font-body1);
+      font-weight: var(--font-weight-semibold);
+      border-radius: var(--radius-md);
+      border: none;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: var(--space-sm);
+      transition: background-color var(--anim-fast);
+      font-family: var(--font-primary);
+    }
+
+    .btn--logout:hover,
+    .btn--logout:focus-visible {
+      background-color: var(--bg-hover);
+    }
+
+    .btn--logout:active {
+      background-color: var(--bg-hover);
+    }
+
+    .btn--logout svg {
+      width: 20px;
+      height: 20px;
+      color: var(--text-secondary);
+    }
+
+    .btn--withdraw {
+      width: 100%;
+      height: 44px;
+      background: none;
+      border: none;
+      color: var(--status-red);
+      font-size: var(--font-body2);
+      font-weight: var(--font-weight-regular);
+      cursor: pointer;
+      font-family: var(--font-primary);
+      transition: opacity var(--anim-fast);
+    }
+
+    .btn--withdraw:hover,
+    .btn--withdraw:focus-visible {
+      opacity: 0.75;
+    }
+
+    .btn--withdraw:active {
+      opacity: 0.6;
+    }
+  </style>
+</head>
+<body>
+  <div class="my-page" role="main" aria-label="마이페이지">
+
+    <!-- 상단 타이틀 (탭 바 루트 화면 - back 버튼 없음) -->
+    <header class="my-top-nav" role="banner">
+      <h1 class="my-top-nav__title">마이페이지</h1>
+    </header>
+
+    <!-- 스크롤 콘텐츠 영역 -->
+    <div class="my-content" id="my-content">
+
+      <!-- 프로필 카드 -->
+      <section class="profile-card" aria-label="프로필 정보">
+        <div
+          class="profile-card__avatar"
+          role="img"
+          aria-label="프로필 아바타"
+          id="profile-avatar"
+        >
+          <!-- ICONS.user SVG (common.js에서 동적 삽입) -->
+        </div>
+        <div class="profile-card__info">
+          <p class="profile-card__nickname" id="profile-nickname">여행자</p>
+          <p class="profile-card__email" id="profile-email">traveler@gmail.com</p>
+          <span
+            class="plan-badge plan-badge--free"
+            id="profile-plan-badge"
+            aria-label="현재 플랜: Free"
+          >Free 플랜</span>
+        </div>
+      </section>
+
+      <!-- 구독 관리 섹션 -->
+      <section class="settings-section" aria-label="구독 관리">
+        <p class="settings-section__title">구독 관리</p>
+        <div class="settings-list" role="list">
+          <button
+            class="settings-item"
+            role="listitem"
+            onclick="navigateTo('09-Paywall.html')"
+            aria-label="현재 플랜: Free. 구독 관리로 이동"
+            tabindex="0"
+          >
+            <span class="settings-item__label">현재 플랜</span>
+            <span class="settings-item__value" id="subscription-plan-value">Free</span>
+            <span class="settings-item__arrow" aria-hidden="true" id="icon-chevron-sub"></span>
+          </button>
+        </div>
+      </section>
+
+      <!-- 설정 섹션 -->
+      <section class="settings-section" aria-label="설정">
+        <p class="settings-section__title">설정</p>
+        <div class="settings-list" role="list">
+          <!-- 알림 설정 -->
+          <button
+            class="settings-item"
+            role="listitem"
+            onclick="handleNotificationSettings()"
+            aria-label="알림 설정"
+            tabindex="0"
+          >
+            <span class="settings-item__label">알림 설정</span>
+            <span class="settings-item__arrow" aria-hidden="true" id="icon-chevron-notif"></span>
+          </button>
+          <!-- 위치정보 동의 관리 -->
+          <button
+            class="settings-item"
+            role="listitem"
+            onclick="navigateTo('13-권한동의.html')"
+            aria-label="위치정보 동의 관리 페이지로 이동"
+            tabindex="0"
+          >
+            <span class="settings-item__label">위치정보 동의 관리</span>
+            <span class="settings-item__arrow" aria-hidden="true" id="icon-chevron-location"></span>
+          </button>
+          <!-- 온보딩 다시 보기 -->
+          <button
+            class="settings-item"
+            role="listitem"
+            onclick="navigateTo('06-온보딩.html')"
+            aria-label="온보딩 다시 보기 페이지로 이동"
+            tabindex="0"
+          >
+            <span class="settings-item__label">온보딩 다시 보기</span>
+            <span class="settings-item__arrow" aria-hidden="true" id="icon-chevron-onboarding"></span>
+          </button>
+        </div>
+      </section>
+
+      <!-- 서비스 섹션 -->
+      <section class="settings-section" aria-label="서비스">
+        <p class="settings-section__title">서비스</p>
+        <div class="settings-list" role="list">
+          <!-- 이용약관 -->
+          <button
+            class="settings-item"
+            role="listitem"
+            onclick="handleTerms()"
+            aria-label="이용약관 보기"
+            tabindex="0"
+          >
+            <span class="settings-item__label">이용약관</span>
+            <span class="settings-item__arrow" aria-hidden="true" id="icon-chevron-terms"></span>
+          </button>
+          <!-- 개인정보처리방침 -->
+          <button
+            class="settings-item"
+            role="listitem"
+            onclick="handlePrivacy()"
+            aria-label="개인정보처리방침 보기"
+            tabindex="0"
+          >
+            <span class="settings-item__label">개인정보처리방침</span>
+            <span class="settings-item__arrow" aria-hidden="true" id="icon-chevron-privacy"></span>
+          </button>
+          <!-- 앱 버전 (클릭 불가) -->
+          <div
+            class="settings-item"
+            role="listitem"
+            aria-label="앱 버전 v1.0.0"
+            style="cursor: default;"
+          >
+            <span class="settings-item__label">앱 버전</span>
+            <span class="settings-item__value" style="margin-right: 0;">v1.0.0</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- 로그아웃 / 탈퇴 영역 -->
+      <div class="danger-section">
+        <!-- 로그아웃 -->
+        <button
+          class="btn--logout"
+          onclick="handleLogout()"
+          aria-label="로그아웃"
+          tabindex="0"
+          id="btn-logout"
+        >
+          <span id="icon-logout" aria-hidden="true"></span>
+          로그아웃
+        </button>
+        <!-- 회원 탈퇴 -->
+        <button
+          class="btn--withdraw settings-item--danger"
+          onclick="handleWithdraw()"
+          aria-label="회원 탈퇴. 주의: 계정이 영구 삭제됩니다"
+          tabindex="0"
+        >
+          회원 탈퇴
+        </button>
+      </div>
+
+    </div><!-- /.my-content -->
+
+    <!-- 하단 탭 바 -->
+    <footer role="contentinfo" aria-label="하단 탭 메뉴">
+      <app-tab-bar active="my"></app-tab-bar>
+    </footer>
+
+  </div><!-- /.my-page -->
+
+  <script src="common.js"></script>
+  <script>
+    // ============================================================
+    // 페이지 초기화 - 프로필 데이터 로드 및 아이콘 삽입
+    // ============================================================
+    (function initMyPage() {
+      var user = SAMPLE_DATA.user;
+
+      // 프로필 닉네임 / 이메일
+      var nicknameEl = document.getElementById('profile-nickname');
+      var emailEl    = document.getElementById('profile-email');
+      if (nicknameEl) nicknameEl.textContent = user.nickname;
+      if (emailEl)    emailEl.textContent    = user.email;
+
+      // 플랜 배지
+      var badgeEl = document.getElementById('profile-plan-badge');
+      var planValue = document.getElementById('subscription-plan-value');
+      if (badgeEl) {
+        if (user.plan === 'Premium') {
+          badgeEl.className = 'plan-badge plan-badge--premium';
+          badgeEl.textContent = 'Premium 플랜';
+          badgeEl.setAttribute('aria-label', '현재 플랜: Premium');
+        } else {
+          badgeEl.className = 'plan-badge plan-badge--free';
+          badgeEl.textContent = 'Free 플랜';
+          badgeEl.setAttribute('aria-label', '현재 플랜: Free');
+        }
+      }
+      if (planValue) planValue.textContent = user.plan;
+
+      // 아바타 아이콘 (ICONS.user SVG)
+      var avatarEl = document.getElementById('profile-avatar');
+      if (avatarEl) {
+        if (user.profileImage) {
+          avatarEl.innerHTML =
+            '<img src="' + user.profileImage + '" alt="' + user.nickname + ' 프로필 사진" ' +
+            'style="width:56px;height:56px;border-radius:50%;object-fit:cover;">';
+        } else {
+          avatarEl.innerHTML = ICONS.user;
+        }
+      }
+
+      // chevronRight 아이콘 삽입
+      var chevronIds = [
+        'icon-chevron-sub',
+        'icon-chevron-notif',
+        'icon-chevron-location',
+        'icon-chevron-onboarding',
+        'icon-chevron-terms',
+        'icon-chevron-privacy',
+      ];
+      chevronIds.forEach(function (id) {
+        var el = document.getElementById(id);
+        if (el) el.innerHTML = ICONS.chevronRight;
+      });
+
+      // 로그아웃 아이콘 삽입
+      var logoutIconEl = document.getElementById('icon-logout');
+      if (logoutIconEl) logoutIconEl.innerHTML = ICONS.logOut;
+    })();
+
+    // ============================================================
+    // 설정 - 알림 설정 (토스트)
+    // ============================================================
+    function handleNotificationSettings() {
+      showToast('알림 설정은 준비 중입니다.');
+    }
+
+    // ============================================================
+    // 서비스 - 이용약관 (토스트)
+    // ============================================================
+    function handleTerms() {
+      showToast('이용약관 페이지는 준비 중입니다.');
+    }
+
+    // ============================================================
+    // 서비스 - 개인정보처리방침 (토스트)
+    // ============================================================
+    function handlePrivacy() {
+      showToast('개인정보처리방침 페이지는 준비 중입니다.');
+    }
+
+    // ============================================================
+    // 로그아웃: confirm → sessionStorage.clear → 소셜로그인 이동
+    // ============================================================
+    function handleLogout() {
+      var confirmed = window.confirm('로그아웃 하시겠습니까?');
+      if (confirmed) {
+        sessionStorage.clear();
+        navigateTo('05-소셜로그인.html');
+      }
+    }
+
+    // ============================================================
+    // 회원 탈퇴: confirm(경고 메시지) → sessionStorage.clear → 소셜로그인 이동
+    // ============================================================
+    function handleWithdraw() {
+      var confirmed = window.confirm(
+        '정말로 탈퇴하시겠습니까?\n\n' +
+        '탈퇴 시 모든 여행 일정과 데이터가 영구 삭제되며,\n' +
+        '복구가 불가능합니다.'
+      );
+      if (confirmed) {
+        sessionStorage.clear();
+        showToast('계정이 삭제되었습니다.');
+        setTimeout(function () {
+          navigateTo('05-소셜로그인.html');
+        }, 1200);
+      }
+    }
+  </script>
+</body>
+</html>

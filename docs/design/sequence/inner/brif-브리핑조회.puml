@@ -1,0 +1,113 @@
+@startuml brif-브리핑조회
+!theme mono
+
+title BRIF 서비스 내부 - 브리핑 조회 플로우\n(UFR-BRIF-050)
+
+participant "BriefingController" as ctrl
+participant "BriefingService" as svc
+participant "BriefingRepository" as repo
+database "DB" as db
+database "Redis Cache" as cache
+queue "Event Bus" as bus
+
+== 브리핑 조회 요청 ==
+ctrl -> svc: getBriefing\n(briefing_id, user_id)
+activate svc
+
+== Redis 캐시 확인 ==
+svc -> cache: GET briefing:{briefing_id}
+activate cache
+
+alt 캐시 히트
+    cache -> svc: {type, title, content,\nsummary, status_color,\ncreated_at}
+    deactivate cache
+    svc -> ctrl: 캐시 데이터 반환
+    deactivate svc
+    deactivate ctrl
+else 캐시 미스
+    cache -> svc: nil
+    deactivate cache
+
+    == DB에서 브리핑 조회 ==
+    svc -> repo: findBriefingById(briefing_id)
+    activate repo
+
+    repo -> db: SELECT * FROM briefing\nWHERE briefing_id=?
+    activate db
+    db -> repo: {briefing_id, user_id, place_id,\ntype, title, content, summary,\nstatus_color, scheduled_departure_time,\ncreated_at}
+    deactivate db
+
+    repo -> svc: 브리핑 레코드 반환
+    deactivate repo
+
+    == 캐시 저장 ==
+    svc -> cache: SET briefing:{briefing_id}\n{type, title, content, summary,\nstatus_color, created_at}\nTTL=30분
+    activate cache
+    cache -> svc: OK
+    deactivate cache
+
+    == 만료 브리핑 체크 ==
+    svc -> svc: 현재 시간과\nscheduled_departure_time 비교\n(방문 예정 시간이 경과했는가?)
+
+    alt 만료된 브리핑 (현재시간 >= scheduled_departure_time)
+        svc -> svc: 만료 상태 표시\n상태: "EXPIRED"
+
+        == 분석 이벤트 기록 ==
+        svc -> bus: publish BriefingViewed\n{briefing_id, status: "EXPIRED",\nviewed_at}
+        activate bus
+        bus -> svc: 이벤트 발행 완료
+        deactivate bus
+
+        svc -> ctrl: {briefing_id, type,\ncontent, summary,\nstatus: "EXPIRED",\nmessage: "이미 지난 브리핑입니다",\naction: "최신 상태 조회 버튼"}
+        deactivate svc
+        deactivate ctrl
+    else 유효한 브리핑 (현재시간 < scheduled_departure_time)
+
+        == 분석 이벤트 기록 ==
+        svc -> bus: publish BriefingViewed\n{briefing_id, type,\nstatus: "ACTIVE",\nviewed_at}
+        activate bus
+        bus -> svc: 이벤트 발행 완료
+        deactivate bus
+
+        svc -> ctrl: {briefing_id, type,\ntitle, content, summary,\nstatus_color, status: "ACTIVE",\nscheduled_departure_time}
+        deactivate svc
+        deactivate ctrl
+    end
+end
+
+note right of svc
+**브리핑 조회 로직**
+1. Redis 캐시 확인 (TTL 30분)
+2. 캐시 미스 시 DB 조회
+3. 결과를 캐시에 저장
+4. 만료 여부 판정
+   - 예정 시간 경과 -> EXPIRED
+   - 예정 시간 미경과 -> ACTIVE
+5. 분석 이벤트 기록
+   (브리핑 조회 이벤트)
+end note
+
+note right of cache
+**캐시 전략**
+- 키: briefing:{briefing_id}
+- TTL: 30분
+- 용도: 브리핑 조회 성능 최적화
+- 갱신: 생성 시, 만료 시
+end note
+
+note right of db
+**브리핑 데이터 구조**
+- briefing_id: PK
+- user_id: FK
+- place_id: FK
+- schedule_id: FK
+- type: "안심"|"주의"
+- title: 브리핑 제목
+- content: 상세 내용
+- summary: 총평
+- status_color: 상태 색상
+- scheduled_departure_time: 예정 시간
+- created_at: 생성 시각
+end note
+
+@enduml

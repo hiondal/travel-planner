@@ -1,0 +1,198 @@
+@startuml
+!theme mono
+title SCHD 서비스 - 일정에 장소 추가 내부 시퀀스\n(UFR-SCHD-030)
+
+participant "ScheduleController" as ctrl
+participant "ScheduleService" as svc
+participant "PlaceScheduleRepository" as placeRepo
+database "DB" as db
+database "Redis Cache(E)" as cache
+queue "Event Bus(E)" as bus
+participant "PLCE 서비스(E)" as plce
+
+note over ctrl, plce
+    SCHD 서비스 내부: 일정에 장소 추가 및 모니터링 대상 등록
+    - 장소 추가 요청 검증
+    - 영업시간 검증 (외부 PLCE 서비스 활용)
+    - 장소 일정 저장
+    - MonitoringTargetRegistered 이벤트 발행
+end note
+
+== 장소 추가 요청 ==
+
+ctrl -> svc: POST /schedules/{scheduleId}/places\n(place_id, scheduled_departure_time, city, timezone)
+activate svc
+
+svc -> svc: 요청 데이터 검증
+activate svc
+note right
+    - scheduleId: 필수
+    - place_id: 필수
+    - scheduled_departure_time: 필수, ISO 8601 형식
+    - city: 필수
+    - timezone: 필수 (e.g., "Asia/Tokyo")
+end note
+deactivate svc
+
+alt 데이터 검증 실패
+    svc --> ctrl: 400 Bad Request
+    deactivate svc
+else 검증 성공
+
+    svc -> placeRepo: 일정 조회\n(scheduleId)
+    activate placeRepo
+    placeRepo -> db: SELECT schedule WHERE schedule_id = ?
+    activate db
+    db --> placeRepo: Schedule 엔티티
+    deactivate db
+    placeRepo --> svc: Schedule
+    deactivate placeRepo
+
+    alt Schedule 존재하지 않음
+        svc --> ctrl: 404 Not Found\n("일정을 찾을 수 없습니다")
+        deactivate svc
+    else Schedule 존재
+
+        svc -> svc: 시간대(timezone) 변환
+        activate svc
+        note right
+            - scheduled_departure_time을 UTC로 변환
+            - 영업시간 검증용 로컬 시간대 유지
+        end note
+        deactivate svc
+
+        == 영업시간 검증 ==
+
+        svc -> svc: PLCE 서비스에서 장소 정보 조회\n(캐시 또는 API)
+        note right
+            PLCE 서비스의 캐시를 통해 장소의 영업시간 정보 조회
+            - place_id
+            - opening_hours (요일별)
+            - is_open_now
+        end note
+
+        alt 영업시간 정보 있음
+            svc -> svc: 요청된 시간에 영업 중인지 검증
+            activate svc
+            note right
+                - 요일 확인 (scheduled_departure_time 기반)
+                - opening_hours 범위 확인
+
+                예시:
+                scheduled_time: 2026-03-16 12:00 JST (Monday)
+                opening_hours: Mon 11:00-22:00
+                -> 12:00은 영업 범위 내 ✓
+            end note
+            deactivate svc
+
+            alt 영업시간 내
+                svc -> svc: 유효성 확인 완료
+                note right
+                    영업시간 내이므로 일정 추가 가능
+                end note
+
+            else 영업시간 외 (폐점 또는 준비 중)
+                svc -> svc: 경고 플래그 설정\n(out_of_hours=true)
+                note right
+                    영업시간 외이므로 특별한 플래그 설정
+                    사용자에게는 경고를 표시할 수 있음
+                end note
+
+            end
+
+        else 영업시간 정보 없음 (미확인 장소)
+            svc -> svc: 기본값 설정\n(out_of_hours=false, 경고 없음)
+            note right
+                영업시간을 확인할 수 없으므로
+                기본적으로 추가 가능 상태
+            end note
+
+        end
+
+        == 장소 일정 저장 ==
+
+        svc -> placeRepo: 장소 일정 저장\n(schedule_id, place_id, scheduled_departure_time,\n city, out_of_hours, timezone)
+        activate placeRepo
+
+        placeRepo -> db: INSERT INTO place_schedule\nVALUES (schedule_id, place_id, scheduled_departure_time,\n city, order_index, out_of_hours_flag, created_at)
+        activate db
+        note right
+            생성되는 필드:
+            - place_schedule_id: 자동 생성 (UUID)
+            - order_index: 시간순 자동 계산
+            - created_at: 현재 시간
+            - monitoring_status: "PENDING"
+        end note
+
+        db --> placeRepo: place_schedule_id
+        deactivate db
+
+        placeRepo --> svc: PlaceSchedule 엔티티\n(place_schedule_id, place_id, scheduled_departure_time,\n city, order_index)
+        deactivate placeRepo
+
+        == 캐시 갱신 ==
+
+        svc -> cache: 일정 캐시 갱신\n(key=schedule:{scheduleId},\n value=Schedule with all places)
+        activate cache
+        note right
+            TTL: 5분
+            장소 추가 시마다 캐시 갱신
+        end note
+        cache --> svc: OK
+        deactivate cache
+
+        == 모니터링 대상 등록 이벤트 발행 ==
+
+        svc -> bus: MonitoringTargetRegistered 이벤트 발행
+        activate bus
+        note right
+            Event payload:
+            {
+                trip_id: trip_id,
+                schedule_id: scheduleId,
+                place_id: place_id,
+                place_schedule_id: place_schedule_id,
+                city: city,
+                scheduled_departure_time: scheduled_departure_time,
+                timezone: timezone,
+                event_timestamp: now()
+            }
+        end note
+
+        bus --> svc: 이벤트 발행 완료
+        deactivate bus
+
+        svc -> svc: 응답 데이터 구성\n{place_schedule_id, place_id,\n scheduled_departure_time, order_index,\n out_of_hours_flag}
+        activate svc
+        deactivate svc
+
+        svc --> ctrl: 200 OK\n{place_schedule_id, place_id,\n scheduled_departure_time, order_index,\n status: "PENDING", out_of_hours_flag}
+        deactivate svc
+
+    end
+
+end
+
+== 응답 반환 ==
+
+ctrl -> ctrl: 응답 검증
+note right
+    - place_schedule_id 존재 여부
+    - 필수 필드 완전성
+end
+
+ctrl --> db: 201 Created\n{place_schedule_id, place_id,\n scheduled_departure_time, order_index,\n status: "PENDING", out_of_hours_flag}
+deactivate ctrl
+
+note over ctrl, plce
+    **핵심 설계 사항**
+    1. 영업시간 검증: PLCE 서비스의 정보 활용
+    2. 시간대 변환: 로컬 시간대로 검증
+    3. 장소 저장: place_schedule_id 발급
+    4. 순서 자동 계산: order_index로 시간순 정렬
+    5. 모니터링 대상 등록: MonitoringTargetRegistered 이벤트 발행
+    6. 캐시 갱신: Redis에 일정 정보 갱신 (5분 TTL)
+    7. 비동기 처리: Event Bus를 통해 MNTR 서비스가 후속 처리
+end note
+
+@enduml

@@ -1,0 +1,482 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>온보딩 - travel-planner</title>
+  <link rel="stylesheet" href="common.css">
+  <style>
+    /* ---- 온보딩 전용 레이아웃 ---- */
+    .onboarding-page {
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+      overflow: hidden;
+      background-color: var(--bg-primary);
+    }
+
+    /* 헤더: 건너뛰기 버튼 */
+    .onboarding-header {
+      display: flex;
+      justify-content: flex-end;
+      align-items: center;
+      height: var(--nav-height);
+      padding: 0 var(--space-base);
+      flex-shrink: 0;
+    }
+
+    .onboarding-skip {
+      font-size: var(--font-body2);
+      font-weight: var(--font-weight-regular);
+      color: var(--text-secondary);
+      background: none;
+      border: none;
+      cursor: pointer;
+      min-height: var(--touch-target-min);
+      min-width: var(--touch-target-min);
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      padding: 0 4px;
+      transition: color var(--anim-fast);
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    .onboarding-skip:active {
+      color: var(--text-primary);
+    }
+
+    /* 슬라이드 컨테이너 */
+    .slide-container {
+      flex: 1;
+      overflow: hidden;
+      position: relative;
+    }
+
+    .slides-track {
+      display: flex;
+      width: 300%;
+      height: 100%;
+      transition: transform 350ms cubic-bezier(0.4, 0, 0.2, 1);
+      will-change: transform;
+    }
+
+    .slide {
+      flex: 0 0 calc(100% / 3);
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: var(--space-xl) var(--space-2xl);
+      text-align: center;
+      gap: 0;
+    }
+
+    /* 일러스트 영역 */
+    .slide-illustration {
+      width: 200px;
+      height: 200px;
+      border-radius: var(--radius-xl);
+      background-color: var(--bg-card);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-bottom: var(--space-3xl);
+      flex-shrink: 0;
+    }
+
+    /* 1단계: 3개 배지 나란히 */
+    .badge-trio {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: var(--space-lg);
+    }
+
+    .badge-trio .badge-xl {
+      width: 52px;
+      height: 52px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+
+    .badge-xl svg {
+      width: 30px;
+      height: 30px;
+    }
+
+    .badge-xl--green {
+      background-color: var(--status-green);
+      color: #FFFFFF;
+    }
+
+    .badge-xl--yellow {
+      background-color: var(--status-yellow);
+      color: var(--text-inverse);
+    }
+
+    .badge-xl--red {
+      background-color: var(--status-red);
+      color: #FFFFFF;
+    }
+
+    /* 2단계: 벨 아이콘 */
+    .illustration-icon {
+      color: var(--text-secondary);
+    }
+
+    .illustration-icon--bell {
+      color: var(--accent-amber);
+    }
+
+    .illustration-icon--zap {
+      color: var(--accent-red);
+    }
+
+    /* 슬라이드 텍스트 */
+    .slide-title {
+      font-size: var(--font-display);
+      font-weight: var(--font-weight-bold);
+      color: var(--text-primary);
+      line-height: 1.29;
+      margin-bottom: var(--space-base);
+    }
+
+    .slide-desc {
+      font-size: var(--font-body1);
+      color: var(--text-secondary);
+      line-height: 1.6;
+      max-width: 280px;
+    }
+
+    /* 하단 푸터: 도트 + 버튼 */
+    .onboarding-footer {
+      flex-shrink: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: var(--space-lg);
+      padding: var(--space-lg) var(--space-base) var(--space-3xl);
+    }
+
+    .onboarding-footer .btn--primary {
+      max-width: 340px;
+    }
+
+    /* 인디케이터 도트 래퍼 */
+    .onboarding-dots {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: var(--space-sm);
+    }
+
+    /* 드래그 중 트랜지션 비활성화 */
+    .slides-track.dragging {
+      transition: none;
+    }
+  </style>
+</head>
+<body>
+  <div class="onboarding-page" id="onboardingPage">
+
+    <!-- 헤더: 건너뛰기 -->
+    <header class="onboarding-header" role="banner">
+      <button
+        class="onboarding-skip"
+        id="skipBtn"
+        onclick="skipOnboarding()"
+        aria-label="온보딩 건너뛰기"
+      >건너뛰기</button>
+    </header>
+
+    <!-- 슬라이드 영역 -->
+    <main class="slide-container" id="slideContainer" aria-label="온보딩 안내">
+      <div class="slides-track" id="slidesTrack">
+
+        <!-- Step 1: 상태 배지 소개 -->
+        <section
+          class="slide"
+          role="tabpanel"
+          id="slide-0"
+          aria-label="1단계: 장소 상태 배지 소개"
+          aria-hidden="false"
+        >
+          <div class="slide-illustration" aria-hidden="true">
+            <div class="badge-trio">
+              <!-- 초록 체크 배지 -->
+              <span class="badge-xl badge-xl--green">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
+                  <path d="m9 11 3 3L22 4"/>
+                </svg>
+              </span>
+              <!-- 노랑 느낌표 배지 -->
+              <span class="badge-xl badge-xl--yellow">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/>
+                  <path d="M12 9v4"/>
+                  <path d="M12 17h.01"/>
+                </svg>
+              </span>
+              <!-- 빨강 X 배지 -->
+              <span class="badge-xl badge-xl--red">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <circle cx="12" cy="12" r="10"/>
+                  <path d="m15 9-6 6"/>
+                  <path d="m9 9 6 6"/>
+                </svg>
+              </span>
+            </div>
+          </div>
+          <h2 class="slide-title">장소 상태를<br>한눈에</h2>
+          <p class="slide-desc">초록은 안심, 노랑은 주의, 빨강은 위험. 여행지 상태를 실시간으로 확인하세요.</p>
+        </section>
+
+        <!-- Step 2: 출발 전 브리핑 소개 -->
+        <section
+          class="slide"
+          role="tabpanel"
+          id="slide-1"
+          aria-label="2단계: 출발 전 브리핑 소개"
+          aria-hidden="true"
+        >
+          <div class="slide-illustration" aria-hidden="true">
+            <svg
+              class="illustration-icon illustration-icon--bell"
+              xmlns="http://www.w3.org/2000/svg"
+              width="80"
+              height="80"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.5"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              aria-hidden="true"
+            >
+              <path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/>
+              <path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/>
+            </svg>
+          </div>
+          <h2 class="slide-title">출발 전<br>미리 알려드려요</h2>
+          <p class="slide-desc">출발 15~30분 전, 다음 목적지의 날씨, 혼잡도, 영업 상태를 브리핑으로 알려드립니다.</p>
+        </section>
+
+        <!-- Step 3: 대안 카드 소개 -->
+        <section
+          class="slide"
+          role="tabpanel"
+          id="slide-2"
+          aria-label="3단계: 대안 카드 소개"
+          aria-hidden="true"
+        >
+          <div class="slide-illustration" aria-hidden="true">
+            <svg
+              class="illustration-icon illustration-icon--zap"
+              xmlns="http://www.w3.org/2000/svg"
+              width="80"
+              height="80"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.5"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              aria-hidden="true"
+            >
+              <path d="M4 14a1 1 0 0 1-.78-1.63l9.9-10.2a.5.5 0 0 1 .86.46l-1.92 6.02A1 1 0 0 0 13 10h7a1 1 0 0 1 .78 1.63l-9.9 10.2a.5.5 0 0 1-.86-.46l1.92-6.02A1 1 0 0 0 11 14z"/>
+            </svg>
+          </div>
+          <h2 class="slide-title">대안을<br>탭 한 번으로</h2>
+          <p class="slide-desc">위험이 감지되면 대안 장소 3곳을 추천해드립니다. 탭 한 번으로 일정을 바꿔보세요.</p>
+        </section>
+
+      </div>
+    </main>
+
+    <!-- 푸터: 인디케이터 도트 + 다음/시작하기 버튼 -->
+    <footer class="onboarding-footer">
+      <!-- 인디케이터 도트 -->
+      <div
+        class="onboarding-dots"
+        id="dotsContainer"
+        role="tablist"
+        aria-label="온보딩 진행 상태"
+      >
+        <span
+          class="dots__dot dots__dot--active"
+          role="tab"
+          aria-selected="true"
+          aria-label="1단계"
+          aria-controls="slide-0"
+        ></span>
+        <span
+          class="dots__dot"
+          role="tab"
+          aria-selected="false"
+          aria-label="2단계"
+          aria-controls="slide-1"
+        ></span>
+        <span
+          class="dots__dot"
+          role="tab"
+          aria-selected="false"
+          aria-label="3단계"
+          aria-controls="slide-2"
+        ></span>
+      </div>
+
+      <!-- 다음 / 시작하기 버튼 -->
+      <button
+        class="btn btn--primary w-full"
+        id="nextBtn"
+        onclick="nextStep()"
+        aria-label="다음 단계로 이동"
+        style="max-width: 340px;"
+      >다음</button>
+    </footer>
+
+  </div>
+
+  <script src="common.js"></script>
+  <script>
+    'use strict';
+
+    var currentStep = 0;
+    var TOTAL_STEPS = 3;
+
+    // ---- 단계 이동 ----
+    function goToStep(step) {
+      if (step < 0 || step >= TOTAL_STEPS) return;
+      currentStep = step;
+      updateView();
+    }
+
+    function nextStep() {
+      if (currentStep < TOTAL_STEPS - 1) {
+        goToStep(currentStep + 1);
+      } else {
+        completeOnboarding();
+      }
+    }
+
+    function skipOnboarding() {
+      completeOnboarding();
+    }
+
+    function completeOnboarding() {
+      sessionStorage.setItem('onboardingComplete', 'true');
+      navigateTo('01-일정표.html');
+    }
+
+    // ---- 뷰 업데이트 ----
+    function updateView() {
+      // 슬라이드 이동
+      var track = document.getElementById('slidesTrack');
+      var offset = currentStep * (100 / TOTAL_STEPS);
+      track.style.transform = 'translateX(-' + offset + '%)';
+
+      // 도트 업데이트
+      var dots = document.querySelectorAll('#dotsContainer .dots__dot');
+      dots.forEach(function (dot, i) {
+        var isActive = i === currentStep;
+        dot.classList.toggle('dots__dot--active', isActive);
+        dot.setAttribute('aria-selected', String(isActive));
+      });
+
+      // 슬라이드 aria-hidden 업데이트
+      for (var i = 0; i < TOTAL_STEPS; i++) {
+        var slide = document.getElementById('slide-' + i);
+        if (slide) {
+          slide.setAttribute('aria-hidden', String(i !== currentStep));
+        }
+      }
+
+      // 버튼 텍스트 및 aria-label 업데이트
+      var btn = document.getElementById('nextBtn');
+      if (currentStep === TOTAL_STEPS - 1) {
+        btn.textContent = '시작하기';
+        btn.setAttribute('aria-label', '여행 시작하기');
+      } else {
+        btn.textContent = '다음';
+        btn.setAttribute('aria-label', '다음 단계로 이동');
+      }
+
+      // 3단계(마지막)에서 건너뛰기 숨김
+      var skipBtn = document.getElementById('skipBtn');
+      if (currentStep === TOTAL_STEPS - 1) {
+        skipBtn.style.visibility = 'hidden';
+      } else {
+        skipBtn.style.visibility = 'visible';
+      }
+    }
+
+    // ---- 터치 스와이프 ----
+    (function initSwipe() {
+      var container = document.getElementById('slideContainer');
+      var track = document.getElementById('slidesTrack');
+      var touchStartX = 0;
+      var touchStartY = 0;
+      var isDragging = false;
+      var SWIPE_THRESHOLD = 50;
+      var DRAG_LOCK_ANGLE = 30; // deg — 수직 스크롤과 구분
+
+      container.addEventListener('touchstart', function (e) {
+        touchStartX = e.touches[0].clientX;
+        touchStartY = e.touches[0].clientY;
+        isDragging = false;
+        track.classList.add('dragging');
+      }, { passive: true });
+
+      container.addEventListener('touchmove', function (e) {
+        var dx = e.touches[0].clientX - touchStartX;
+        var dy = e.touches[0].clientY - touchStartY;
+        var angle = Math.abs(Math.atan2(dy, dx) * 180 / Math.PI);
+        // 수평 스와이프인 경우에만 드래그 처리
+        if (angle < DRAG_LOCK_ANGLE || angle > (180 - DRAG_LOCK_ANGLE)) {
+          isDragging = true;
+          // 현재 위치 + 드래그 오프셋 실시간 반영
+          var baseOffset = currentStep * (100 / TOTAL_STEPS);
+          var dragPct = (dx / container.offsetWidth) * (100 / TOTAL_STEPS);
+          track.style.transform = 'translateX(-' + (baseOffset - dragPct) + '%)';
+        }
+      }, { passive: true });
+
+      container.addEventListener('touchend', function (e) {
+        track.classList.remove('dragging');
+        if (!isDragging) return;
+        var endX = e.changedTouches[0].clientX;
+        var diff = touchStartX - endX;
+        if (Math.abs(diff) > SWIPE_THRESHOLD) {
+          if (diff > 0 && currentStep < TOTAL_STEPS - 1) {
+            goToStep(currentStep + 1);
+          } else if (diff < 0 && currentStep > 0) {
+            goToStep(currentStep - 1);
+          } else {
+            // 스냅백
+            updateView();
+          }
+        } else {
+          // 스냅백
+          updateView();
+        }
+        isDragging = false;
+      }, { passive: true });
+    }());
+
+    // ---- 키보드 접근성: 좌/우 화살표 키 ----
+    document.addEventListener('keydown', function (e) {
+      if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
+        if (currentStep < TOTAL_STEPS - 1) goToStep(currentStep + 1);
+      } else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
+        if (currentStep > 0) goToStep(currentStep - 1);
+      }
+    });
+  </script>
+</body>
+</html>

@@ -1,0 +1,330 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>브리핑 - travel-planner</title>
+  <link rel="stylesheet" href="common.css">
+  <style>
+    /* ---- 브리핑 목록 전용 레이아웃 ---- */
+
+    /* 상단 헤더 영역 */
+    .briefing-header {
+      padding: var(--space-base) var(--space-base) var(--space-md);
+      padding-top: calc(var(--space-base) + var(--space-lg));
+    }
+
+    .briefing-header__title {
+      font-size: var(--font-h1);
+      font-weight: var(--font-weight-bold);
+      color: var(--text-primary);
+      line-height: 1.27;
+    }
+
+    /* 날짜 헤더 */
+    .briefing-date-header {
+      padding: var(--space-md) var(--space-base) var(--space-sm);
+    }
+
+    .briefing-date-header__text {
+      font-size: var(--font-body2);
+      font-weight: var(--font-weight-semibold);
+      color: var(--text-secondary);
+    }
+
+    .briefing-date-header__today {
+      font-weight: var(--font-weight-bold);
+      color: var(--text-primary);
+      margin-right: var(--space-sm);
+    }
+
+    /* 브리핑 카드 목록 */
+    .briefing-list {
+      padding: 0 var(--space-base);
+      display: flex;
+      flex-direction: column;
+      gap: var(--space-sm);
+    }
+
+    /* 브리핑 카드 */
+    .briefing-card {
+      display: flex;
+      align-items: flex-start;
+      gap: var(--space-md);
+      background-color: var(--bg-card);
+      border-radius: var(--radius-md);
+      padding: var(--space-base);
+      cursor: pointer;
+      transition: background-color var(--anim-fast);
+      -webkit-tap-highlight-color: transparent;
+      text-decoration: none;
+    }
+
+    .briefing-card:active {
+      background-color: var(--bg-hover);
+    }
+
+    /* 카드 왼쪽: 배지 + 시각 */
+    .briefing-card__left {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      gap: var(--space-xs);
+      flex-shrink: 0;
+      min-width: 68px;
+    }
+
+    .briefing-card__time {
+      font-size: var(--font-caption);
+      font-weight: var(--font-weight-regular);
+      color: var(--text-secondary);
+      white-space: nowrap;
+    }
+
+    /* 카드 중앙: 장소명 + 총평 */
+    .briefing-card__content {
+      flex: 1;
+      min-width: 0;
+      display: flex;
+      flex-direction: column;
+      gap: var(--space-xs);
+    }
+
+    .briefing-card__place {
+      font-size: var(--font-h3);
+      font-weight: var(--font-weight-semibold);
+      color: var(--text-primary);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .briefing-card__summary {
+      font-size: var(--font-body2);
+      color: var(--text-secondary);
+      line-height: 1.43;
+      /* 2줄 클램프 */
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+    }
+
+    /* 카드 오른쪽: 화살표 */
+    .briefing-card__arrow {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      color: var(--text-disabled);
+      align-self: center;
+    }
+
+    /* info-banner: 한도 초과 안내 */
+    .info-banner-wrapper {
+      padding: 0 var(--space-base);
+      margin-top: var(--space-sm);
+      margin-bottom: var(--space-sm);
+    }
+
+    /* "이전 브리핑 없음" 텍스트 */
+    .briefing-past-empty {
+      padding: var(--space-lg) var(--space-base);
+      text-align: center;
+      font-size: var(--font-body2);
+      color: var(--text-disabled);
+    }
+
+    /* 만료된 브리핑 카드: 투명도 낮춤 */
+    .briefing-card--expired {
+      opacity: 0.5;
+    }
+  </style>
+</head>
+<body>
+  <div class="page-container">
+
+    <!-- 상단 타이틀 (탭 바 루트 화면: back 버튼 없음) -->
+    <header class="briefing-header" role="banner">
+      <h1 class="briefing-header__title">브리핑</h1>
+    </header>
+
+    <!-- 메인 콘텐츠 -->
+    <main class="page-content" id="mainContent" role="main" aria-label="브리핑 목록">
+
+      <!-- 날짜 헤더 -->
+      <div class="briefing-date-header" id="dateHeaderContainer">
+        <!-- JS로 렌더링 -->
+      </div>
+
+      <!-- 브리핑 카드 목록 -->
+      <ul
+        class="briefing-list"
+        id="briefingList"
+        role="list"
+        aria-label="오늘의 브리핑 목록"
+      >
+        <!-- JS로 렌더링 -->
+      </ul>
+
+      <!-- 한도 초과 안내 (Free 플랜) -->
+      <div class="info-banner-wrapper" id="infoBannerContainer" style="display: none;">
+        <div
+          class="info-banner"
+          role="region"
+          aria-label="브리핑 한도 초과 안내"
+        >
+          <div class="flex" style="align-items: flex-start; gap: var(--space-sm); margin-bottom: var(--space-sm);">
+            <span class="icon icon--16" style="color: var(--accent-purple); flex-shrink: 0; margin-top: 2px;" aria-hidden="true">
+              <!-- alertCircle 아이콘 -->
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none"
+                   stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="12" r="10"/><line x1="12" x2="12" y1="8" y2="12"/>
+                <line x1="12" x2="12.01" y1="16" y2="16"/>
+              </svg>
+            </span>
+            <p class="info-banner__title">한도 초과 안내</p>
+          </div>
+          <p class="info-banner__desc">
+            오늘의 브리핑을 모두 사용했습니다.<br>
+            Trip Pass로 업그레이드하면 하루 최대 10회 브리핑을 받을 수 있어요.
+          </p>
+          <button
+            type="button"
+            class="info-banner__link"
+            onclick="navigateTo('09-Paywall.html')"
+            aria-label="Trip Pass로 업그레이드하기"
+          >업그레이드 하기 &rsaquo;</button>
+        </div>
+      </div>
+
+      <!-- 이전 브리핑 없음 -->
+      <p class="briefing-past-empty" role="status" aria-live="polite">
+        이전 브리핑 없음
+      </p>
+
+    </main>
+
+    <!-- 하단 탭 바 -->
+    <footer role="contentinfo">
+      <app-tab-bar active="briefing"></app-tab-bar>
+    </footer>
+
+  </div>
+
+  <script src="common.js"></script>
+  <script>
+    'use strict';
+
+    // ---- 날짜 헤더 렌더링 ----
+    function renderDateHeader() {
+      var container = document.getElementById('dateHeaderContainer');
+      var todayDate = SAMPLE_DATA.briefings.length > 0
+        ? SAMPLE_DATA.briefings[0].date
+        : '2026-03-16';
+      var d = new Date(todayDate);
+      var days = ['일', '월', '화', '수', '목', '금', '토'];
+      var month = d.getMonth() + 1;
+      var day = d.getDate();
+      var dayLabel = days[d.getDay()];
+
+      container.innerHTML =
+        '<p class="briefing-date-header__text">' +
+        '<span class="briefing-date-header__today">오늘</span>' +
+        month + '월 ' + day + '일 (' + dayLabel + ')' +
+        '</p>';
+    }
+
+    // ---- 브리핑 카드 단일 HTML 생성 ----
+    function renderBriefingCard(briefing) {
+      var badgeHTML = getBadgeLabelHTML(
+        briefing.status,
+        briefing.status === 'green' ? '안심' : briefing.status === 'yellow' ? '주의' : getStatusLabel(briefing.status)
+      );
+
+      var expiredClass = briefing.isExpired ? ' briefing-card--expired' : '';
+
+      return (
+        '<li role="listitem" class="briefing-card' + expiredClass + '"' +
+        ' tabindex="0"' +
+        ' aria-label="' + briefing.placeName + ' 브리핑, ' + (briefing.status === 'green' ? '안심' : '주의') + ', ' + briefing.createdAt + '"' +
+        ' onclick="handleCardClick(\'' + briefing.id + '\')"' +
+        ' onkeydown="handleCardKeydown(event, \'' + briefing.id + '\')"' +
+        '>' +
+
+        /* 왼쪽: 배지 + 시각 */
+        '<div class="briefing-card__left">' +
+        badgeHTML +
+        '<span class="briefing-card__time">' + briefing.createdAt + '</span>' +
+        '</div>' +
+
+        /* 중앙: 장소명 + 총평 */
+        '<div class="briefing-card__content">' +
+        '<h3 class="briefing-card__place">' + briefing.placeName + '</h3>' +
+        '<p class="briefing-card__summary">' + briefing.summary + '</p>' +
+        '</div>' +
+
+        /* 오른쪽: 화살표 */
+        '<span class="briefing-card__arrow" aria-hidden="true">' +
+        ICONS.chevronRight +
+        '</span>' +
+
+        '</li>'
+      );
+    }
+
+    // ---- 브리핑 목록 렌더링 ----
+    function renderBriefingList() {
+      var list = document.getElementById('briefingList');
+      var briefings = SAMPLE_DATA.briefings;
+
+      if (!briefings || briefings.length === 0) {
+        list.innerHTML =
+          '<li role="listitem" class="briefing-past-empty" style="list-style:none;">' +
+          '오늘의 브리핑이 없습니다.' +
+          '</li>';
+        return;
+      }
+
+      // 최신순(createdAt 내림차순) 정렬
+      var sorted = briefings.slice().sort(function (a, b) {
+        return b.createdAt.localeCompare(a.createdAt);
+      });
+
+      var html = '';
+      sorted.forEach(function (briefing) {
+        html += renderBriefingCard(briefing);
+      });
+      list.innerHTML = html;
+    }
+
+    // ---- 한도 초과 배너 표시 (Free 플랜) ----
+    function renderInfoBanner() {
+      if (SAMPLE_DATA.user && SAMPLE_DATA.user.plan === 'Free') {
+        var container = document.getElementById('infoBannerContainer');
+        container.style.display = 'block';
+      }
+    }
+
+    // ---- 카드 클릭 핸들러 ----
+    function handleCardClick(briefingId) {
+      navigateTo('03-브리핑상세.html', { briefingId: briefingId });
+    }
+
+    // ---- 카드 키보드 접근성 (Enter / Space) ----
+    function handleCardKeydown(event, briefingId) {
+      if (event.key === 'Enter' || event.key === ' ') {
+        event.preventDefault();
+        handleCardClick(briefingId);
+      }
+    }
+
+    // ---- 페이지 초기화 ----
+    document.addEventListener('DOMContentLoaded', function () {
+      renderDateHeader();
+      renderBriefingList();
+      renderInfoBanner();
+    });
+  </script>
+</body>
+</html>

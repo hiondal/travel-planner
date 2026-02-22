@@ -1,0 +1,372 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>장소 검색 - travel-planner</title>
+  <link rel="stylesheet" href="common.css">
+  <style>
+    .search-header {
+      padding: var(--space-sm) var(--space-base);
+    }
+
+    .search-results-header {
+      padding: var(--space-sm) var(--space-base);
+      font-size: var(--font-body2);
+      color: var(--text-secondary);
+    }
+
+    .search-results {
+      padding: 0 var(--space-base);
+    }
+
+    .search-result-item {
+      display: flex;
+      align-items: center;
+      gap: var(--space-md);
+      background-color: var(--bg-card);
+      border-radius: var(--radius-md);
+      padding: var(--space-base);
+      margin-bottom: var(--space-sm);
+      cursor: pointer;
+      transition: background-color var(--anim-fast);
+    }
+
+    .search-result-item:active {
+      background-color: var(--bg-hover);
+    }
+
+    .search-result-item__icon {
+      width: 40px;
+      height: 40px;
+      border-radius: var(--radius-sm);
+      background-color: var(--bg-input);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--text-secondary);
+      flex-shrink: 0;
+    }
+
+    .search-result-item__info {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .search-result-item__name {
+      font-size: var(--font-h3);
+      font-weight: var(--font-weight-semibold);
+      margin-bottom: var(--space-2xs);
+    }
+
+    .search-result-item__address {
+      font-size: var(--font-caption);
+      color: var(--text-secondary);
+      margin-bottom: var(--space-xs);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .search-result-item__meta {
+      display: flex;
+      align-items: center;
+      gap: var(--space-sm);
+      font-size: var(--font-caption);
+      color: var(--text-secondary);
+    }
+
+    .search-result-item__rating {
+      display: flex;
+      align-items: center;
+      gap: 2px;
+      color: var(--accent-amber);
+    }
+
+    .search-result-item__category {
+      color: var(--text-disabled);
+    }
+
+    /* Skeleton loading */
+    .skeleton {
+      background: var(--bg-input);
+      border-radius: var(--radius-sm);
+      animation: pulse 1.5s ease-in-out infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.5; }
+    }
+
+    .skeleton-card {
+      display: flex;
+      align-items: center;
+      gap: var(--space-md);
+      padding: var(--space-base);
+      background-color: var(--bg-card);
+      border-radius: var(--radius-md);
+      margin-bottom: var(--space-sm);
+    }
+
+    .skeleton-avatar {
+      width: 40px;
+      height: 40px;
+      border-radius: var(--radius-sm);
+    }
+
+    .skeleton-text {
+      height: 14px;
+      border-radius: 4px;
+      margin-bottom: var(--space-xs);
+    }
+
+    .skeleton-text--short { width: 60%; }
+    .skeleton-text--long { width: 90%; }
+    .skeleton-text--xs { width: 40%; height: 12px; }
+
+    /* Place detail bottom sheet */
+    .place-detail__image {
+      width: 100%;
+      height: 160px;
+      background-color: var(--bg-input);
+      border-radius: var(--radius-md);
+      margin-bottom: var(--space-base);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--text-disabled);
+    }
+
+    .place-detail__section {
+      margin-bottom: var(--space-base);
+    }
+
+    .place-detail__section-label {
+      font-size: var(--font-caption);
+      font-weight: var(--font-weight-semibold);
+      color: var(--text-secondary);
+      margin-bottom: var(--space-xs);
+    }
+
+    .place-detail__hours {
+      font-size: var(--font-body2);
+      color: var(--text-primary);
+      line-height: 1.6;
+    }
+
+    .place-detail__map {
+      width: 100%;
+      height: 120px;
+      background-color: var(--bg-input);
+      border-radius: var(--radius-md);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--text-disabled);
+      font-size: var(--font-caption);
+    }
+  </style>
+</head>
+<body>
+  <div class="page-container">
+    <app-top-nav back title="장소 추가"></app-top-nav>
+
+    <div class="search-header">
+      <div class="search-bar-wrapper">
+        <span class="search-icon" aria-hidden="true">
+          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+        </span>
+        <input type="search" class="search-bar" id="searchInput" placeholder="장소명으로 검색" aria-label="장소 검색" oninput="handleSearch()" autocomplete="off">
+        <button class="clear-btn" id="clearBtn" onclick="clearSearch()" aria-label="검색어 지우기" style="display:none">
+          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+        </button>
+      </div>
+    </div>
+
+    <main class="page-content page-content--no-tab" role="main">
+      <p class="search-results-header" id="resultsHeader"></p>
+
+      <div class="search-results" id="searchResults" role="list" aria-label="검색 결과">
+        <!-- JS로 렌더링 -->
+      </div>
+
+      <div id="emptyState" style="display:none">
+        <div class="empty-state">
+          <div class="empty-state__icon" aria-hidden="true">
+            <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+          </div>
+          <p class="empty-state__title">검색 결과가 없습니다</p>
+          <p class="empty-state__desc">다른 검색어로 시도해보세요</p>
+        </div>
+      </div>
+
+      <div id="initialState">
+        <div class="empty-state">
+          <div class="empty-state__icon" aria-hidden="true">
+            <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+          </div>
+          <p class="empty-state__title">장소를 검색해보세요</p>
+          <p class="empty-state__desc">2글자 이상 입력하면 검색됩니다</p>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <!-- Place Detail Bottom Sheet -->
+  <div class="bottom-sheet-overlay" id="placeSheet-overlay"></div>
+  <div class="bottom-sheet" id="placeSheet" role="dialog" aria-labelledby="placeSheetTitle" aria-modal="true">
+    <div class="bottom-sheet__handle"><div class="bottom-sheet__handle-bar"></div></div>
+    <div class="bottom-sheet__header">
+      <h2 class="bottom-sheet__title" id="placeSheetTitle"></h2>
+      <button class="bottom-sheet__close" data-close-sheet aria-label="닫기">
+        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+      </button>
+    </div>
+    <div class="bottom-sheet__content" id="placeSheetContent"></div>
+  </div>
+
+  <script src="common.js"></script>
+  <script>
+    'use strict';
+
+    var searchResults = SAMPLE_DATA.searchResults;
+    var searchTimeout = null;
+
+    function handleSearch() {
+      var query = document.getElementById('searchInput').value.trim();
+      var clearBtn = document.getElementById('clearBtn');
+      clearBtn.style.display = query.length > 0 ? 'flex' : 'none';
+
+      if (query.length < 2) {
+        document.getElementById('searchResults').innerHTML = '';
+        document.getElementById('resultsHeader').textContent = '';
+        document.getElementById('emptyState').style.display = 'none';
+        document.getElementById('initialState').style.display = query.length === 0 ? '' : 'none';
+        return;
+      }
+
+      document.getElementById('initialState').style.display = 'none';
+
+      // Show skeleton loading
+      showSkeleton();
+
+      // Simulate API delay
+      clearTimeout(searchTimeout);
+      searchTimeout = setTimeout(function() {
+        var filtered = searchResults.filter(function(item) {
+          return item.name.toLowerCase().indexOf(query.toLowerCase()) !== -1 ||
+                 item.category.toLowerCase().indexOf(query.toLowerCase()) !== -1;
+        });
+        renderResults(filtered);
+      }, 500);
+    }
+
+    function showSkeleton() {
+      var container = document.getElementById('searchResults');
+      var html = '';
+      for (var i = 0; i < 3; i++) {
+        html += '<div class="skeleton-card">' +
+          '<div class="skeleton skeleton-avatar"></div>' +
+          '<div style="flex:1">' +
+          '<div class="skeleton skeleton-text skeleton-text--short"></div>' +
+          '<div class="skeleton skeleton-text skeleton-text--long"></div>' +
+          '<div class="skeleton skeleton-text skeleton-text--xs"></div>' +
+          '</div></div>';
+      }
+      container.innerHTML = html;
+      document.getElementById('resultsHeader').textContent = '검색 중...';
+    }
+
+    function renderResults(results) {
+      var container = document.getElementById('searchResults');
+      document.getElementById('emptyState').style.display = results.length === 0 ? '' : 'none';
+
+      if (results.length === 0) {
+        container.innerHTML = '';
+        document.getElementById('resultsHeader').textContent = '';
+        return;
+      }
+
+      document.getElementById('resultsHeader').textContent = '검색 결과 (' + results.length + '건)';
+
+      var html = '';
+      results.forEach(function(item, idx) {
+        html += '<div class="search-result-item" role="listitem" onclick="selectPlace(' + idx + ')" ' +
+          'aria-label="' + item.name + ', ' + item.category + ', 평점 ' + item.rating + '">' +
+          '<div class="search-result-item__icon" aria-hidden="true">' +
+          '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>' +
+          '</div>' +
+          '<div class="search-result-item__info">' +
+          '<p class="search-result-item__name">' + item.name + '</p>' +
+          '<p class="search-result-item__address">' + item.address + '</p>' +
+          '<div class="search-result-item__meta">' +
+          '<span class="search-result-item__rating">' + item.rating +
+          ' <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="1"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg></span>' +
+          '<span class="search-result-item__category">' + item.category + '</span>' +
+          '</div></div></div>';
+      });
+      container.innerHTML = html;
+    }
+
+    function selectPlace(idx) {
+      var query = document.getElementById('searchInput').value.trim();
+      var filtered = searchResults.filter(function(item) {
+        return item.name.toLowerCase().indexOf(query.toLowerCase()) !== -1 ||
+               item.category.toLowerCase().indexOf(query.toLowerCase()) !== -1;
+      });
+      var place = filtered[idx];
+      if (!place) return;
+
+      // Show place detail bottom sheet
+      document.getElementById('placeSheetTitle').textContent = place.name;
+      document.getElementById('placeSheetContent').innerHTML =
+        '<div class="place-detail__image" aria-hidden="true">' +
+        '<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect width="18" height="18" x="3" y="3" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></svg>' +
+        '</div>' +
+        '<div class="flex gap-sm mb-base">' +
+        '<span class="text-caption text-secondary">카테고리: ' + place.category + '</span>' +
+        '<span class="text-caption text-secondary">평점: ' + place.rating + '</span>' +
+        '</div>' +
+        '<div class="place-detail__section">' +
+        '<p class="place-detail__section-label">영업시간</p>' +
+        '<p class="place-detail__hours">월~금: 11:00 ~ 22:00<br>토/일: 10:00 ~ 23:00</p>' +
+        '</div>' +
+        '<div class="place-detail__section">' +
+        '<p class="place-detail__section-label">위치</p>' +
+        '<div class="place-detail__map">지도 미리보기</div>' +
+        '</div>' +
+        '<button class="btn btn--primary mt-base" onclick="addPlaceToSchedule(\'' + place.name + '\')">일정에 추가</button>';
+
+      openBottomSheet('placeSheet');
+    }
+
+    function addPlaceToSchedule(placeName) {
+      closeBottomSheet('placeSheet');
+      navigateTo('12-시간지정.html', { placeName: placeName });
+    }
+
+    function clearSearch() {
+      document.getElementById('searchInput').value = '';
+      document.getElementById('clearBtn').style.display = 'none';
+      document.getElementById('searchResults').innerHTML = '';
+      document.getElementById('resultsHeader').textContent = '';
+      document.getElementById('emptyState').style.display = 'none';
+      document.getElementById('initialState').style.display = '';
+      document.getElementById('searchInput').focus();
+    }
+
+    // Pre-populate search if coming from a link
+    var pageData = getPageData();
+    if (pageData && pageData.searchQuery) {
+      document.getElementById('searchInput').value = pageData.searchQuery;
+      handleSearch();
+      clearPageData();
+    }
+
+    // Auto-populate with sample data on load
+    document.getElementById('searchInput').value = '라멘';
+    handleSearch();
+  </script>
+</body>
+</html>

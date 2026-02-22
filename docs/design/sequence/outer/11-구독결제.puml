@@ -1,0 +1,147 @@
+@startuml 구독결제
+!theme mono
+
+title 구독 결제 - 외부 시퀀스 다이어그램\n(UFR-PAY-010)
+
+actor "여행자" as user
+participant "프론트엔드\n(React Native)" as fe
+participant "API Gateway" as gw
+participant "PAY 서비스\n(결제)" as pay
+participant "AUTH 서비스" as auth
+participant "Apple IAP" as iap
+participant "Google Play Billing" as gpb
+
+== Paywall 또는 설정 화면에서 구독 선택 ==
+user -> fe: "Trip Pass" 또는 "Pro" 선택\n(Paywall 또는 설정 화면)
+activate fe
+
+fe -> gw: POST /subscriptions/purchase\n?tier={Trip Pass | Pro}\n(Authorization: Bearer {token})
+activate gw
+
+gw -> pay: POST /subscriptions/purchase\n?tier={tier}\n(사용자 ID, 플랫폼 정보)
+activate pay
+
+== 플랫폼별 인앱 결제 분기 ==
+alt iOS (Apple IAP)
+
+    pay -> fe: {clientToken, productId}\n(클라이언트에서 결제 시작)
+    activate fe
+
+    fe -> iap: SKPaymentQueue\n.add(SKPayment)\n(구매 요청)
+    activate iap
+
+    iap -> user: Apple 결제 화면\n(Face ID/Touch ID 인증)
+    activate user
+    user -> iap: 결제 승인 및 인증
+    deactivate user
+
+    iap -> fe: {transactionId, receiptData,\n transactionState}\n(결제 완료)
+    deactivate iap
+
+    fe -> gw: POST /subscriptions/purchase/complete\n{transactionId, receiptData,\n  platform: "iOS"}\n(Authorization: Bearer {token})
+    activate gw
+
+    gw -> pay: POST /subscriptions/purchase/complete\n(수신 검증 및 등록)
+    activate pay
+
+    pay -> iap: verifyReceipt()\n(Apple 서버 검증)
+    activate iap
+    iap -> pay: {status: 0, bundle_id, product_id,\n  purchase_date}\n(검증 성공)
+    deactivate iap
+
+else Android (Google Play Billing)
+
+    pay -> fe: {clientToken, productId}\n(클라이언트에서 결제 시작)
+    activate fe
+
+    fe -> gpb: BillingClient\n.launchBillingFlow()\n(구매 요청)
+    activate gpb
+
+    gpb -> user: Google Play 결제 화면\n(결제 수단 선택)
+    activate user
+    user -> gpb: 결제 승인 및 인증
+    deactivate user
+
+    gpb -> fe: {purchaseToken, orderId,\n acknowledgeState}\n(결제 완료)
+    deactivate gpb
+
+    fe -> gw: POST /subscriptions/purchase/complete\n{purchaseToken, orderId,\n  platform: "Android"}\n(Authorization: Bearer {token})
+    activate gw
+
+    gw -> pay: POST /subscriptions/purchase/complete\n(수신 검증 및 등록)
+    activate pay
+
+    pay -> gpb: verifyPurchase()\n(Google 서버 검증)
+    activate gpb
+    gpb -> pay: {purchaseState: 0, orderId,\n  purchaseTime}\n(검증 성공)
+    deactivate gpb
+
+end
+
+== 결제 완료 - 구독 상태 업데이트 ==
+pay -> pay: 구독 기록 저장\n(user_id, tier, purchase_date,\n expiry_date)
+
+== AUTH 서비스에 토큰 재발급 요청 ==
+pay -> auth: POST /auth/tier-change\n{userId, newTier}\n(Free -> Trip Pass/Pro)
+activate auth
+
+auth -> auth: 토큰 클레임 업데이트\n{tier: "Trip Pass" | "Pro"}
+
+auth -> pay: {accessToken (새), refreshToken (새)}
+deactivate auth
+
+== 결제 성공/실패 분기 ==
+alt 결제 검증 성공
+
+    pay -> gw: 200 OK\n{status: "success",\n tier: "Trip Pass" | "Pro",\n accessToken, refreshToken,\n features: [...]}\n(활성화된 기능 목록)
+    deactivate pay
+
+    gw -> fe: 200 OK\n{tier, accessToken, refreshToken,\n features: ["대안 카드", "무제한 브리핑", ...]}\n(클라이언트 상태 업데이트용)
+    deactivate gw
+
+    fe -> user: 결제 성공 화면\n(새 토큰 저장, 활성화된 기능 표시)
+
+    note right of fe
+    **클라이언트 처리**
+    1. 새 accessToken/refreshToken\n   localStorage 저장
+    2. 활성화된 기능 목록 표시
+    3. 대안 카드 기능 활성화
+    4. 무제한 브리핑 활성화
+    5. Paywall 숨김
+    end note
+
+    deactivate fe
+
+else 결제 검증 실패
+
+    pay -> gw: 400 Bad Request\n{status: "failed",\n error: "receipt_verification_failed"}
+    deactivate pay
+
+    gw -> fe: 400 Bad Request\n{error: "결제에 실패했습니다.\n다시 시도해주세요"}
+    deactivate gw
+
+    fe -> user: 결제 실패 메시지\n+ 재시도 버튼
+    deactivate fe
+
+end
+
+note right of pay
+**결제 검증 프로세스**
+
+iOS (Apple):
+- verifyReceipt() API 호출
+- bundle_id, product_id 검증
+- purchase_date 확인
+
+Android (Google):
+- verifyPurchase() API 호출
+- orderId, purchaseState 검증
+- purchaseTime 확인
+
+**구독 상태 저장**
+- user_id, tier, purchase_date
+- expiry_date (구독 갱신 시점)
+- cancellation_date (취소 시)
+end note
+
+@enduml

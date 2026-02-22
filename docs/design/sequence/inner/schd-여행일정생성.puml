@@ -1,0 +1,128 @@
+@startuml
+!theme mono
+title SCHD 서비스 - 여행 생성 및 권한 동의 내부 시퀀스\n(UFR-SCHD-010)
+
+participant "ScheduleController" as ctrl
+participant "ScheduleService" as svc
+participant "TripRepository" as tripRepo
+database "DB" as db
+database "Redis Cache(E)" as cache
+
+note over ctrl, cache
+    SCHD 서비스 내부: 여행 생성 및 첫 등록 시 권한 동의 저장
+    - 여행 데이터 검증 및 저장
+    - 권한 동의 정보 저장 (첫 등록 시에만)
+    - 여행 ID 발급
+end note
+
+== 여행 생성 요청 ==
+
+ctrl -> svc: POST /trips\n(trip_name, start_date, end_date, city,\npermission_consent={location, push, timestamp})
+activate svc
+
+svc -> svc: 요청 데이터 검증
+activate svc
+note right
+    - trip_name: 필수, 길이 1~100자
+    - start_date: 필수, 현재 이후 날짜
+    - end_date: 필수, start_date 이상
+    - city: 필수, 지원 도시 목록 확인
+    - permission_consent: 첫 여행 시 필수
+end note
+deactivate svc
+
+alt 데이터 검증 실패
+    svc --> ctrl: 400 Bad Request\n("필수 필드 누락 또는 형식 오류")
+    deactivate svc
+else 검증 성공
+    svc -> svc: 여행 기간 계산
+    activate svc
+    note right
+        - duration_days = end_date - start_date + 1
+        - 최대 90일 제한 (MVP 규정)
+    end note
+    deactivate svc
+
+    alt 첫 여행 등록 (권한 동의 필수)
+        svc -> svc: 권한 동의 정보 검증
+        activate svc
+        note right
+            - location_consent: true/false
+            - push_consent: true/false
+            - timestamp: 동의 시점
+            - user_agent: 디바이스 정보 (선택)
+        end note
+        deactivate svc
+
+        svc -> tripRepo: 여행 저장\n(trip_name, start_date, end_date,\n city, user_id, permission_consent)
+        activate tripRepo
+
+        tripRepo -> db: INSERT INTO trip\nVALUES (user_id, trip_name, start_date, end_date,\n city, duration_days, permission_consent_location,\n permission_consent_push, permission_consent_at)
+        activate db
+        note right
+            생성되는 필드:
+            - trip_id: 자동 생성 (UUID)
+            - created_at: 현재 시간
+            - status: "PLANNING"
+            - itinerary_status: "EMPTY"
+        end note
+
+        db --> tripRepo: trip_id (저장됨)
+        deactivate db
+
+        tripRepo --> svc: Trip 엔티티\n(trip_id, trip_name, start_date, end_date,\n city, duration_days, status)
+        deactivate tripRepo
+
+    else 이후 여행 등록 (권한 이미 있음)
+        svc -> tripRepo: 여행 저장\n(trip_name, start_date, end_date, city, user_id)
+        activate tripRepo
+
+        tripRepo -> db: INSERT INTO trip\nVALUES (user_id, trip_name, start_date, end_date,\n city, duration_days)
+        activate db
+        db --> tripRepo: trip_id
+        deactivate db
+
+        tripRepo --> svc: Trip 엔티티
+        deactivate tripRepo
+
+    end
+
+    svc -> cache: 여행 캐싱\n(key=trip:{trip_id}, value=Trip)
+    activate cache
+    note right
+        TTL: 1시간 (자주 조회되지 않으므로 짧게)
+    end note
+    cache --> svc: OK
+    deactivate cache
+
+    svc -> svc: 응답 데이터 구성\n{trip_id, trip_name, start_date, end_date,\n city, duration_days, status}
+    activate svc
+    deactivate svc
+
+    svc --> ctrl: 200 OK\n{trip_id, trip_name, start_date, end_date,\n city, duration_days, status: "PLANNING"}
+    deactivate svc
+
+end
+
+== 응답 반환 ==
+
+ctrl -> ctrl: 응답 검증
+note right
+    - trip_id 존재 여부
+    - 필수 필드 완전성
+end
+
+ctrl --> db: 201 Created\n{trip_id, trip_name, start_date, end_date,\n city, duration_days, status}
+deactivate ctrl
+
+note over ctrl, cache
+    **핵심 설계 사항**
+    1. 권한 동의: 첫 여행 등록 시 위치정보/Push 동의 저장
+    2. 여행 기간 검증: 1~90일 범위 확인
+    3. 도시 검증: 지원 도시 목록 확인 (서울, 도쿄, 방콕, 싱가포르, 홍콩)
+    4. 상태 초기화: status="PLANNING", itinerary_status="EMPTY"
+    5. 캐싱: Redis에 여행 정보 저장 (1시간 TTL)
+    6. 멱등성: trip_id로 중복 생성 방지
+end note
+
+@enduml

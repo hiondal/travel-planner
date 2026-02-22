@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>브리핑 상세 - travel-planner</title>
+  <link rel="stylesheet" href="common.css">
+  <style>
+    .briefing-detail {
+      padding: var(--space-base);
+    }
+
+    .briefing-card-detail {
+      background-color: var(--bg-card);
+      border-radius: var(--radius-md);
+      padding: var(--space-lg);
+      margin-bottom: var(--space-xl);
+    }
+
+    .briefing-card-detail__header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: var(--space-base);
+    }
+
+    .briefing-card-detail__time {
+      font-size: var(--font-caption);
+      color: var(--text-secondary);
+    }
+
+    .briefing-card-detail__place {
+      font-size: var(--font-h2);
+      font-weight: var(--font-weight-semibold);
+      margin-bottom: var(--space-base);
+    }
+
+    .briefing-card-detail__summary-label {
+      font-size: var(--font-caption);
+      color: var(--text-secondary);
+      margin-bottom: var(--space-xs);
+    }
+
+    .briefing-card-detail__summary {
+      font-size: var(--font-body1);
+      color: var(--text-primary);
+      line-height: 1.6;
+      padding: var(--space-md);
+      background-color: var(--bg-input);
+      border-radius: var(--radius-sm);
+    }
+
+    .briefing-details-section {
+      margin-bottom: var(--space-xl);
+    }
+
+    .briefing-details-section__title {
+      font-size: var(--font-caption);
+      font-weight: var(--font-weight-semibold);
+      color: var(--text-secondary);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: var(--space-sm);
+    }
+
+    .briefing-cta {
+      margin-bottom: var(--space-xl);
+    }
+
+    .briefing-timestamp {
+      font-size: var(--font-caption);
+      color: var(--text-disabled);
+      text-align: center;
+    }
+
+    .expired-banner {
+      display: flex;
+      align-items: flex-start;
+      gap: var(--space-sm);
+      padding: var(--space-md) var(--space-base);
+      background-color: rgba(255, 214, 10, 0.08);
+      border-radius: var(--radius-sm);
+      border-left: 3px solid var(--status-yellow);
+      margin-bottom: var(--space-xl);
+    }
+
+    .expired-banner__icon {
+      color: var(--status-yellow);
+      flex-shrink: 0;
+      margin-top: 2px;
+    }
+
+    .expired-banner__text {
+      font-size: var(--font-body2);
+      color: var(--text-primary);
+      font-weight: var(--font-weight-semibold);
+    }
+
+    .expired-banner__sub {
+      font-size: var(--font-caption);
+      color: var(--text-secondary);
+      margin-top: var(--space-xs);
+    }
+  </style>
+</head>
+<body>
+  <div class="page-container">
+    <app-top-nav back title="브리핑 상세"></app-top-nav>
+
+    <main class="page-content briefing-detail" role="main">
+      <div id="expiredBanner" style="display:none"></div>
+
+      <div class="briefing-card-detail" id="briefingCard" role="region" aria-label="브리핑 카드">
+        <!-- JS 렌더링 -->
+      </div>
+
+      <div class="briefing-details-section">
+        <p class="briefing-details-section__title">상세 정보</p>
+        <div id="briefingRows">
+          <!-- JS 렌더링 -->
+        </div>
+      </div>
+
+      <div class="briefing-cta" id="briefingCta">
+        <!-- JS 렌더링 -->
+      </div>
+
+      <p class="briefing-timestamp" id="briefingTimestamp"></p>
+    </main>
+
+    <footer role="contentinfo" data-tab="briefing"></footer>
+  </div>
+
+  <script src="common.js"></script>
+  <script>
+    'use strict';
+
+    // Get briefing data
+    var pageData = getPageData();
+    var briefingId = pageData ? pageData.briefingId : 'briefing-001';
+    var briefing = SAMPLE_DATA.briefings.find(function(b) { return b.id === briefingId; });
+
+    if (!briefing) {
+      briefing = SAMPLE_DATA.briefings[0]; // Default: warning briefing
+    }
+
+    // Render card
+    var cardHtml = '<div class="briefing-card-detail__header">' +
+      getBadgeLabelHTML(briefing.status, briefing.type === 'safe' ? '안심' : '주의') +
+      '<span class="briefing-card-detail__time">' + briefing.departureTime + ' 출발 예정</span>' +
+      '</div>' +
+      '<h2 class="briefing-card-detail__place">' + briefing.placeName + '</h2>' +
+      '<p class="briefing-card-detail__summary-label">총평:</p>' +
+      '<p class="briefing-card-detail__summary">"' + briefing.summary + '"</p>';
+    document.getElementById('briefingCard').innerHTML = cardHtml;
+
+    // Detail rows
+    var rowsHtml = '';
+    var details = briefing.details;
+    Object.keys(details).forEach(function(key) {
+      rowsHtml += renderInfoRow(details[key]);
+    });
+    document.getElementById('briefingRows').innerHTML = rowsHtml;
+
+    // CTA based on type
+    var ctaEl = document.getElementById('briefingCta');
+    if (briefing.type === 'safe') {
+      ctaEl.innerHTML = '<button class="btn btn--secondary" onclick="goBack()">안심 확인 완료</button>';
+    } else {
+      ctaEl.innerHTML = '<button class="btn btn--primary" onclick="navigateTo(\'04-대안카드.html\', {placeId: \'' + briefing.placeId + '\'})">대안 보기</button>';
+    }
+
+    // Timestamp
+    document.getElementById('briefingTimestamp').textContent = '생성 시각: ' + briefing.createdAt;
+
+    // Expired banner (example for expired briefing)
+    if (briefing.isExpired) {
+      var bannerEl = document.getElementById('expiredBanner');
+      bannerEl.style.display = '';
+      bannerEl.innerHTML = '<div class="expired-banner">' +
+        '<span class="expired-banner__icon" aria-hidden="true">' +
+        '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" x2="12" y1="8" y2="12"/><line x1="12" x2="12.01" y1="16" y2="16"/></svg>' +
+        '</span>' +
+        '<div>' +
+        '<p class="expired-banner__text">이미 지난 브리핑입니다</p>' +
+        '<p class="expired-banner__sub">생성: ' + briefing.createdAt + ' / 방문 예정: ' + briefing.departureTime + '</p>' +
+        '</div></div>';
+
+      ctaEl.innerHTML = '<button class="btn btn--secondary" onclick="showToast(\'최신 상태 조회 중... (프로토타입)\')">최신 상태 조회</button>';
+    }
+  </script>
+</body>
+</html>

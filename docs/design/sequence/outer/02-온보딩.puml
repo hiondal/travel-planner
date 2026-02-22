@@ -1,0 +1,62 @@
+@startuml
+!theme mono
+
+actor "여행자" as user
+participant "프론트엔드\n(React Native)" as fe
+participant "API Gateway" as gw
+participant "SCHD 서비스" as schd
+
+user -> fe: 로그인 완료 후 앱 첫 실행
+activate fe
+
+fe -> fe: 온보딩 표시 여부 확인\n(로컬 저장소: onboarding_done=false)
+
+alt 온보딩 미완료 (첫 실행)
+    fe -> user: 3단계 온보딩 가이드 표시\n(스와이프 또는 다음 버튼으로 진행)
+    activate user
+
+    user -> user: 1단계: 상태 배지 소개\n(초록=안심, 노랑=주의, 빨강=위험, 회색=미확인)
+    user -> fe: 다음 버튼 탭
+
+    user -> user: 2단계: 출발 전 브리핑 소개\n(Push 알림으로 출발 15~30분 전 발송)
+    user -> fe: 다음 버튼 탭
+
+    user -> user: 3단계: 대안 카드 소개\n(상태 악화 시 한 탭으로 일정 변경)
+    user -> fe: 완료 버튼 탭
+    deactivate user
+
+    fe -> fe: onboarding_done=true 저장\n(로컬 저장소)
+
+    fe -> gw: POST /trips\n(trip_name="도쿄 체험 일정",\nstart_date=today,\nend_date=today+7days,\ncity="도쿄")
+    activate gw
+    gw -> schd: 샘플 일정 생성 요청
+    activate schd
+    schd -> schd: 샘플 여행 일정 생성\n(trip_id 발급)
+    schd -> schd: 샘플 장소 3개 추가\n(1. 센소지 사찰\n2. 이치란 라멘\n3. 시부야 스카이)
+    schd -> schd: 각 장소별 모니터링 대상 등록\n(MonitoringTargetRegistered 이벤트 발행)
+    schd --> gw: 200 OK\n(trip_id, sample_schedules)
+    deactivate schd
+    gw --> fe: 샘플 일정 정보
+    deactivate gw
+
+    fe -> fe: 샘플 일정 및 배지 정보 화면 렌더링
+    fe --> user: 온보딩 완료\n샘플 일정 표시\n(배지, 브리핑, 대안 카드 미리보기 가능)
+    deactivate fe
+
+else 온보딩 완료 (재방문)
+    fe -> gw: GET /trips\n(최근 여행 조회)
+    activate gw
+    gw -> schd: 여행 목록 조회 요청
+    activate schd
+    schd --> gw: 200 OK\n(trips=[...])
+    deactivate schd
+    gw --> fe: 여행 목록
+    deactivate gw
+
+    fe -> fe: 메인 화면 렌더링\n(일정표 표시)
+    fe --> user: 메인 화면 로드\n(온보딩 스킵)
+    deactivate fe
+
+end
+
+@enduml

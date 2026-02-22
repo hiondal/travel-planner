@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>상태 상세 - travel-planner</title>
+  <link rel="stylesheet" href="common.css">
+  <style>
+    .status-page {
+      padding-bottom: var(--space-2xl);
+    }
+
+    .status-hero {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      text-align: center;
+      padding: var(--space-2xl) var(--space-base);
+      background-color: var(--bg-card);
+      border-radius: 0 0 var(--radius-xl) var(--radius-xl);
+      margin-bottom: var(--space-xl);
+    }
+
+    .status-hero__badge {
+      margin-bottom: var(--space-base);
+    }
+
+    .status-hero__place {
+      font-size: var(--font-h1);
+      font-weight: var(--font-weight-bold);
+      margin-bottom: var(--space-sm);
+    }
+
+    .status-hero__summary {
+      font-size: var(--font-body1);
+      color: var(--text-secondary);
+    }
+
+    .status-details {
+      padding: 0 var(--space-base);
+      margin-bottom: var(--space-xl);
+    }
+
+    .status-details__title {
+      font-size: var(--font-caption);
+      font-weight: var(--font-weight-semibold);
+      color: var(--text-secondary);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: var(--space-sm);
+    }
+
+    .status-reason {
+      margin: 0 var(--space-base) var(--space-xl);
+      padding: var(--space-md) var(--space-base);
+      background-color: var(--bg-input);
+      border-radius: var(--radius-sm);
+      font-size: var(--font-body2);
+      color: var(--text-secondary);
+    }
+
+    .status-reason strong {
+      color: var(--text-primary);
+      font-weight: var(--font-weight-semibold);
+    }
+
+    .status-cta {
+      padding: 0 var(--space-base);
+    }
+  </style>
+</head>
+<body>
+  <div class="page-container">
+    <app-top-nav back title="상태 상세" close></app-top-nav>
+
+    <main class="page-content page-content--no-tab status-page" role="main">
+      <div class="status-hero" id="statusHero" role="region" aria-label="상태 요약">
+        <!-- JS 렌더링 -->
+      </div>
+
+      <div class="status-details">
+        <p class="status-details__title">상세 정보</p>
+        <div id="statusRows">
+          <!-- JS 렌더링 -->
+        </div>
+      </div>
+
+      <div class="status-reason" id="statusReason" role="note">
+        <!-- JS 렌더링 -->
+      </div>
+
+      <div class="status-cta" id="statusCta">
+        <!-- JS 렌더링 -->
+      </div>
+    </main>
+  </div>
+
+  <div aria-live="polite" id="statusAnnounce" class="sr-only"></div>
+
+  <script src="common.js"></script>
+  <script>
+    'use strict';
+
+    // Get place data
+    var pageData = getPageData();
+    var placeId = pageData ? pageData.placeId : 'place-002';
+    var place = SAMPLE_DATA.places.find(function(p) { return p.id === placeId; });
+
+    if (!place) {
+      place = SAMPLE_DATA.places[1]; // Default: ichiran ramen
+    }
+
+    // Hero
+    document.getElementById('statusHero').innerHTML =
+      '<div class="status-hero__badge">' + getStatusBadge(place.status, 'lg') + '</div>' +
+      '<h1 class="status-hero__place">' + place.name + '</h1>' +
+      '<p class="status-hero__summary">종합 상태: ' + getStatusLabel(place.status) + '</p>';
+
+    // Detail rows
+    var rowsHtml = '';
+    var details = place.details;
+    Object.keys(details).forEach(function(key) {
+      rowsHtml += renderInfoRow(details[key]);
+    });
+    document.getElementById('statusRows').innerHTML = rowsHtml;
+
+    // Reason
+    document.getElementById('statusReason').innerHTML =
+      '<strong>판정 사유:</strong> "' + place.statusReason + '"';
+
+    // CTA
+    if (place.status === 'yellow' || place.status === 'red') {
+      document.getElementById('statusCta').innerHTML =
+        '<button class="btn btn--primary" onclick="navigateTo(\'04-대안카드.html\', {placeId: \'' + place.id + '\'})">대안 보기</button>';
+    }
+
+    // Screen reader announcement
+    document.getElementById('statusAnnounce').textContent =
+      place.name + ' 상태 상세. 종합 상태: ' + getStatusLabel(place.status) + '. ' + place.statusReason;
+  </script>
+</body>
+</html>

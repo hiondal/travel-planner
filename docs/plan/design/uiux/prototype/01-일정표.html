@@ -1,0 +1,1145 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>일정표 - travel-planner</title>
+  <link rel="stylesheet" href="common.css">
+  <style>
+    /* ---- 스케줄 헤더 (커스텀 네비게이션) ---- */
+    .schedule-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      height: var(--nav-height);
+      padding: 0 var(--space-base);
+      background-color: var(--bg-primary);
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      border-bottom: 1px solid rgba(255,255,255,0.04);
+    }
+
+    /* 여행명 드롭다운 영역 */
+    .trip-selector {
+      display: flex;
+      align-items: center;
+      gap: var(--space-xs);
+      cursor: pointer;
+      padding: var(--space-sm) var(--space-xs);
+      border-radius: var(--radius-sm);
+      transition: background-color var(--anim-fast);
+      min-height: var(--touch-target-min);
+      flex: 1;
+      max-width: 180px;
+    }
+
+    .trip-selector:active {
+      background-color: var(--bg-hover);
+    }
+
+    .trip-selector__name {
+      font-size: var(--font-h2);
+      font-weight: var(--font-weight-semibold);
+      color: var(--text-primary);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .trip-selector__chevron {
+      width: 18px;
+      height: 18px;
+      color: var(--text-secondary);
+      flex-shrink: 0;
+    }
+
+    /* 날짜 네비게이션 영역 */
+    .date-nav {
+      display: flex;
+      align-items: center;
+      gap: var(--space-xs);
+    }
+
+    .date-nav__label {
+      font-size: var(--font-body2);
+      font-weight: var(--font-weight-semibold);
+      color: var(--text-primary);
+      min-width: 68px;
+      text-align: center;
+    }
+
+    .date-nav__btn {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: var(--touch-target-min);
+      height: var(--touch-target-min);
+      color: var(--text-secondary);
+      cursor: pointer;
+      background: none;
+      border: none;
+      border-radius: var(--radius-sm);
+      transition: color var(--anim-fast), background-color var(--anim-fast);
+    }
+
+    .date-nav__btn:hover {
+      color: var(--text-primary);
+      background-color: var(--bg-hover);
+    }
+
+    .date-nav__btn:disabled {
+      color: var(--text-disabled);
+      pointer-events: none;
+    }
+
+    /* ---- 날짜 헤더 섹션 ---- */
+    .day-header {
+      padding: var(--space-base) var(--space-base) var(--space-sm);
+    }
+
+    .day-header__row {
+      display: flex;
+      align-items: center;
+      gap: var(--space-sm);
+    }
+
+    .day-header__today-badge {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 2px var(--space-sm);
+      background-color: var(--accent-red);
+      color: #FFFFFF;
+      font-size: var(--font-overline);
+      font-weight: var(--font-weight-bold);
+      border-radius: var(--radius-pill);
+      letter-spacing: 0.5px;
+    }
+
+    .day-header__date {
+      font-size: var(--font-h3);
+      font-weight: var(--font-weight-semibold);
+      color: var(--text-primary);
+    }
+
+    .day-header__day-label {
+      font-size: var(--font-caption);
+      color: var(--text-secondary);
+      margin-top: 2px;
+    }
+
+    /* ---- 타임라인 래퍼 ---- */
+    .timeline-wrapper {
+      padding: 0 var(--space-base) var(--space-base);
+    }
+
+    /* ---- 타임라인 아이템 (장소 카드 + 연결선) ---- */
+    .timeline-item {
+      position: relative;
+    }
+
+    /* 시간 표시 */
+    .timeline-item__time {
+      font-size: var(--font-caption);
+      font-weight: var(--font-weight-semibold);
+      color: var(--text-secondary);
+      margin-bottom: var(--space-xs);
+      padding-left: 2px;
+    }
+
+    /* 장소 카드 */
+    .place-card {
+      display: flex;
+      align-items: flex-start;
+      gap: var(--space-md);
+      background-color: var(--bg-card);
+      border-radius: var(--radius-md);
+      padding: var(--space-base);
+      cursor: pointer;
+      transition: background-color var(--anim-fast);
+      border: 1px solid transparent;
+    }
+
+    .place-card:active,
+    .place-card:focus-visible {
+      background-color: var(--bg-hover);
+    }
+
+    .place-card:focus-visible {
+      outline: 2px solid var(--accent-blue);
+      outline-offset: 2px;
+    }
+
+    /* 상태에 따른 카드 좌측 강조 선 */
+    .place-card--yellow {
+      border-left: 3px solid var(--status-yellow);
+    }
+
+    .place-card--red {
+      border-left: 3px solid var(--status-red);
+    }
+
+    /* 배지 래퍼 */
+    .place-card__badge {
+      flex-shrink: 0;
+      padding-top: 2px;
+    }
+
+    /* 장소 정보 */
+    .place-card__info {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .place-card__name {
+      font-size: var(--font-h3);
+      font-weight: var(--font-weight-semibold);
+      color: var(--text-primary);
+      margin-bottom: 4px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .place-card__meta {
+      display: flex;
+      align-items: center;
+      gap: var(--space-sm);
+      flex-wrap: wrap;
+    }
+
+    .place-card__meta-item {
+      font-size: var(--font-caption);
+      color: var(--text-secondary);
+      display: flex;
+      align-items: center;
+      gap: 3px;
+    }
+
+    .place-card__status-text {
+      font-size: var(--font-caption);
+      font-weight: var(--font-weight-semibold);
+      margin-top: 4px;
+    }
+
+    .place-card__status-text--yellow { color: var(--status-yellow); }
+    .place-card__status-text--red    { color: var(--status-red); }
+    .place-card__status-text--gray   { color: var(--status-gray); }
+    .place-card__status-text--green  { color: var(--status-green); }
+
+    /* 이동시간 연결선 */
+    .timeline-connector {
+      display: flex;
+      align-items: center;
+      gap: var(--space-sm);
+      padding: var(--space-sm) var(--space-sm) var(--space-sm) calc(var(--space-base) + 12px);
+      font-size: var(--font-caption);
+      color: var(--text-disabled);
+    }
+
+    .timeline-connector__line {
+      width: 1px;
+      height: 20px;
+      background-color: #333333;
+      margin-left: 11px;
+      flex-shrink: 0;
+    }
+
+    .timeline-connector__icon {
+      width: 14px;
+      height: 14px;
+      flex-shrink: 0;
+      color: var(--text-disabled);
+    }
+
+    .timeline-connector__text {
+      font-size: var(--font-caption);
+      color: var(--text-disabled);
+    }
+
+    /* ---- 장소 추가 버튼 (하단 고정) ---- */
+    .add-place-btn-wrapper {
+      position: fixed;
+      bottom: calc(var(--tab-bar-height) + var(--safe-area-bottom) + var(--space-base));
+      left: 0;
+      right: 0;
+      display: flex;
+      justify-content: center;
+      z-index: 150;
+      pointer-events: none;
+    }
+
+    .add-place-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: var(--space-sm);
+      padding: var(--space-md) var(--space-xl);
+      background-color: var(--accent-red);
+      color: #FFFFFF;
+      font-size: var(--font-body2);
+      font-weight: var(--font-weight-bold);
+      border-radius: var(--radius-pill);
+      border: none;
+      cursor: pointer;
+      pointer-events: auto;
+      box-shadow: 0 4px 16px rgba(255, 45, 45, 0.4);
+      transition: all var(--anim-fast);
+    }
+
+    .add-place-btn:active {
+      transform: scale(0.96);
+      filter: brightness(0.9);
+    }
+
+    .add-place-btn__icon {
+      width: 18px;
+      height: 18px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    /* ---- 빈 일정 상태 ---- */
+    .empty-timeline {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: var(--space-4xl) var(--space-base);
+      text-align: center;
+      min-height: 240px;
+    }
+
+    .empty-timeline__icon {
+      width: 48px;
+      height: 48px;
+      color: var(--text-disabled);
+      margin-bottom: var(--space-base);
+    }
+
+    .empty-timeline__title {
+      font-size: var(--font-h3);
+      font-weight: var(--font-weight-semibold);
+      color: var(--text-secondary);
+      margin-bottom: var(--space-sm);
+    }
+
+    .empty-timeline__desc {
+      font-size: var(--font-body2);
+      color: var(--text-disabled);
+    }
+
+    /* ---- 여행 선택 드롭다운 바텀시트 ---- */
+    .trip-list-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: var(--space-base);
+      min-height: 52px;
+      border-radius: var(--radius-sm);
+      cursor: pointer;
+      transition: background-color var(--anim-fast);
+    }
+
+    .trip-list-item:active {
+      background-color: var(--bg-hover);
+    }
+
+    .trip-list-item--active {
+      background-color: var(--bg-input);
+    }
+
+    .trip-list-item__name {
+      font-size: var(--font-body1);
+      font-weight: var(--font-weight-semibold);
+      color: var(--text-primary);
+    }
+
+    .trip-list-item__date {
+      font-size: var(--font-caption);
+      color: var(--text-secondary);
+      margin-top: 2px;
+    }
+
+    .trip-list-item__check {
+      width: 20px;
+      height: 20px;
+      color: var(--accent-blue);
+    }
+
+    /* ---- 상태 상세 바텀시트 ---- */
+    .status-detail__summary {
+      display: flex;
+      align-items: center;
+      gap: var(--space-md);
+      padding: var(--space-base);
+      background-color: var(--bg-input);
+      border-radius: var(--radius-md);
+      margin-bottom: var(--space-base);
+    }
+
+    .status-detail__summary-badge {
+      flex-shrink: 0;
+    }
+
+    .status-detail__summary-text {
+      flex: 1;
+    }
+
+    .status-detail__place-name {
+      font-size: var(--font-h3);
+      font-weight: var(--font-weight-semibold);
+      color: var(--text-primary);
+      margin-bottom: 4px;
+    }
+
+    .status-detail__status-label {
+      font-size: var(--font-caption);
+      color: var(--text-secondary);
+    }
+
+    .status-detail__reason {
+      padding: var(--space-sm) var(--space-base);
+      background-color: rgba(255,255,255,0.03);
+      border-radius: var(--radius-sm);
+      margin-bottom: var(--space-base);
+    }
+
+    .status-detail__reason-label {
+      font-size: var(--font-caption);
+      color: var(--text-secondary);
+      margin-bottom: var(--space-xs);
+    }
+
+    .status-detail__reason-text {
+      font-size: var(--font-body2);
+      color: var(--text-primary);
+    }
+
+    .status-detail__info-list {
+      margin-bottom: var(--space-base);
+    }
+
+    .status-detail__cta {
+      margin-top: var(--space-md);
+    }
+
+    /* 대안보기 CTA 버튼 (노랑/빨강만 표시) */
+    .btn--alternative {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: var(--space-sm);
+      height: 52px;
+      background-color: var(--accent-amber);
+      color: var(--text-inverse);
+      font-size: var(--font-body1);
+      font-weight: var(--font-weight-bold);
+      border-radius: var(--radius-sm);
+      width: 100%;
+      border: none;
+      cursor: pointer;
+      transition: all var(--anim-fast);
+    }
+
+    .btn--alternative:active {
+      transform: scale(0.97);
+      filter: brightness(0.95);
+    }
+
+    .btn--alternative--red {
+      background-color: var(--accent-red);
+      color: #FFFFFF;
+    }
+
+    /* ---- 상태 변경 라이브 리전 ---- */
+    #status-live-region {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      padding: 0;
+      margin: -1px;
+      overflow: hidden;
+      clip: rect(0, 0, 0, 0);
+      white-space: nowrap;
+      border: 0;
+    }
+  </style>
+</head>
+<body>
+  <div class="page-container">
+
+    <!-- 커스텀 스케줄 헤더 -->
+    <header class="schedule-header" role="banner" aria-label="일정 화면 헤더">
+
+      <!-- 여행명 드롭다운 -->
+      <button
+        class="trip-selector"
+        onclick="openTripSelector()"
+        aria-label="여행 선택, 현재: 도쿄 3박4일"
+        aria-haspopup="dialog"
+        id="trip-selector-btn"
+      >
+        <span class="trip-selector__name" id="trip-name-display">도쿄 3박4일</span>
+        <span class="trip-selector__chevron" aria-hidden="true">
+          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24"
+               fill="none" stroke="currentColor" stroke-width="2.5"
+               stroke-linecap="round" stroke-linejoin="round">
+            <path d="m6 9 6 6 6-6"/>
+          </svg>
+        </span>
+      </button>
+
+      <!-- 날짜 네비게이션 -->
+      <nav class="date-nav" aria-label="날짜 이동">
+        <button
+          class="date-nav__btn"
+          onclick="changeDate(-1)"
+          id="date-prev-btn"
+          aria-label="이전 날짜"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24"
+               fill="none" stroke="currentColor" stroke-width="2.5"
+               stroke-linecap="round" stroke-linejoin="round"
+               aria-hidden="true">
+            <path d="m15 18-6-6 6-6"/>
+          </svg>
+        </button>
+
+        <span class="date-nav__label" id="date-nav-label" aria-live="polite" aria-atomic="true">
+          3/16(월)
+        </span>
+
+        <button
+          class="date-nav__btn"
+          onclick="changeDate(1)"
+          id="date-next-btn"
+          aria-label="다음 날짜"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24"
+               fill="none" stroke="currentColor" stroke-width="2.5"
+               stroke-linecap="round" stroke-linejoin="round"
+               aria-hidden="true">
+            <path d="m9 18 6-6-6-6"/>
+          </svg>
+        </button>
+      </nav>
+
+    </header>
+
+    <!-- 메인 콘텐츠 -->
+    <main class="page-content" role="main" id="main-content">
+
+      <!-- 날짜 헤더 -->
+      <div class="day-header" id="day-header">
+        <!-- JS로 렌더링 -->
+      </div>
+
+      <!-- 타임라인 -->
+      <div class="timeline-wrapper">
+        <div
+          id="timeline-list"
+          role="list"
+          aria-label="오늘의 일정 타임라인"
+        >
+          <!-- JS로 렌더링 -->
+        </div>
+      </div>
+
+      <!-- 상태 변경 스크린리더 알림 영역 -->
+      <div
+        id="status-live-region"
+        role="status"
+        aria-live="polite"
+        aria-atomic="true"
+      ></div>
+
+    </main>
+
+    <!-- 장소 추가 버튼 (하단 고정) -->
+    <div class="add-place-btn-wrapper">
+      <button
+        class="add-place-btn"
+        onclick="navigateTo('08-장소검색.html')"
+        aria-label="장소 추가"
+      >
+        <span class="add-place-btn__icon" aria-hidden="true">
+          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24"
+               fill="none" stroke="currentColor" stroke-width="2.5"
+               stroke-linecap="round" stroke-linejoin="round">
+            <path d="M5 12h14"/><path d="M12 5v14"/>
+          </svg>
+        </span>
+        장소 추가
+      </button>
+    </div>
+
+    <!-- 하단 탭 바 -->
+    <footer role="contentinfo">
+      <app-tab-bar active="schedule"></app-tab-bar>
+    </footer>
+
+  </div>
+
+  <!-- =====================================================
+       바텀시트: 여행 선택 (tripSheet)
+       ===================================================== -->
+  <div
+    id="tripSheet-overlay"
+    class="bottom-sheet-overlay"
+    aria-hidden="true"
+  ></div>
+  <div
+    id="tripSheet"
+    class="bottom-sheet"
+    role="dialog"
+    aria-modal="true"
+    aria-label="여행 선택"
+    tabindex="-1"
+  >
+    <div class="bottom-sheet__handle" aria-hidden="true">
+      <div class="bottom-sheet__handle-bar"></div>
+    </div>
+    <div class="bottom-sheet__header">
+      <h2 class="bottom-sheet__title">여행 선택</h2>
+      <button
+        class="bottom-sheet__close"
+        data-close-sheet
+        aria-label="여행 선택 닫기"
+      >
+        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"
+             fill="none" stroke="currentColor" stroke-width="2"
+             stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M18 6 6 18"/><path d="m6 6 12 12"/>
+        </svg>
+      </button>
+    </div>
+    <div class="bottom-sheet__content">
+      <div id="trip-list-content">
+        <!-- JS로 렌더링 -->
+      </div>
+    </div>
+  </div>
+
+  <!-- =====================================================
+       바텀시트: 상태 상세 (statusSheet)
+       ===================================================== -->
+  <div
+    id="statusSheet-overlay"
+    class="bottom-sheet-overlay"
+    aria-hidden="true"
+  ></div>
+  <div
+    id="statusSheet"
+    class="bottom-sheet"
+    role="dialog"
+    aria-modal="true"
+    aria-label="장소 상태 상세"
+    tabindex="-1"
+  >
+    <div class="bottom-sheet__handle" aria-hidden="true">
+      <div class="bottom-sheet__handle-bar"></div>
+    </div>
+    <div class="bottom-sheet__header">
+      <h2 class="bottom-sheet__title">상태 상세</h2>
+      <button
+        class="bottom-sheet__close"
+        data-close-sheet
+        aria-label="상태 상세 닫기"
+      >
+        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"
+             fill="none" stroke="currentColor" stroke-width="2"
+             stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M18 6 6 18"/><path d="m6 6 12 12"/>
+        </svg>
+      </button>
+    </div>
+    <div class="bottom-sheet__content" id="status-sheet-content">
+      <!-- JS로 렌더링 -->
+    </div>
+  </div>
+
+  <script src="common.js"></script>
+  <script>
+    'use strict';
+
+    // ============================================================
+    // 상태 관리
+    // ============================================================
+
+    // 현재 여행 인덱스 (SAMPLE_DATA.trip 기준 단일 여행)
+    var currentTripIndex = 0;
+
+    // 현재 표시 중인 날짜 인덱스 (0-based, 1일차 = 0)
+    var currentDayIndex = 1; // 기본값: 2일차 (3/16)
+
+    // 현재 선택된 장소 ID (바텀시트용)
+    var selectedPlaceId = null;
+
+    // 여행 목록 (프로토타입용 목록)
+    var tripList = [
+      { id: 'trip-001', name: '도쿄 3박4일', city: '도쿄', startDate: '2026-03-15', endDate: '2026-03-18', days: 4 },
+      { id: 'trip-002', name: '오사카 2박3일', city: '오사카', startDate: '2026-04-10', endDate: '2026-04-12', days: 3 },
+    ];
+
+    var currentTripId = 'trip-001';
+
+    // ============================================================
+    // 날짜 헬퍼
+    // ============================================================
+
+    /**
+     * startDate + dayIndex(0-based) 로 날짜 문자열 반환
+     * @param {string} startDate
+     * @param {number} dayIndex
+     * @returns {string} 'YYYY-MM-DD'
+     */
+    function getDayDate(startDate, dayIndex) {
+      var d = new Date(startDate);
+      d.setDate(d.getDate() + dayIndex);
+      var y = d.getFullYear();
+      var m = String(d.getMonth() + 1).padStart(2, '0');
+      var day = String(d.getDate()).padStart(2, '0');
+      return y + '-' + m + '-' + day;
+    }
+
+    /**
+     * 오늘 날짜 여부 판단
+     * @param {string} dateStr 'YYYY-MM-DD'
+     * @returns {boolean}
+     */
+    function isToday(dateStr) {
+      var today = new Date();
+      var d = new Date(dateStr);
+      return (
+        today.getFullYear() === d.getFullYear() &&
+        today.getMonth() === d.getMonth() &&
+        today.getDate() === d.getDate()
+      );
+    }
+
+    // ============================================================
+    // 날짜 이동
+    // ============================================================
+
+    /**
+     * 날짜 변경
+     * @param {number} delta -1 또는 1
+     */
+    function changeDate(delta) {
+      var trip = SAMPLE_DATA.trip;
+      var nextIndex = currentDayIndex + delta;
+
+      // 범위 초과 방지
+      if (nextIndex < 0 || nextIndex >= trip.days) return;
+
+      currentDayIndex = nextIndex;
+      renderPage();
+    }
+
+    // ============================================================
+    // 렌더링
+    // ============================================================
+
+    /** 전체 페이지 렌더링 */
+    function renderPage() {
+      renderDateNavLabel();
+      renderDayHeader();
+      renderTimeline();
+      updateNavButtons();
+      updateTripSelectorLabel();
+    }
+
+    /** 날짜 네비게이션 레이블 갱신 */
+    function renderDateNavLabel() {
+      var trip = SAMPLE_DATA.trip;
+      var dateStr = getDayDate(trip.startDate, currentDayIndex);
+      var label = document.getElementById('date-nav-label');
+      if (label) {
+        label.textContent = formatDateShort(dateStr);
+      }
+    }
+
+    /** 이전/다음 버튼 비활성화 처리 */
+    function updateNavButtons() {
+      var trip = SAMPLE_DATA.trip;
+      var prevBtn = document.getElementById('date-prev-btn');
+      var nextBtn = document.getElementById('date-next-btn');
+
+      if (prevBtn) {
+        prevBtn.disabled = (currentDayIndex === 0);
+        prevBtn.setAttribute('aria-disabled', String(currentDayIndex === 0));
+      }
+      if (nextBtn) {
+        nextBtn.disabled = (currentDayIndex >= trip.days - 1);
+        nextBtn.setAttribute('aria-disabled', String(currentDayIndex >= trip.days - 1));
+      }
+    }
+
+    /** 여행명 표시 갱신 */
+    function updateTripSelectorLabel() {
+      var trip = tripList.find(function(t) { return t.id === currentTripId; }) || tripList[0];
+      var display = document.getElementById('trip-name-display');
+      if (display) {
+        display.textContent = trip.name;
+      }
+      var btn = document.getElementById('trip-selector-btn');
+      if (btn) {
+        btn.setAttribute('aria-label', '여행 선택, 현재: ' + trip.name);
+      }
+    }
+
+    /** 날짜 헤더 렌더링 */
+    function renderDayHeader() {
+      var trip = SAMPLE_DATA.trip;
+      var dateStr = getDayDate(trip.startDate, currentDayIndex);
+      var dayNumber = currentDayIndex + 1;
+      var today = isToday(dateStr);
+
+      var days = ['일', '월', '화', '수', '목', '금', '토'];
+      var d = new Date(dateStr);
+      var monthDay = (d.getMonth() + 1) + '월 ' + d.getDate() + '일 (' + days[d.getDay()] + ')';
+
+      var todayBadge = today
+        ? '<span class="day-header__today-badge" aria-label="오늘">TODAY</span>'
+        : '';
+
+      var html =
+        '<div class="day-header__row">' +
+        todayBadge +
+        '<span class="day-header__date">' + monthDay + '</span>' +
+        '</div>' +
+        '<div class="day-header__day-label">' + dayNumber + '일차</div>';
+
+      var headerEl = document.getElementById('day-header');
+      if (headerEl) headerEl.innerHTML = html;
+    }
+
+    /** 타임라인 렌더링 */
+    function renderTimeline() {
+      var trip = SAMPLE_DATA.trip;
+      var dayNumber = currentDayIndex + 1;
+
+      // 해당 날짜의 장소 필터링
+      var dayPlaces = SAMPLE_DATA.places.filter(function(p) {
+        return p.day === dayNumber;
+      });
+
+      // 시간순 정렬
+      dayPlaces.sort(function(a, b) {
+        return a.time.localeCompare(b.time);
+      });
+
+      var timelineEl = document.getElementById('timeline-list');
+      if (!timelineEl) return;
+
+      if (dayPlaces.length === 0) {
+        timelineEl.innerHTML = renderEmptyTimeline();
+        return;
+      }
+
+      var html = '';
+      dayPlaces.forEach(function(place, idx) {
+        html += renderTimelineItem(place);
+
+        // 마지막 항목이 아니면 연결선 표시
+        if (idx < dayPlaces.length - 1 && place.travelTime) {
+          html += renderConnector(place.travelTime);
+        } else if (idx < dayPlaces.length - 1) {
+          html += renderConnector(null);
+        }
+      });
+
+      timelineEl.innerHTML = html;
+
+      // 장소 카드 클릭 이벤트 바인딩
+      timelineEl.querySelectorAll('.place-card').forEach(function(card) {
+        card.addEventListener('click', function() {
+          var placeId = card.getAttribute('data-place-id');
+          openStatusDetail(placeId);
+        });
+        // 키보드 접근성
+        card.addEventListener('keydown', function(e) {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            var placeId = card.getAttribute('data-place-id');
+            openStatusDetail(placeId);
+          }
+        });
+      });
+    }
+
+    /**
+     * 타임라인 개별 아이템 HTML 반환
+     * @param {object} place
+     * @returns {string}
+     */
+    function renderTimelineItem(place) {
+      var statusClass = (place.status === 'yellow' || place.status === 'red')
+        ? ' place-card--' + place.status
+        : '';
+
+      var metaHtml = '';
+
+      // 카테고리
+      if (place.category) {
+        metaHtml +=
+          '<span class="place-card__meta-item">' +
+          place.category +
+          '</span>';
+      }
+
+      // 날씨 정보 (green 상태에서만 표시)
+      if (place.details && place.details.weather) {
+        metaHtml +=
+          '<span class="place-card__meta-item">' +
+          '<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/></svg>' +
+          place.details.weather.value +
+          '</span>';
+      }
+
+      // 상태 텍스트 (주의/위험/미확인 시만 별도 표시)
+      var statusTextHtml = '';
+      if (place.status !== 'green') {
+        statusTextHtml =
+          '<div class="place-card__status-text place-card__status-text--' + place.status + '">' +
+          place.statusReason +
+          '</div>';
+      }
+
+      return (
+        '<div class="timeline-item" role="listitem">' +
+        '<div class="timeline-item__time" aria-label="' + place.time + ' 출발">' + place.time + '</div>' +
+        '<div class="place-card' + statusClass + '" ' +
+        'data-place-id="' + place.id + '" ' +
+        'role="button" ' +
+        'tabindex="0" ' +
+        'aria-label="' + place.name + ', ' + getStatusAriaLabel(place.status) + '. 상세 보기">' +
+        '<div class="place-card__badge">' +
+        getStatusBadge(place.status, 'sm') +
+        '</div>' +
+        '<div class="place-card__info">' +
+        '<div class="place-card__name">' + place.name + '</div>' +
+        '<div class="place-card__meta">' + metaHtml + '</div>' +
+        statusTextHtml +
+        '</div>' +
+        '</div>' +
+        '</div>'
+      );
+    }
+
+    /**
+     * 이동시간 연결선 HTML 반환
+     * @param {string|null} travelTime
+     * @returns {string}
+     */
+    function renderConnector(travelTime) {
+      if (!travelTime) {
+        return (
+          '<div class="timeline-connector" aria-hidden="true">' +
+          '<div class="timeline-connector__line"></div>' +
+          '</div>'
+        );
+      }
+
+      return (
+        '<div class="timeline-connector" aria-hidden="true">' +
+        '<div class="timeline-connector__line"></div>' +
+        '<span class="timeline-connector__icon">' +
+        '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="13" cy="4" r="1.5"/><path d="m9.5 21 2-7"/><path d="m15 21-3.5-5.5L9 12l1-4 4 1 2.5 3"/><path d="M6 12h.01"/></svg>' +
+        '</span>' +
+        '<span class="timeline-connector__text">' + travelTime + '</span>' +
+        '</div>'
+      );
+    }
+
+    /**
+     * 빈 타임라인 상태 HTML 반환
+     * @returns {string}
+     */
+    function renderEmptyTimeline() {
+      return (
+        '<div class="empty-timeline" role="listitem">' +
+        '<div class="empty-timeline__icon" aria-hidden="true">' +
+        '<svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="4" rx="2" ry="2"/><line x1="16" x2="16" y1="2" y2="6"/><line x1="8" x2="8" y1="2" y2="6"/><line x1="3" x2="21" y1="10" y2="10"/><path d="M8 14h.01"/><path d="M12 14h.01"/><path d="M16 14h.01"/><path d="M8 18h.01"/><path d="M12 18h.01"/><path d="M16 18h.01"/></svg>' +
+        '</div>' +
+        '<div class="empty-timeline__title">일정이 없습니다</div>' +
+        '<div class="empty-timeline__desc">하단 버튼으로 장소를 추가해보세요</div>' +
+        '</div>'
+      );
+    }
+
+    // ============================================================
+    // 여행 선택 드롭다운
+    // ============================================================
+
+    function openTripSelector() {
+      renderTripList();
+      openBottomSheet('tripSheet');
+      // 포커스 이동
+      setTimeout(function() {
+        var sheet = document.getElementById('tripSheet');
+        if (sheet) sheet.focus();
+      }, 100);
+    }
+
+    function renderTripList() {
+      var html = '';
+      tripList.forEach(function(trip) {
+        var isActive = trip.id === currentTripId;
+        var activeClass = isActive ? ' trip-list-item--active' : '';
+
+        var checkIcon = isActive
+          ? '<span class="trip-list-item__check" aria-hidden="true">' +
+            '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>' +
+            '</span>'
+          : '<span style="width:20px;" aria-hidden="true"></span>';
+
+        html +=
+          '<div class="trip-list-item' + activeClass + '" ' +
+          'onclick="selectTrip(\'' + trip.id + '\')" ' +
+          'role="option" ' +
+          'aria-selected="' + isActive + '" ' +
+          'tabindex="0" ' +
+          'aria-label="' + trip.name + ' 선택' + (isActive ? ', 현재 선택됨' : '') + '">' +
+          '<div>' +
+          '<div class="trip-list-item__name">' + trip.name + '</div>' +
+          '<div class="trip-list-item__date">' +
+          formatDateShort(trip.startDate) + ' ~ ' + formatDateShort(trip.endDate) +
+          '</div>' +
+          '</div>' +
+          checkIcon +
+          '</div>';
+      });
+
+      var content = document.getElementById('trip-list-content');
+      if (content) content.innerHTML = html;
+    }
+
+    /**
+     * 여행 선택
+     * @param {string} tripId
+     */
+    function selectTrip(tripId) {
+      currentTripId = tripId;
+      currentDayIndex = 0;
+      closeBottomSheet('tripSheet');
+      renderPage();
+      showToast('여행이 변경되었습니다');
+    }
+
+    // ============================================================
+    // 상태 상세 바텀시트
+    // ============================================================
+
+    /**
+     * 상태 상세 바텀시트 열기
+     * @param {string} placeId
+     */
+    function openStatusDetail(placeId) {
+      var place = SAMPLE_DATA.places.find(function(p) { return p.id === placeId; });
+      if (!place) return;
+
+      selectedPlaceId = placeId;
+      renderStatusDetail(place);
+      openBottomSheet('statusSheet');
+
+      // 스크린리더 알림
+      var liveRegion = document.getElementById('status-live-region');
+      if (liveRegion) {
+        liveRegion.textContent = place.name + ' 상태 상세: ' + getStatusLabel(place.status) + ', ' + place.statusReason;
+      }
+
+      // 포커스 이동
+      setTimeout(function() {
+        var sheet = document.getElementById('statusSheet');
+        if (sheet) sheet.focus();
+      }, 100);
+    }
+
+    /**
+     * 상태 상세 내용 렌더링
+     * @param {object} place
+     */
+    function renderStatusDetail(place) {
+      var details = place.details;
+
+      // 종합 상태 요약
+      var summaryHtml =
+        '<div class="status-detail__summary">' +
+        '<div class="status-detail__summary-badge">' +
+        getStatusBadge(place.status, 'lg') +
+        '</div>' +
+        '<div class="status-detail__summary-text">' +
+        '<div class="status-detail__place-name">' + place.name + '</div>' +
+        '<div class="status-detail__status-label">' +
+        getBadgeLabelHTML(place.status, getStatusLabel(place.status)) +
+        '</div>' +
+        '</div>' +
+        '</div>';
+
+      // 판정 사유
+      var reasonHtml =
+        '<div class="status-detail__reason">' +
+        '<div class="status-detail__reason-label">판정 사유</div>' +
+        '<div class="status-detail__reason-text">' + place.statusReason + '</div>' +
+        '</div>';
+
+      // 4항목 상세 리스트
+      var infoListHtml = '<div class="status-detail__info-list">';
+      if (details.business) infoListHtml += renderInfoRow(details.business);
+      if (details.crowd)    infoListHtml += renderInfoRow(details.crowd);
+      if (details.weather)  infoListHtml += renderInfoRow(details.weather);
+      if (details.transit)  infoListHtml += renderInfoRow(details.transit);
+      infoListHtml += '</div>';
+
+      // 대안보기 CTA (노랑/빨강만 표시)
+      var ctaHtml = '';
+      if (place.status === 'yellow' || place.status === 'red') {
+        var btnClass = place.status === 'red'
+          ? 'btn--alternative btn--alternative--red'
+          : 'btn--alternative';
+        var btnText = place.status === 'red' ? '대안 장소 보기' : '대안 확인하기';
+
+        ctaHtml =
+          '<div class="status-detail__cta">' +
+          '<button class="' + btnClass + '" ' +
+          'onclick="goToAlternatives(\'' + place.id + '\')" ' +
+          'aria-label="' + place.name + ' 대안 장소 보기">' +
+          '<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>' +
+          btnText +
+          '</button>' +
+          '</div>';
+      }
+
+      var content = document.getElementById('status-sheet-content');
+      if (content) {
+        content.innerHTML = summaryHtml + reasonHtml + infoListHtml + ctaHtml;
+      }
+    }
+
+    /**
+     * 대안 장소 화면으로 이동
+     * @param {string} placeId
+     */
+    function goToAlternatives(placeId) {
+      closeBottomSheet('statusSheet');
+      navigateTo('04-대안카드.html', { placeId: placeId });
+    }
+
+    // ============================================================
+    // 초기화
+    // ============================================================
+
+    document.addEventListener('DOMContentLoaded', function() {
+      // 기본 렌더링
+      renderPage();
+
+      // 바텀시트 설정
+      setupBottomSheet('statusSheet');
+      setupBottomSheet('tripSheet');
+    });
+  </script>
+</body>
+</html>

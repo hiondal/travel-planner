@@ -1,0 +1,123 @@
+graph TB
+    %% Client Layer
+    subgraph Client["Client Layer"]
+        Mobile["모바일 앱<br/>(React Native)"]
+    end
+
+    %% Gateway Layer
+    subgraph Gateway["API Gateway Layer"]
+        GW["API Gateway<br/>• JWT 검증<br/>• 라우팅<br/>• 인바운드 Rate Limiting<br/>• CORS / 로깅"]
+    end
+
+    %% Service Layer
+    subgraph Services["Service Layer (7개 마이크로서비스)"]
+        AUTH["AUTH<br/>━━━━━━<br/>• 소셜 로그인<br/>• JWT 발급/갱신<br/>• 구독 티어<br/><br/>패턴: Federated Identity"]
+
+        SCHD["SCHD<br/>━━━━━━<br/>• 여행/일정/장소 CRUD<br/>• 모니터링 대상 등록<br/>• 상태 배지 조회<br/><br/>패턴: Cache-Aside<br/>Publisher-Subscriber"]
+
+        PLCE["PLCE<br/>━━━━━━<br/>• 장소 검색<br/>• 장소 캐싱<br/>• 이동시간 계산<br/><br/>패턴: Cache-Aside<br/>Circuit Breaker<br/>Retry / Rate Limiting"]
+
+        MNTR["MNTR<br/>━━━━━━<br/>• 15분 주기 수집<br/>• 상태 배지 판정<br/>• 상태 변경 알림<br/><br/>패턴: Scheduler Agent<br/>Circuit Breaker<br/>Cache-Aside / Retry"]
+
+        BRIF["BRIF<br/>━━━━━━<br/>• 출발전 브리핑 생성<br/>• 멱등성 보장<br/>• Push 발송<br/><br/>패턴: Scheduler Agent<br/>Cache-Aside"]
+
+        ALTN["ALTN<br/>━━━━━━<br/>• 대안 검색<br/>• 스코어링<br/>• 카드 생성<br/><br/>패턴: Cache-Aside<br/>Circuit Breaker<br/>Choreography"]
+
+        PAY["PAY<br/>━━━━━━<br/>• 인앱 결제<br/>• 구독 관리<br/><br/>패턴: Federated Identity"]
+    end
+
+    %% Event Bus & Scheduler
+    subgraph EventInfra["Event & Scheduler Infrastructure"]
+        EB["Event Bus<br/>(Spring ApplicationEvent<br/>+ @TransactionalEventListener<br/>+ outbox_events)<br/><br/>패턴: Publisher-Subscriber"]
+
+        SCH["Scheduler + Supervisor<br/>(Spring @Scheduled<br/>+ job_execution_log)<br/><br/>패턴: Scheduler Agent Supervisor"]
+    end
+
+    %% Data Layer
+    subgraph DataLayer["Data & Cache Layer"]
+        DB["PostgreSQL<br/>• user, trip, schedule<br/>• place, monitoring_target<br/>• status_badge, briefing<br/>• job_execution_log<br/>• outbox_events"]
+
+        CACHE["Redis Cache<br/>(TTL: 5~30분)<br/>• Place (5분)<br/>• StatusBadge (5분)<br/>• Briefing (30분)<br/>• AlternativeCard (10분)"]
+    end
+
+    %% External APIs
+    subgraph ExternalAPIs["External APIs"]
+        GOOGLE_OAUTH["Google/Apple<br/>OAuth"]
+        GOOGLE_PLACES["Google Places API<br/>(혼잡도, 영업시간)"]
+        WEATHER["OpenWeatherMap API<br/>(날씨 정보)"]
+        DIRECTIONS["Google Directions API<br/>(교통, 이동시간)"]
+        FCM["Firebase Cloud<br/>Messaging<br/>(Push 알림)"]
+        IAP["Apple IAP /<br/>Google Play<br/>Billing"]
+    end
+
+    %% Connections - Client to Gateway
+    Mobile -->|"[AUTH]login [SCHD]trip [PLCE]search etc"| GW
+
+    %% Connections - Gateway to Services
+    GW -->|"[AUTH]검증"| AUTH
+    GW -->|"[SCHD]일정"| SCHD
+    GW -->|"[PLCE]장소"| PLCE
+    GW -->|"[MNTR]상태"| MNTR
+    GW -->|"[BRIF]브리핑"| BRIF
+    GW -->|"[ALTN]대안"| ALTN
+    GW -->|"[PAY]결제"| PAY
+
+    %% Connections - Services to External APIs (동기)
+    AUTH -->|"OAuth 인증"| GOOGLE_OAUTH
+    PLCE -->|"장소 검색"| GOOGLE_PLACES
+    PLCE -->|"이동시간"| DIRECTIONS
+    MNTR -->|"혼잡도"| GOOGLE_PLACES
+    MNTR -->|"날씨"| WEATHER
+    MNTR -->|"교통"| DIRECTIONS
+    BRIF -->|"Push"| FCM
+    PAY -->|"결제"| IAP
+
+    %% Connections - Services to Event Bus (비동기)
+    SCHD -->|"MonitoringTargetRegistered / Changed / PlaceReplaced"| EB
+    MNTR -->|"StatusBadgeUpdated / StatusDeteriorated"| EB
+    ALTN -->|"AlternativeAdopted"| EB
+
+    %% Connections - Event Bus subscriptions
+    EB -->|"구독: MonitoringTarget Registered/Changed"| MNTR
+    EB -->|"구독: StatusBadgeUpdated (브리핑 트리거)"| BRIF
+    EB -->|"구독: StatusDeteriorated (대안 검색)"| ALTN
+    EB -->|"구독: StatusBadgeUpdated (캐시 갱신)"| SCHD
+    EB -->|"구독: AlternativeAdopted (일정 교체)"| SCHD
+    EB -->|"구독: AlternativeAdopted (모니터링 변경)"| MNTR
+
+    %% Connections - Scheduler to Services
+    SCH -->|"15분 주기 데이터 수집"| MNTR
+    SCH -->|"출발 15~30분전 브리핑 트리거"| BRIF
+
+    %% Connections - Services to Data Layer
+    AUTH --> DB
+    SCHD --> DB
+    PLCE --> DB
+    MNTR --> DB
+    BRIF --> DB
+    ALTN --> DB
+    PAY --> DB
+
+    PLCE --> CACHE
+    MNTR --> CACHE
+    BRIF --> CACHE
+    SCHD --> CACHE
+    ALTN --> CACHE
+
+    %% Connections - Scheduler to Data Layer
+    SCH --> DB
+
+    %% Style definitions
+    classDef clientStyle fill:#BFDBFE,stroke:#3B82F6,stroke-width:2px,color:#1E40AF
+    classDef gatewayStyle fill:#FED7AA,stroke:#F97316,stroke-width:2px,color:#92400E
+    classDef serviceStyle fill:#D1FAE5,stroke:#10B981,stroke-width:2px,color:#065F46
+    classDef infraStyle fill:#F3E8FF,stroke:#A855F7,stroke-width:2px,color:#581C87
+    classDef dataStyle fill:#E0E7FF,stroke:#6366F1,stroke-width:2px,color:#312E81
+    classDef externalStyle fill:#FEE2E2,stroke:#EF4444,stroke-width:2px,color:#7F1D1D
+
+    class Mobile clientStyle
+    class GW gatewayStyle
+    class AUTH,SCHD,PLCE,MNTR,BRIF,ALTN,PAY serviceStyle
+    class EB,SCH infraStyle
+    class DB,CACHE dataStyle
+    class GOOGLE_OAUTH,GOOGLE_PLACES,WEATHER,DIRECTIONS,FCM,IAP externalStyle

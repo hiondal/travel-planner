@@ -1,0 +1,179 @@
+@startuml pay-구독구매
+!theme mono
+
+title PAY 서비스 내부 - 인앱 결제 구독 구매\n(UFR-PAY-010)
+
+participant "PaymentController" as ctrl
+participant "SubscriptionService" as svc
+participant "PlatformVerifier" as verifier
+participant "SubscriptionRepository" as repo
+database "DB" as db
+participant "AUTH 서비스(E)" as auth
+participant "Apple IAP(E)" as iap
+participant "Google Play Billing(E)" as gpb
+
+== 결제 완료 수신 요청 ==
+ctrl -> svc: completePurchase\n(platform, receipt_data,\ntransaction_id, user_id)
+activate svc
+
+== 플랫폼별 영수증 검증 분기 ==
+svc -> verifier: verifyReceipt\n(platform, receipt_data,\ntransaction_id)
+activate verifier
+
+alt iOS (Apple IAP)
+
+    verifier -> iap: verifyReceipt(receipt_data)\nApple Server API
+    activate iap
+
+    alt 검증 성공
+        iap -> verifier: {status: 0,\nbundle_id, product_id,\npurchase_date,\nexpires_date}\n(유효한 영수증)
+        deactivate iap
+
+        verifier -> svc: {platform: "iOS",\nproduct_id, purchase_date,\nexpires_date,\nverified: true}
+    else 검증 실패
+        iap -> verifier: {status: 21002}\n(영수증 검증 실패)
+        deactivate iap
+
+        verifier -> svc: {verified: false,\nerror: "receipt_verification_failed"}
+    end
+
+else Android (Google Play Billing)
+
+    verifier -> gpb: verifyPurchase(purchase_token,\norderId)\nGoogle Play API
+    activate gpb
+
+    alt 검증 성공
+        gpb -> verifier: {purchaseState: 0,\norderId, purchaseTime,\nauto_renewing}\n(구매 상태: 0=Purchased)
+        deactivate gpb
+
+        verifier -> svc: {platform: "Android",\nproduct_id, purchase_time,\nauto_renewing,\nverified: true}
+    else 검증 실패
+        gpb -> verifier: {purchaseState: 2}\n(구매 상태: 2=Canceled)
+        deactivate gpb
+
+        verifier -> svc: {verified: false,\nerror: "purchase_cancelled"}
+    end
+
+end
+
+deactivate verifier
+
+== 검증 결과 분기 ==
+alt 검증 실패
+    svc -> ctrl: {status: "FAILED",\nerror: "영수증 검증 실패"}
+    deactivate svc
+    deactivate ctrl
+
+else 검증 성공
+
+    == 구독 상태 DB 저장 ==
+    svc -> repo: saveSubscription\n(user_id, platform,\nproduct_id, purchase_date,\nexpires_date, tier)
+    activate repo
+
+    repo -> db: INSERT INTO subscription\n(user_id, platform,\nproduct_id, purchase_date,\nexpires_date, tier,\nstatus: "ACTIVE",\ncreated_at)\nVALUES(...)\nON DUPLICATE KEY UPDATE\nstatus="ACTIVE",\nexpires_date=VALUES(expires_date),\nupdate_at=NOW()
+    activate db
+    db -> repo: {subscription_id}
+    deactivate db
+
+    repo -> svc: 저장 완료
+    deactivate repo
+
+    == 구독 티어 결정 ==
+    svc -> svc: product_id 기반 tier 결정\ntrip_pass_monthly -> "TRIP_PASS"\npro_monthly -> "PRO"
+
+    == AUTH 서비스에 토큰 재발급 요청 ==
+    svc -> auth: POST /auth/tier-change\n{user_id, new_tier}
+    activate auth
+
+    auth -> auth: JWT 토큰 클레임 업데이트\n{user_id, tier, exp}
+
+    auth -> svc: {accessToken (새),\nrefreshToken (새),\nexpiresIn: 1800}
+    deactivate auth
+
+    == 구독 정보 캐시 저장 ==
+    svc -> svc: Redis 캐시에\n구독 정보 저장\n(tier 변경 반영)
+
+    == 응답 반환 ==
+    svc -> ctrl: {status: "SUCCESS",\ntier: "TRIP_PASS" | "PRO",\naccessToken, refreshToken,\nfeatures: [\n  "대안 카드 3개" | "대안 카드 5개",\n  "무제한 브리핑",\n  "상태 배지 우선 조회"\n]}\n(활성화된 기능 목록)
+    deactivate svc
+    deactivate ctrl
+end
+
+note right of svc
+**구독 구매 처리 흐름**
+1. 플랫폼별 영수증 검증
+   (Apple IAP / Google Play)
+2. 검증 성공 여부 분기
+3. DB에 구독 상태 저장
+4. product_id -> tier 변환
+5. AUTH에 토큰 재발급 요청
+6. 캐시 갱신
+7. 활성화된 기능 목록 반환
+
+**구독 상태**
+- ACTIVE: 구독 중
+- PAUSED: 일시중지
+- CANCELLED: 취소됨
+- EXPIRED: 만료됨
+end note
+
+note right of verifier
+**플랫폼별 검증**
+
+iOS (Apple IAP):
+- API: verifyReceipt()
+- 검증 항목: bundle_id, product_id,\n purchase_date, expires_date
+- 응답 status=0: 성공
+- 응답 status=21002: 검증 실패
+
+Android (Google Play):
+- API: verifyPurchase()
+- 검증 항목: orderId, purchaseState,\n purchaseTime
+- purchaseState=0: 구매됨
+- purchaseState=2: 취소됨
+end note
+
+note right of repo
+**Subscription 테이블**
+
+컬럼:
+- subscription_id: PK
+- user_id: FK, UNIQUE
+- platform: "iOS" | "Android"
+- product_id: 상품 ID
+- tier: "TRIP_PASS" | "PRO"
+- purchase_date: 구매 일시
+- expires_date: 만료 일시
+- status: "ACTIVE" | "PAUSED" |
+         "CANCELLED" | "EXPIRED"
+- created_at: 생성 일시
+- updated_at: 갱신 일시
+
+인덱스:
+- user_id (UNIQUE)
+- tier
+- status
+end note
+
+note right of auth
+**AUTH 토큰 갱신**
+
+이전 토큰:
+{
+  user_id, tier: "FREE",
+  iat, exp
+}
+
+새 토큰:
+{
+  user_id, tier: "TRIP_PASS",
+  iat, exp
+}
+
+토큰 갱신 항목:
+- tier 필드 변경
+- exp (새 만료시간)
+- issued_at 업데이트
+end note
+
+@enduml

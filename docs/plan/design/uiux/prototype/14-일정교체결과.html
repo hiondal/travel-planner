@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>일정 교체 결과 - travel-planner</title>
+  <link rel="stylesheet" href="common.css">
+  <style>
+    .result-content {
+      padding: var(--space-base);
+    }
+
+    .result-card {
+      background-color: var(--bg-card);
+      border-radius: var(--radius-md);
+      padding: var(--space-xl);
+      margin-bottom: var(--space-xl);
+      text-align: center;
+    }
+
+    .result-card__badge {
+      display: flex;
+      justify-content: center;
+      margin-bottom: var(--space-base);
+    }
+
+    .result-card__title {
+      font-size: var(--font-h2);
+      font-weight: var(--font-weight-semibold);
+      margin-bottom: var(--space-xl);
+    }
+
+    .result-card__flow {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: var(--space-md);
+      margin-bottom: var(--space-xl);
+    }
+
+    .result-card__place {
+      font-size: var(--font-h3);
+      font-weight: var(--font-weight-semibold);
+      padding: var(--space-md) var(--space-lg);
+      background-color: var(--bg-input);
+      border-radius: var(--radius-sm);
+      width: 100%;
+    }
+
+    .result-card__place--old {
+      color: var(--text-secondary);
+      text-decoration: line-through;
+      opacity: 0.6;
+    }
+
+    .result-card__place--new {
+      color: var(--status-green);
+      border: 1px solid rgba(52, 199, 89, 0.3);
+      background-color: rgba(52, 199, 89, 0.08);
+    }
+
+    .result-card__arrow {
+      color: var(--text-disabled);
+    }
+
+    .result-card__changes {
+      text-align: left;
+      margin-bottom: var(--space-lg);
+    }
+
+    .result-card__change-item {
+      display: flex;
+      align-items: center;
+      gap: var(--space-sm);
+      font-size: var(--font-body2);
+      color: var(--text-secondary);
+      margin-bottom: var(--space-sm);
+      line-height: 1.5;
+    }
+
+    .result-card__change-icon {
+      color: var(--status-green);
+      flex-shrink: 0;
+    }
+
+    .result-card__change-highlight {
+      color: var(--status-green);
+      font-weight: var(--font-weight-semibold);
+    }
+
+    .result-timeline-preview {
+      margin-top: var(--space-base);
+    }
+
+    .result-timeline-preview__title {
+      font-size: var(--font-caption);
+      font-weight: var(--font-weight-semibold);
+      color: var(--text-secondary);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: var(--space-sm);
+    }
+
+    .result-place-item {
+      display: flex;
+      align-items: center;
+      gap: var(--space-md);
+      padding: var(--space-md);
+      background-color: var(--bg-card);
+      border-radius: var(--radius-sm);
+      margin-bottom: var(--space-xs);
+    }
+
+    .result-place-item--highlight {
+      border: 1px solid rgba(52, 199, 89, 0.3);
+      background-color: rgba(52, 199, 89, 0.05);
+    }
+
+    .result-place-item__time {
+      font-size: var(--font-caption);
+      color: var(--text-secondary);
+      min-width: 44px;
+    }
+
+    .result-place-item__name {
+      font-size: var(--font-body2);
+      font-weight: var(--font-weight-semibold);
+      flex: 1;
+    }
+  </style>
+</head>
+<body>
+  <div class="page-container">
+    <app-top-nav back title="일정표" back-action="navigateTo('01-일정표.html')"></app-top-nav>
+
+    <main class="page-content page-content--no-tab result-content" role="main">
+      <div class="result-card" role="region" aria-label="일정 변경 결과">
+        <div class="result-card__badge">
+          <span class="badge badge--lg badge--green" aria-label="변경 완료">
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><path d="m9 11 3 3L22 4"/></svg>
+          </span>
+        </div>
+
+        <h1 class="result-card__title">일정이 변경되었습니다</h1>
+
+        <div class="result-card__flow">
+          <div class="result-card__place result-card__place--old" id="oldPlace">이치란 라멘 시부야</div>
+          <span class="result-card__arrow" aria-hidden="true">
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14"/><path d="m19 12-7 7-7-7"/></svg>
+          </span>
+          <div class="result-card__place result-card__place--new" id="newPlace">아후리 라멘 시부야</div>
+        </div>
+
+        <div class="result-card__changes">
+          <div class="result-card__change-item">
+            <span class="result-card__change-icon" aria-hidden="true">
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><path d="m9 11 3 3L22 4"/></svg>
+            </span>
+            <span>이동시간: 도보 15분 <span class="result-card__change-highlight">→ 도보 5분</span></span>
+          </div>
+          <div class="result-card__change-item">
+            <span class="result-card__change-icon" aria-hidden="true">
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><path d="m9 11 3 3L22 4"/></svg>
+            </span>
+            <span>후속 일정 이동시간 재계산 완료</span>
+          </div>
+        </div>
+
+        <button class="btn btn--primary" onclick="navigateTo('01-일정표.html')">확인</button>
+      </div>
+
+      <!-- Updated timeline preview -->
+      <div class="result-timeline-preview">
+        <p class="result-timeline-preview__title">업데이트된 일정</p>
+
+        <div class="result-place-item">
+          <span class="result-place-item__time">09:00</span>
+          <span class="badge badge--sm badge--green" aria-hidden="true">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><path d="m9 11 3 3L22 4"/></svg>
+          </span>
+          <span class="result-place-item__name">메이지진구</span>
+        </div>
+
+        <div class="result-place-item result-place-item--highlight">
+          <span class="result-place-item__time">12:00</span>
+          <span class="badge badge--sm badge--green" aria-hidden="true">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><path d="m9 11 3 3L22 4"/></svg>
+          </span>
+          <span class="result-place-item__name" style="color: var(--status-green)" id="newPlaceTimeline">아후리 라멘 시부야</span>
+        </div>
+
+        <div class="result-place-item">
+          <span class="result-place-item__time">14:30</span>
+          <span class="badge badge--sm badge--red" aria-hidden="true">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="m15 9-6 6"/><path d="m9 9 6 6"/></svg>
+          </span>
+          <span class="result-place-item__name">시부야 스카이</span>
+        </div>
+
+        <div class="result-place-item">
+          <span class="result-place-item__time">17:00</span>
+          <span class="badge badge--sm badge--gray" aria-hidden="true">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><path d="M12 17h.01"/></svg>
+          </span>
+          <span class="result-place-item__name">하라주쿠 쇼핑</span>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="common.js"></script>
+  <script>
+    'use strict';
+
+    // Load data from navigation
+    var pageData = getPageData();
+    if (pageData) {
+      if (pageData.originalPlace) {
+        document.getElementById('oldPlace').textContent = pageData.originalPlace;
+      }
+      if (pageData.newPlace) {
+        document.getElementById('newPlace').textContent = pageData.newPlace;
+        document.getElementById('newPlaceTimeline').textContent = pageData.newPlace;
+      }
+      clearPageData();
+    }
+  </script>
+</body>
+</html>

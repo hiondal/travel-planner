@@ -1,0 +1,42 @@
+@startuml
+!theme mono
+title 02-외부 데이터 수집
+
+participant 스케줄러
+participant 데이터수집업무
+participant "(E)Google Places" as google
+participant "(E)날씨 API" as weather
+participant "(E)교통 API" as traffic
+
+note over 스케줄러 : [정책/규칙] 방문 예정 시간\n2시간 전부터 15분 주기 수집
+
+스케줄러 -> 데이터수집업무 : [커맨드] 장소 데이터 수집 요청\n[데이터] 장소 ID, 좌표
+
+데이터수집업무 -> google : [커맨드] 영업 상태 + 혼잡도 조회 요청\n[데이터] Place ID
+google --> 데이터수집업무 : [이벤트] 영업 상태 + 혼잡도 반환됨\n[데이터] 영업중/휴업/임시휴업,\npopular_times(혼잡도 레벨, 대기시간)
+
+note right : [정책/규칙 C10 반영]\nGoogle Places API의\npopular_times 필드로 혼잡도 수집\n(독립 API가 아닌 Places API 내 필드)
+
+데이터수집업무 -> weather : [커맨드] 날씨 정보 조회 요청\n[데이터] 좌표, 시간대
+weather --> 데이터수집업무 : [이벤트] 날씨 정보 반환됨\n[데이터] 기온, 강수확률, 날씨 상태
+
+데이터수집업무 -> traffic : [커맨드] 이동시간 조회 요청\n[데이터] 출발지 좌표, 도착지 좌표
+traffic --> 데이터수집업무 : [이벤트] 이동시간 반환됨\n[데이터] 예상 이동시간, 이동수단별 시간
+
+note right : [정책/규칙] API 실패 시 최근 캐시 사용\n3회 연속 실패 시 회색(미확인) 상태
+
+== 부분 실패(Partial Failure) 처리 ==
+
+note right : [정책/규칙 P20] 부분 실패 Fallback 정책\n- 각 API 독립적으로 성공/실패 판정\n- 실패 항목만 개별 캐시 fallback 적용\n- 성공 항목은 정상 반영
+
+alt 모든 API 성공
+  데이터수집업무 -> 데이터수집업무 : [이벤트] 수집 데이터 저장됨\n[데이터] 장소 ID, 수집 시각, 각 항목 값
+else 일부 API 실패 (Partial Failure)
+  데이터수집업무 -> 데이터수집업무 : [이벤트] 부분 수집 데이터 저장됨\n[데이터] 성공 항목: 실시간 값,\n실패 항목: 최근 캐시 값 + is_cached=true
+  note right : 실패 항목에 데이터 품질 메타데이터 첨부\n- is_cached: true\n- data_age_seconds: 캐시 경과 시간\n- source_status: FALLBACK
+else 전체 API 실패
+  데이터수집업무 -> 데이터수집업무 : [이벤트] 수집 실패 기록됨\n[데이터] 장소 ID, 실패 시각, 연속 실패 횟수
+  note right : 3회 연속 전체 실패 시\n해당 장소 회색(미확인) 상태 전환
+end
+
+@enduml

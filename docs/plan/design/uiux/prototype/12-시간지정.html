@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>시간 지정 - travel-planner</title>
+  <link rel="stylesheet" href="common.css">
+  <style>
+    .selected-place {
+      background-color: var(--bg-card);
+      border-radius: var(--radius-md);
+      padding: var(--space-base);
+      margin-bottom: var(--space-xl);
+    }
+
+    .selected-place__name {
+      font-size: var(--font-h3);
+      font-weight: var(--font-weight-semibold);
+      margin-bottom: var(--space-xs);
+    }
+
+    .selected-place__hours {
+      font-size: var(--font-body2);
+      color: var(--text-secondary);
+      margin-bottom: var(--space-xs);
+    }
+
+    .selected-place__meta {
+      display: flex;
+      align-items: center;
+      gap: var(--space-sm);
+      font-size: var(--font-caption);
+      color: var(--text-secondary);
+    }
+
+    .selected-place__rating {
+      display: flex;
+      align-items: center;
+      gap: 2px;
+      color: var(--accent-amber);
+    }
+
+    .time-form {
+      margin-bottom: var(--space-xl);
+    }
+
+    .time-form__label {
+      font-size: var(--font-body2);
+      font-weight: var(--font-weight-semibold);
+      color: var(--text-primary);
+      margin-bottom: var(--space-sm);
+      display: block;
+    }
+
+    .time-form__hint {
+      font-size: var(--font-caption);
+      color: var(--text-secondary);
+      margin-bottom: var(--space-base);
+    }
+
+    .time-input-row {
+      display: flex;
+      gap: var(--space-md);
+      align-items: center;
+    }
+
+    .time-input-row .input-field {
+      flex: 1;
+    }
+
+    .time-separator {
+      font-size: var(--font-h2);
+      color: var(--text-secondary);
+    }
+
+    .warning-container {
+      margin-bottom: var(--space-xl);
+    }
+
+    .form-actions {
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      padding: var(--space-base);
+      padding-bottom: calc(var(--space-base) + var(--safe-area-bottom));
+      background-color: var(--bg-primary);
+      border-top: 1px solid #1A1A1A;
+    }
+
+    .page-content--form {
+      padding-bottom: calc(52px + var(--space-base) * 2 + var(--safe-area-bottom));
+    }
+  </style>
+</head>
+<body>
+  <div class="page-container">
+    <app-top-nav back title="장소 추가"></app-top-nav>
+
+    <main class="page-content page-content--no-tab page-content--form screen-padding" role="main">
+      <div class="mt-base">
+        <h2 class="text-caption text-secondary mb-sm">선택된 장소</h2>
+
+        <div class="selected-place" role="region" aria-label="선택된 장소 정보">
+          <p class="selected-place__name" id="placeName">이치란 라멘 시부야</p>
+          <p class="selected-place__hours" id="placeHours">영업시간: 11:00 ~ 22:00</p>
+          <div class="selected-place__meta">
+            <span id="placeCategory">라멘</span>
+            <span>|</span>
+            <span class="selected-place__rating" id="placeRating">
+              4.2
+              <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="1"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+            </span>
+          </div>
+        </div>
+
+        <div class="time-form">
+          <label class="time-form__label">방문 일시 (현지 시간)</label>
+
+          <div class="mb-base">
+            <label class="sr-only" for="visitDate">방문 날짜</label>
+            <input type="date" class="input-field" id="visitDate" onchange="checkTime()" aria-label="방문 날짜">
+            <p class="text-caption text-secondary mt-xs" id="visitDateLabel"></p>
+          </div>
+
+          <div>
+            <label class="sr-only" for="visitTime">방문 시간</label>
+            <input type="time" class="input-field" id="visitTime" value="12:00" step="1800" onchange="checkTime()" aria-label="방문 시간">
+          </div>
+        </div>
+
+        <div class="warning-container" id="warningContainer" style="display:none">
+          <div class="warning-card" role="alert">
+            <span class="warning-card__icon" aria-hidden="true">
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" x2="12" y1="8" y2="12"/><line x1="12" x2="12.01" y1="16" y2="16"/></svg>
+            </span>
+            <div>
+              <p class="warning-card__text">영업시간 외입니다</p>
+              <p class="warning-card__sub" id="warningHours">영업시간: 11:00 ~ 22:00</p>
+              <p class="warning-card__sub">(영업시간 외에도 추가 가능)</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </main>
+
+    <div class="form-actions">
+      <button class="btn btn--primary" id="addBtn" onclick="addToSchedule()">일정에 추가</button>
+    </div>
+  </div>
+
+  <script src="common.js"></script>
+  <script>
+    'use strict';
+
+    var trip = SAMPLE_DATA.trip;
+    var businessStart = 11;
+    var businessEnd = 22;
+
+    // Set date range
+    var dateInput = document.getElementById('visitDate');
+    dateInput.min = trip.startDate;
+    dateInput.max = trip.endDate;
+    dateInput.value = '2026-03-16';
+
+    // Load place data from navigation
+    var pageData = getPageData();
+    if (pageData && pageData.placeName) {
+      document.getElementById('placeName').textContent = pageData.placeName;
+      // Find matching place in search results for details
+      var matchedResult = SAMPLE_DATA.searchResults.find(function(r) {
+        return r.name === pageData.placeName;
+      });
+      if (matchedResult) {
+        document.getElementById('placeCategory').textContent = matchedResult.category;
+        document.getElementById('placeRating').innerHTML = matchedResult.rating +
+          ' <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="1"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>';
+      }
+      clearPageData();
+    }
+
+    updateDateLabel();
+
+    function updateDateLabel() {
+      var val = document.getElementById('visitDate').value;
+      if (val) {
+        document.getElementById('visitDateLabel').textContent = formatDate(val);
+      }
+    }
+
+    function checkTime() {
+      updateDateLabel();
+      var time = document.getElementById('visitTime').value;
+      if (!time) return;
+
+      var hour = parseInt(time.split(':')[0], 10);
+      var outsideHours = hour < businessStart || hour >= businessEnd;
+      document.getElementById('warningContainer').style.display = outsideHours ? '' : 'none';
+    }
+
+    function addToSchedule() {
+      var placeName = document.getElementById('placeName').textContent;
+      var date = document.getElementById('visitDate').value;
+      var time = document.getElementById('visitTime').value;
+
+      showToast('"' + placeName + '" 일정에 추가되었습니다.');
+      setTimeout(function() {
+        navigateTo('01-일정표.html');
+      }, 800);
+    }
+
+    checkTime();
+  </script>
+</body>
+</html>

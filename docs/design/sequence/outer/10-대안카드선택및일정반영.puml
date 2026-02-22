@@ -1,0 +1,147 @@
+@startuml 대안카드선택및일정반영
+!theme mono
+
+title 대안 카드 선택 및 일정 반영 - 외부 시퀀스 다이어그램\n(UFR-ALTN-030, 040, UFR-SCHD-040)
+
+actor "여행자" as user
+participant "프론트엔드\n(React Native)" as fe
+participant "API Gateway" as gw
+participant "ALTN 서비스\n(대안)" as altn
+participant "SCHD 서비스\n(일정)" as schd
+participant "MNTR 서비스\n(모니터링)" as mntr
+participant "PLCE 서비스\n(장소)" as plce
+database "Redis Cache" as cache
+queue "Event Bus" as bus
+participant "Google Directions API" as gdir
+
+== 시나리오 1: 대안 카드 선택 ==
+user -> fe: 대안 카드 탭\n(3개 카드 중 1개 선택)
+activate fe
+
+fe -> gw: POST /alternatives/{cardId}/adopt\n?scheduleId={scheduleId}\n(Authorization: Bearer {token})
+activate gw
+
+gw -> altn: POST /alternatives/{cardId}/adopt\n(대안 ID, 스케줄 ID)
+activate altn
+
+== AlternativeAdopted 이벤트 발행 ==
+altn -> bus: publish AlternativeAdopted\n{userId, scheduleId, original_placeId,\n alternative_placeId, adopted_at}
+activate bus
+
+== SCHD가 이벤트 구독 - 일정 교체 처리 ==
+bus -> schd: AlternativeAdopted 이벤트 구독
+deactivate bus
+activate schd
+
+schd -> schd: 기존 장소를 대안 장소로 교체\n(원래 placeId -> 대안 placeId)
+
+schd -> cache: GET schedule:{scheduleId}
+activate cache
+cache -> schd: {places: [..., {id, name, ...}, ...]}
+deactivate cache
+
+schd -> schd: 교체된 장소 이전/이후\n2개 구간 식별\n(이전 위치->교체 위치,\n 교체 위치->이후 위치)
+
+== 후속 이동시간 재계산 ==
+schd -> plce: POST /directions/calculate\n{origin: {lat, lng},\n  destination: {lat, lng},\n  departure_time}
+activate plce
+
+plce -> gdir: directions()\n(origin, destination, departure_time)
+activate gdir
+gdir -> plce: {distance, duration,\n traffic_conditions}
+deactivate gdir
+
+alt Google Directions API 호출 성공
+    plce -> schd: {duration_prev: XXmin,\n duration_next: XXmin,\n distance: XXkm}
+else API 호출 실패
+    plce -> schd: {duration_prev: estimated_XXmin,\n duration_next: estimated_XXmin}\n(직선거리 기반 추정값)
+end
+
+deactivate plce
+
+schd -> cache: SET schedule:{scheduleId}\n{places: [...with updated durations...]}\n(TTL: 5분)
+activate cache
+cache -> schd: OK
+deactivate cache
+
+== MonitoringTargetChanged 이벤트 발행 ==
+schd -> bus: publish MonitoringTargetChanged\n{userId, scheduleId,\n old_placeId, new_placeId,\n scheduled_departure_time}
+activate bus
+
+== MNTR이 이벤트 구독 - 모니터링 변경 ==
+bus -> mntr: MonitoringTargetChanged 이벤트 구독
+deactivate bus
+activate mntr
+
+mntr -> mntr: 기존 장소 모니터링 해제\n(원래 placeId)\n대안 장소 모니터링 등록\n(대안 placeId)
+
+deactivate mntr
+
+== 변경 요약 전송 ==
+schd -> gw: 200 OK\n{status: "success",\n summary: {\n   original_place: "이치란 라멘 시부야",\n   alternative_place: "신라멘 시부야점",\n   duration_change: "-5분",\n   distance_change: "+0.2km"\n }}
+deactivate schd
+deactivate altn
+
+gw -> fe: 200 OK\n{summary: {...}}
+deactivate gw
+
+fe -> user: 변경 요약 화면 표시\n(원래 → 대안, 이동시간 변화)
+activate fe
+
+note right of fe
+**변경 요약 예시**
+이치란 라멘 시부야\n    ↓\n신라멘 시부야점\n\n이동시간: 15분 → 10분 (-5분)
+거리: 1.2km → 1.4km (+0.2km)
+end note
+
+deactivate fe
+
+== 분석 이벤트 기록 ==
+fe -> gw: POST /analytics/events\n{event_type: "alternative_adopted",\n  scheduleId, cardIndex: 1,\n  elapsed_time_sec: 45}\n(대안 검색 시작 -> 채택까지)
+activate gw
+deactivate gw
+
+== 시나리오 2: 대안 미선택 (닫기/뒤로가기) ==
+user -> fe: 닫기 버튼 탭\n또는 뒤로가기
+activate fe
+
+fe -> gw: POST /alternatives/dismiss\n?scheduleId={scheduleId}
+activate gw
+
+gw -> altn: POST /alternatives/dismiss\n(스케줄 ID, 미선택 사유)
+activate altn
+
+altn -> altn: 미채택 기록 저장\n(제시된 카드 수, 사유)\n분석용 데이터 수집
+
+== 분석 이벤트 - 미선택 ==
+altn -> gw: 200 OK\n{status: "dismissed"}
+deactivate altn
+
+gw -> fe: 200 OK
+deactivate gw
+
+fe -> user: "기존 일정 유지됨" 메시지 표시\n(변경 없음)
+
+== 일정 유지 확인 ==
+fe -> gw: GET /schedules/{scheduleId}
+activate gw
+
+gw -> cache: GET schedule:{scheduleId}
+activate cache
+cache -> gw: {places: [original places - unchanged]}
+deactivate cache
+
+gw -> fe: 200 OK\n{schedule: {...original...}}
+deactivate gw
+
+fe -> user: 기존 일정 그대로 표시
+deactivate fe
+
+note right of user
+**대안 미선택 영향**
+- 기존 일정은 전혀 변경되지 않음
+- 모니터링은 계속 유지
+- 미채택 데이터는 추천 품질 개선에 활용
+end note
+
+@enduml

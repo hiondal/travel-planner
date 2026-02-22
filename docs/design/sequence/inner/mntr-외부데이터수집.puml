@@ -1,0 +1,220 @@
+@startuml
+!theme mono
+
+title MNTR 서비스: 15분 주기 외부 데이터 수집 (UFR-MNTR-010)
+
+participant "MonitoringScheduler" as sch
+participant "MonitoringController" as ctrl
+participant "MonitoringService" as svc
+participant "DataCollectorService" as collector
+participant "MonitoringRepository" as repo
+database "DB" as db
+database "Redis Cache" as cache
+participant "PLCE 서비스(E)" as plce
+participant "OpenWeatherMap API(E)" as owm
+participant "Google Directions API(E)" as gdir
+queue "Job Execution Log" as joblog
+
+== 15분 주기 스케줄러 트리거 ==
+sch -> ctrl: POST /monitoring/collect\n(방문 예정 장소 배치)
+activate ctrl
+
+ctrl -> svc: 데이터 수집 요청
+activate svc
+
+== 수집 작업 등록 ==
+svc -> repo: 수집 작업 등록\n(INSERT job_execution_log)
+activate repo
+
+repo -> db: INSERT\nstatus=PENDING,\nstarted_at,\nmonitoring_targets=[...]
+activate db
+db --> repo: 작업 ID 반환
+deactivate db
+deactivate repo
+
+== 병렬 외부 API 호출 (Circuit Breaker + Retry 적용) ==
+par 혼잡도 & 영업상태 수집
+    collector -> plce: GET /places/{placeId}/details(E)\n(fields: popular_times,\nopening_hours)
+    activate plce
+
+    alt API 성공
+        plce --> collector: 200 OK\n{current_popularity, opening_hours,\nname, rating}
+        deactivate plce
+
+        collector -> collector: 응답 처리\n- current_popularity 추출\n- opening_hours 파싱
+        collector -> collector: 상태 판정 준비\n(혼잡도, 영업 여부)
+
+    else API 실패 (Circuit Breaker)
+        plce --> collector: 503 Service Unavailable
+        deactivate plce
+
+        collector -> collector: 재시도 (3회)\n지수 백오프 적용
+
+        alt 재시도 성공
+            collector -> collector: 데이터 저장
+        else 재시도 실패 & Circuit Breaker OPEN
+            collector -> cache: 캐시에서 이전 데이터 조회\n(key=monitoring_status:{placeId})
+            activate cache
+            cache --> collector: 캐시 데이터 반환\n(최대 30분 전)
+            deactivate cache
+
+            collector -> collector: is_cached=true,\ndata_age_seconds,\nsource_status=FALLBACK\n메타데이터 첨부
+        end
+    end
+
+else 날씨 정보 수집
+    collector -> owm: GET /weather(E)\n(lat, lng, appid,\nunits=metric)
+    activate owm
+
+    alt API 성공
+        owm --> collector: 200 OK\n{temp, humidity, clouds,\nrain, wind_speed}
+        deactivate owm
+
+        collector -> collector: 응답 처리\n- 강수확률 추출\n- 온도, 습도 파싱
+
+    else API 실패 (Circuit Breaker)
+        owm --> collector: 503 Service Unavailable
+        deactivate owm
+
+        collector -> collector: 재시도 (3회)
+
+        alt 재시도 성공
+            collector -> collector: 데이터 저장
+        else 재시도 실패 & Circuit Breaker OPEN
+            collector -> cache: 캐시에서 이전 데이터 조회\n(key=weather:{lat}:{lng})
+            activate cache
+            cache --> collector: 캐시 데이터 반환\n(최대 30분 전)
+            deactivate cache
+
+            collector -> collector: 폴백 메타데이터 첨부
+        end
+    end
+
+else 교통 정보 & 이동시간 수집
+    collector -> gdir: POST /directions(E)\n(origin, destination,\nmode=walking, departure_time)
+    activate gdir
+
+    alt API 성공
+        gdir --> collector: 200 OK\n{duration_seconds, distance_meters,\nroutes[]}
+        deactivate gdir
+
+        collector -> collector: 응답 처리\n- 이동시간 추출 (초 -> 분)\n- 거리 추출 (m -> km)
+
+    else API 실패 (Circuit Breaker)
+        gdir --> collector: 503 Service Unavailable
+        deactivate gdir
+
+        collector -> collector: 재시도 (3회)
+
+        alt 재시도 성공
+            collector -> collector: 데이터 저장
+        else 재시도 실패 & Circuit Breaker OPEN
+            collector -> cache: 캐시에서 이전 데이터 조회\n(key=directions:{origin}:{destination})
+            activate cache
+            cache --> collector: 캐시 데이터 반환
+            deactivate cache
+
+            collector -> collector: 폴백 메타데이터 첨부
+        end
+    end
+end
+
+== 수집 데이터 캐시 저장 ==
+collector -> cache: SET monitoring_status\n{place_id, 수집데이터,\ncollected_at, metadata}\n(TTL=5분)
+activate cache
+cache --> collector: 저장 완료
+deactivate cache
+
+== 상태 배지 판정 (UFR-MNTR-020) ==
+svc -> svc: 상태 판정 로직 실행\n영업상태(영업중/휴업) +\n날씨(강수확률) +\n혼잡도(popular_times) +\n이동시간(기준 대비 배수)\n→ 초록/노랑/빨강/회색 판정
+
+svc -> svc: 판정 임계값 적용\n- 강수확률: 40%(주의), 70%(위험)\n- 혼잡도: 60%(주의), 80%(위험)\n- 이동시간: 1.5배(주의), 2배(위험)
+
+alt 상태 판정 성공
+    svc -> cache: SET status_badge\n{place_id, status_color,\nicon, reason, confidence_score=null}\n(TTL=5분)
+    activate cache
+    cache --> svc: 저장 완료
+    deactivate cache
+
+    svc -> repo: INSERT status_history\n(place_id, status_color,\njudgment_reason,\ncreated_at)
+    activate repo
+    repo -> db: INSERT\nstatus_history\n레코드 저장\n(6개월 이상 보존)
+    activate db
+    db --> repo: 저장 완료
+    deactivate db
+    deactivate repo
+
+else 데이터 부족 (3회 연속 실패)
+    svc -> svc: 상태 = 회색(미확인)\nstatus_color=GRAY
+
+    svc -> cache: SET status_badge\n{place_id, status_color=GRAY}\n(TTL=5분)
+    activate cache
+    cache --> svc: 저장 완료
+    deactivate cache
+
+    svc -> repo: INSERT status_history\n(place_id, status_color=GRAY,\nconsecutive_failures=3)
+    activate repo
+    repo -> db: INSERT\nstatus_history
+    activate db
+    db --> repo: 저장 완료
+    deactivate db
+    deactivate repo
+end
+
+== 상태 배지 업데이트 이벤트 발행 ==
+svc -> svc: StatusBadgeUpdated 이벤트 생성\n{place_id, place_name,\nstatus_color, timestamp,\njudgment_reason}
+
+svc -> svc: 이벤트 발행\n(Spring @TransactionalEventListener\nphase=AFTER_COMMIT)
+
+== 작업 완료 기록 ==
+svc -> repo: 수집 작업 상태 업데이트\n(UPDATE job_execution_log)
+activate repo
+
+repo -> db: UPDATE\nstatus=COMPLETED,\ncompleted_at,\ncollected_count=N
+activate db
+db --> repo: 작업 완료 확인
+deactivate db
+deactivate repo
+
+svc --> ctrl: 200 OK\n(수집 완료)
+deactivate svc
+
+ctrl --> sch: 응답
+deactivate ctrl
+
+note right of collector
+병렬 호출 특성:
+- 3개 API 동시 호출
+- 전체 타임아웃: 2초
+- 개별 타임아웃: 1.5초
+- 부분 실패 허용
+- is_cached=true 메타데이터로
+  캐시 데이터 추적
+end note
+
+note right of svc
+상태 판정 로직:
+초록: 모두 정상
+노랑: 1개 이상 주의
+빨강: 1개 이상 위험
+회색: 데이터 미확인(3연续 실패)
+
+임계값:
+- 강수확률: 40%, 70%
+- 혼잡도: 60%, 80%
+- 이동시간: 1.5배, 2배
+end note
+
+note right of repo
+상태 이력 저장:
+- status_history 테이블
+- 6개월 이상 보존
+- 덮어쓰기 금지
+- AI 학습 데이터셋 구성
+
+이벤트 발행:
+- StatusBadgeUpdated
+- BRIF, ALTN, SCHD 구독
+end note
+
+@enduml

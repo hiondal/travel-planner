@@ -1,0 +1,165 @@
+@startuml 대안장소검색
+!theme mono
+
+title 대안 장소 검색 - 외부 시퀀스 다이어그램\n(UFR-ALTN-010, 020, 050)
+
+actor "여행자" as user
+participant "프론트엔드\n(React Native)" as fe
+participant "API Gateway" as gw
+participant "AUTH 서비스" as auth
+participant "ALTN 서비스\n(대안)" as altn
+participant "PLCE 서비스\n(장소)" as plce
+participant "MNTR 서비스\n(모니터링)" as mntr
+database "Redis Cache" as cache
+participant "Google Places API" as gplaces
+
+== 대안 보기 탭 ==
+user -> fe: "대안 보기" 탭\n(브리핑 상세 또는 배지 상세에서)
+activate fe
+
+fe -> gw: POST /alternatives/search\n?lat={lat}&lng={lng}&scheduleId={scheduleId}\n(Authorization: Bearer {token})
+activate gw
+
+== Free 티어 Paywall 분기 ==
+gw -> auth: GET /auth/subscription\n(토큰 클레임 검증)
+activate auth
+auth -> gw: {tier: "Free" | "Trip Pass" | "Pro"}
+deactivate auth
+
+alt Free 티어 사용자
+    gw -> fe: 402 Payment Required\n{paywall: {title, price, benefits}}
+    activate fe
+    fe -> user: Paywall 화면 표시\n(Trip Pass/Pro 업그레이드 안내)
+    deactivate fe
+else Trip Pass 또는 Pro 사용자
+
+    gw -> altn: POST /alternatives/search\n?lat={lat}&lng={lng}&scheduleId={scheduleId}\n(스케줄 ID 포함)
+    activate altn
+
+    == 주변 장소 검색 (반경 1km) ==
+    altn -> plce: GET /places/search\n?lat={lat}&lng={lng}&radius=1000\n&category={original_category}&opening_now=true
+    activate plce
+
+    plce -> cache: GET places:1km:{lat}:{lng}:{category}
+    activate cache
+
+    alt 캐시 HIT
+        cache -> plce: [place1, place2, ..., placeN]
+        deactivate cache
+        plce -> altn: [place candidates from cache]
+    else 캐시 MISS
+        deactivate cache
+        plce -> gplaces: nearbySearch\n(location, radius=1000m, type, openNow)
+        activate gplaces
+        gplaces -> plce: {results: [place1, place2, ...]}\n(장소명, 좌표, 평점, 영업시간)
+        deactivate gplaces
+
+        plce -> cache: SET places:1km:{lat}:{lng}:{category}\n(TTL: 5분)
+        activate cache
+        cache -> plce: OK
+        deactivate cache
+
+        plce -> altn: [place candidates from API]
+    end
+
+    deactivate plce
+
+    == 대안 후보 상태 확인 (모니터링 캐시) ==
+    altn -> mntr: POST /monitoring/status/batch\n?placeIds={place1_id},{place2_id},...
+    activate mntr
+
+    mntr -> cache: GET status:{place1_id}, status:{place2_id}, ...
+    activate cache
+    cache -> mntr: {place1_id: "green", place2_id: "yellow", ...}
+    deactivate cache
+
+    mntr -> altn: {badge_status: {"place1": "green", "place2": "yellow", ...}}
+    deactivate mntr
+
+    == 스코어링 및 정렬 ==
+    altn -> altn: 스코어 계산\n(거리 0.5 + 평점 0.3 + 혼잡도 0.2)\n상태 필터링 적용\n(초록 최우선, 노랑 "주의필요", 회색 "정보미확인", 빨강 제외)
+
+    altn -> altn: Top 3 또는 반경 확장 판단
+
+    alt 반경 1km에서 3개 이상
+        altn -> altn: Top 3 선정 완료
+    else 반경 1km에서 3개 미만
+
+        == 반경 단계적 확장 (폴백) ==
+        altn -> plce: GET /places/search\n?lat={lat}&lng={lng}&radius=2000\n&category={original_category}&opening_now=true\n(1km 결과 유지 + 1km~2km 추가검색)
+        activate plce
+
+        plce -> cache: GET places:2km:{lat}:{lng}:{category}
+        activate cache
+
+        alt 캐시 HIT
+            cache -> plce: [additional candidates]
+            deactivate cache
+        else 캐시 MISS
+            deactivate cache
+            plce -> gplaces: nearbySearch(radius=2000m)
+            activate gplaces
+            gplaces -> plce: {results: [place1, place2, ...]}
+            deactivate gplaces
+
+            plce -> cache: SET places:2km:{lat}:{lng}:{category}\n(TTL: 5분)
+            activate cache
+            cache -> plce: OK
+            deactivate cache
+        end
+
+        plce -> altn: [additional candidates from 1km~2km]
+        deactivate plce
+
+        altn -> mntr: POST /monitoring/status/batch\n?placeIds={new_candidates}
+        activate mntr
+
+        mntr -> cache: GET status:{...}
+        activate cache
+        cache -> mntr: {badge status}
+        deactivate cache
+
+        mntr -> altn: {badge_status}
+        deactivate mntr
+
+        altn -> altn: 누적 결과에서\n스코어링 및 Top 3 선정\n(최대 반경 3km)
+    end
+
+    == 대안 카드 생성 및 반환 ==
+    altn -> altn: 구독 티어별 카드 수 제한\n(Trip Pass: 3개, Pro: 5개)
+
+    altn -> gw: 200 OK\n{alternatives: [\n  {id, name, distance, rating,\n   congestion, reason, radius_used},\n  ...\n]}\n(정상: 3초 이내, 최대: 5초)
+    deactivate altn
+
+    gw -> fe: 200 OK\n{alternatives: [...]}
+    deactivate gw
+
+    fe -> user: 대안 카드 3장 표시\n(장소명, 거리, 평점, 혼잡도, 추천이유)
+end
+
+deactivate fe
+deactivate user
+
+note right of altn
+**스코어링 알고리즘**
+score = w1*distance_score\n      + w2*rating_score\n      + w3*congestion_score
+MVP 가중치:
+- w1 = 0.5 (거리 우선)
+- w2 = 0.3 (평점)
+- w3 = 0.2 (혼잡도)
+
+상태 필터링:
+- 초록: 최우선 포함
+- 노랑: "주의필요" 레이블
+- 회색: "정보미확인" 레이블
+- 빨강: 제외
+end note
+
+note right of altn
+**반경 확장 폴백**
+1km → 2km → 3km
+누적 검색으로 중복 최소화
+타임아웃: 정상 3초, 최대 5초
+end note
+
+@enduml

@@ -1,0 +1,106 @@
+<svg width="700" height="580" xmlns="http://www.w3.org/2000/svg">
+  <!-- Background -->
+  <rect width="700" height="580" fill="#f9f9f9"/>
+
+  <!-- Title -->
+  <text x="350" y="30" text-anchor="middle" font-size="16" font-weight="bold" fill="#333">솔루션 우선순위 매트릭스 (9명 투표 결과)</text>
+
+  <!-- Quadrant backgrounds -->
+  <rect x="120" y="50" width="250" height="185" fill="#ffcccc" opacity="0.3"/>
+  <rect x="370" y="50" width="250" height="185" fill="#ccffcc" opacity="0.3"/>
+  <rect x="120" y="235" width="250" height="185" fill="#ffffcc" opacity="0.3"/>
+  <rect x="370" y="235" width="250" height="185" fill="#cce5ff" opacity="0.3"/>
+
+  <!-- Axes -->
+  <line x1="120" y1="420" x2="620" y2="420" stroke="#333" stroke-width="2"/>
+  <line x1="120" y1="420" x2="120" y2="50" stroke="#333" stroke-width="2"/>
+  <!-- Arrow heads -->
+  <polygon points="620,420 610,415 610,425" fill="#333"/>
+  <polygon points="120,50 115,60 125,60" fill="#333"/>
+
+  <!-- Axis labels -->
+  <text x="370" y="450" text-anchor="middle" font-size="14" font-weight="bold" fill="#333">실현 가능성 (F표)</text>
+  <text x="55" y="240" text-anchor="middle" font-size="14" font-weight="bold" fill="#333" transform="rotate(-90, 55, 240)">비즈니스 영향도 (B표)</text>
+
+  <!-- Axis scale labels -->
+  <text x="130" y="438" font-size="10" fill="#666">0</text>
+  <text x="370" y="438" font-size="10" fill="#666">7</text>
+  <text x="610" y="438" font-size="10" fill="#666">14</text>
+  <text x="105" y="420" font-size="10" fill="#666" text-anchor="end">0</text>
+  <text x="105" y="235" font-size="10" fill="#666" text-anchor="end">7</text>
+  <text x="105" y="55" font-size="10" fill="#666" text-anchor="end">14</text>
+
+  <!-- Quadrant divider lines (dashed) -->
+  <line x1="370" y1="50" x2="370" y2="420" stroke="#999" stroke-width="1" stroke-dasharray="5,5"/>
+  <line x1="120" y1="235" x2="620" y2="235" stroke="#999" stroke-width="1" stroke-dasharray="5,5"/>
+
+  <!-- Quadrant labels -->
+  <text x="245" y="75" text-anchor="middle" font-size="13" font-weight="bold" fill="#cc3333">Bit Bets</text>
+  <text x="245" y="92" text-anchor="middle" font-size="10" fill="#cc3333">(전략적 투자)</text>
+  <text x="495" y="75" text-anchor="middle" font-size="13" font-weight="bold" fill="#339933">No Brainers</text>
+  <text x="495" y="92" text-anchor="middle" font-size="10" fill="#339933">(즉시 실행)</text>
+  <text x="245" y="260" text-anchor="middle" font-size="13" font-weight="bold" fill="#999933">Unwise</text>
+  <text x="245" y="277" text-anchor="middle" font-size="10" fill="#999933">(보류/폐기)</text>
+  <text x="495" y="260" text-anchor="middle" font-size="13" font-weight="bold" fill="#336699">Utilities</text>
+  <text x="495" y="277" text-anchor="middle" font-size="10" fill="#336699">(리소스 여유 시)</text>
+
+  <!-- S01: B=14, F=0 → Bit Bets (top-left) -->
+  <circle cx="145" cy="68" r="18" fill="#e63946" opacity="0.85"/>
+  <text x="145" y="73" text-anchor="middle" font-size="11" font-weight="bold" fill="white">S01</text>
+  <text x="170" y="68" font-size="9" fill="#333">B:14 F:0</text>
+
+  <!-- S04: B=7, F=14 → No Brainers (top-right) -->
+  <circle cx="580" cy="210" r="22" fill="#2a9d8f" opacity="0.9" stroke="#1a7a6f" stroke-width="2"/>
+  <text x="580" y="215" text-anchor="middle" font-size="12" font-weight="bold" fill="white">S04</text>
+  <text x="548" y="200" font-size="9" fill="#333">B:7 F:14</text>
+  <!-- Star marker for No Brainer -->
+  <text x="600" y="195" font-size="14" fill="#FFD700">&#9733;</text>
+
+  <!-- S06: B=3, F=5 → Utilities (center) -->
+  <circle cx="410" cy="340" r="15" fill="#457b9d" opacity="0.85"/>
+  <text x="410" y="345" text-anchor="middle" font-size="11" font-weight="bold" fill="white">S06</text>
+  <text x="432" y="340" font-size="9" fill="#333">B:3 F:5</text>
+
+  <!-- S05: B=0, F=6 → Utilities (right-bottom) -->
+  <circle cx="440" cy="400" r="15" fill="#457b9d" opacity="0.85"/>
+  <text x="440" y="405" text-anchor="middle" font-size="11" font-weight="bold" fill="white">S05</text>
+  <text x="462" y="400" font-size="9" fill="#333">B:0 F:6</text>
+
+  <!-- S03: B=3, F=0 → Unwise (left-middle) -->
+  <circle cx="140" cy="340" r="12" fill="#aaaaaa" opacity="0.7"/>
+  <text x="140" y="344" text-anchor="middle" font-size="10" font-weight="bold" fill="white">S03</text>
+  <text x="158" y="340" font-size="9" fill="#666">B:3 F:0</text>
+
+  <!-- S12: B=0, F=2 → Unwise (bottom-left) -->
+  <circle cx="195" cy="400" r="10" fill="#aaaaaa" opacity="0.6"/>
+  <text x="195" y="404" text-anchor="middle" font-size="9" font-weight="bold" fill="white">S12</text>
+  <text x="210" y="400" font-size="9" fill="#666">B:0 F:2</text>
+
+  <!-- Remaining 0-vote solutions cluster -->
+  <rect x="130" y="370" width="50" height="20" rx="3" fill="#dddddd" opacity="0.5"/>
+  <text x="155" y="384" text-anchor="middle" font-size="8" fill="#999">S02,S07~S19</text>
+
+  <!-- Connection arrow: S04 → S05 → S06 (MVP flow) -->
+  <line x1="440" y1="385" x2="430" y2="355" stroke="#2a9d8f" stroke-width="1.5" stroke-dasharray="3,3"/>
+  <line x1="420" y1="328" x2="560" y2="225" stroke="#2a9d8f" stroke-width="1.5" stroke-dasharray="3,3"/>
+
+  <!-- MVP Selection Box -->
+  <rect x="365" y="180" width="260" height="245" rx="8" fill="none" stroke="#2a9d8f" stroke-width="2.5" stroke-dasharray="8,4"/>
+  <text x="595" y="175" font-size="10" font-weight="bold" fill="#2a9d8f">MVP 핵심 영역</text>
+
+  <!-- Legend -->
+  <rect x="20" y="460" width="660" height="110" rx="5" fill="white" stroke="#ddd" stroke-width="1"/>
+  <text x="35" y="480" font-size="12" font-weight="bold" fill="#333">범례</text>
+
+  <circle cx="45" cy="498" r="8" fill="#2a9d8f" opacity="0.9" stroke="#1a7a6f" stroke-width="2"/>
+  <text x="60" y="502" font-size="11" fill="#333">S04: 출발 전 브리핑 (B:7 + F:14 = 21표) — No Brainers &#9733;</text>
+
+  <circle cx="45" cy="518" r="8" fill="#e63946" opacity="0.85"/>
+  <text x="60" y="522" font-size="11" fill="#333">S01: 여행 일정 실시간 모니터링 & 사전 알림 (B:14 + F:0 = 14표) — Bit Bets</text>
+
+  <circle cx="45" cy="538" r="8" fill="#457b9d" opacity="0.85"/>
+  <text x="60" y="542" font-size="11" fill="#333">S06: 맥락 맞춤 대안 카드 (B:3 + F:5 = 8표) / S05: 실시간 상태 배지 (B:0 + F:6 = 6표) — Utilities</text>
+
+  <circle cx="45" cy="558" r="8" fill="#aaaaaa" opacity="0.7"/>
+  <text x="60" y="562" font-size="11" fill="#333">S03: AI 자동 재조정 (3표) / S12: 날씨 전환 (2표) / 나머지 13개 (0표) — Unwise/보류</text>
+</svg>
