@@ -1,0 +1,296 @@
+@startuml
+!theme mono
+
+title SCHEDULE 서비스 - 클래스 다이어그램
+
+package "com.travelplanner.schedule" {
+
+    ' ===== Controller Layer =====
+    package "controller" {
+        class SchdController {
+            - tripService: TripService
+            - scheduleItemService: ScheduleItemService
+            + createTrip(request: CreateTripRequest, principal: UserPrincipal): ResponseEntity<TripResponse>
+            + getTrip(tripId: String, principal: UserPrincipal): ResponseEntity<TripResponse>
+            + getSchedule(tripId: String, principal: UserPrincipal): ResponseEntity<ScheduleResponse>
+            + addScheduleItem(tripId: String, request: AddScheduleItemRequest, principal: UserPrincipal): ResponseEntity<?>
+            + deleteScheduleItem(tripId: String, itemId: String, principal: UserPrincipal): ResponseEntity<Void>
+            + replaceScheduleItem(tripId: String, itemId: String, request: ReplaceScheduleItemRequest, principal: UserPrincipal): ResponseEntity<ReplaceScheduleItemResponse>
+            - validateOwnership(tripId: String, userId: String): void
+        }
+    }
+
+    ' ===== Service Layer =====
+    package "service" {
+        interface TripService {
+            + createTrip(userId: String, request: CreateTripRequest): Trip
+            + getTrip(tripId: String, userId: String): Trip
+            + getSchedule(tripId: String, userId: String): ScheduleResult
+        }
+
+        class TripServiceImpl {
+            - tripRepository: TripRepository
+            - consentRepository: ConsentRepository
+            - scheduleItemRepository: ScheduleItemRepository
+            + createTrip(userId: String, request: CreateTripRequest): Trip
+            + getTrip(tripId: String, userId: String): Trip
+            + getSchedule(tripId: String, userId: String): ScheduleResult
+            - checkConsentRequired(userId: String): void
+            - validateDateRange(startDate: LocalDate, endDate: LocalDate): void
+        }
+
+        interface ScheduleItemService {
+            + addScheduleItem(tripId: String, userId: String, request: AddScheduleItemRequest): ScheduleItemAddResult
+            + deleteScheduleItem(tripId: String, itemId: String, userId: String): void
+            + replaceScheduleItem(tripId: String, itemId: String, newPlaceId: String, userId: String): ReplaceResult
+        }
+
+        class ScheduleItemServiceImpl {
+            - scheduleItemRepository: ScheduleItemRepository
+            - tripRepository: TripRepository
+            - placeServiceClient: PlaceServiceClient
+            - eventPublisher: EventPublisher
+            + addScheduleItem(tripId: String, userId: String, request: AddScheduleItemRequest): ScheduleItemAddResult
+            + deleteScheduleItem(tripId: String, itemId: String, userId: String): void
+            + replaceScheduleItem(tripId: String, itemId: String, newPlaceId: String, userId: String): ReplaceResult
+            - checkBusinessHours(businessHours: List<BusinessHour>, visitDatetime: LocalDateTime, timezone: String): boolean
+            - recalculateTravelTime(tripId: String, itemId: String, newPlaceId: String): int
+        }
+
+        TripServiceImpl ..|> TripService
+        ScheduleItemServiceImpl ..|> ScheduleItemService
+    }
+
+    ' ===== Repository Layer =====
+    package "repository" {
+        interface TripRepository {
+            + save(trip: Trip): Trip
+            + findByIdAndUserId(tripId: String, userId: String): Optional<Trip>
+            + findById(tripId: String): Optional<Trip>
+        }
+
+        interface ScheduleItemRepository {
+            + save(item: ScheduleItem): ScheduleItem
+            + findByTripIdOrderByVisitDatetime(tripId: String): List<ScheduleItem>
+            + findByIdAndTripId(itemId: String, tripId: String): Optional<ScheduleItem>
+            + deleteById(itemId: String): void
+            + findSurroundingItems(tripId: String, itemId: String): List<ScheduleItem>
+        }
+
+        interface ConsentRepository {
+            + existsByUserId(userId: String): boolean
+        }
+    }
+
+    ' ===== External Client =====
+    package "client" {
+        class PlaceServiceClient {
+            - baseUrl: String
+            + getPlaceDetail(placeId: String): PlaceDetail
+        }
+
+        class EventPublisher {
+            + publishScheduleItemAdded(event: ScheduleItemAddedEvent): void
+            + publishScheduleItemDeleted(event: ScheduleItemDeletedEvent): void
+            + publishScheduleItemReplaced(event: ScheduleItemReplacedEvent): void
+        }
+
+        class PlaceDetail {
+            - placeId: String
+            - name: String
+            - businessHours: List<BusinessHour>
+            - timezone: String
+        }
+
+        class BusinessHour {
+            - day: String
+            - open: String
+            - close: String
+            + isWithinHours(time: LocalTime): boolean
+        }
+    }
+
+    ' ===== Domain Model =====
+    package "domain" {
+        class Trip {
+            - id: String
+            - userId: String
+            - name: String
+            - startDate: LocalDate
+            - endDate: LocalDate
+            - city: String
+            - status: TripStatus
+            - createdAt: LocalDateTime
+            - updatedAt: LocalDateTime
+            + Trip(userId: String, name: String, startDate: LocalDate, endDate: LocalDate, city: String)
+            + complete(): void
+            + cancel(): void
+            + isActive(): boolean
+            + getDurationDays(): int
+        }
+
+        class ScheduleItem {
+            - id: String
+            - tripId: String
+            - placeId: String
+            - placeName: String
+            - visitDatetime: LocalDateTime
+            - timezone: String
+            - order: int
+            - outsideBusinessHours: boolean
+            - status: String
+            - createdAt: LocalDateTime
+            + ScheduleItem(tripId: String, placeId: String, placeName: String, visitDatetime: LocalDateTime, timezone: String, order: int)
+            + updatePlace(placeId: String, placeName: String): void
+            + markOutsideBusinessHours(): void
+            + isOutsideBusinessHours(): boolean
+        }
+
+        Trip --> TripStatus
+        Trip "1" o-- "0..*" ScheduleItem
+    }
+
+    ' ===== DTO =====
+    package "dto" {
+        package "request" {
+            class CreateTripRequest {
+                - name: String
+                - startDate: LocalDate
+                - endDate: LocalDate
+                - city: String
+                + validate(): void
+            }
+            class AddScheduleItemRequest {
+                - placeId: String
+                - visitDatetime: LocalDateTime
+                - timezone: String
+                - force: boolean
+                + validate(): void
+            }
+            class ReplaceScheduleItemRequest {
+                - newPlaceId: String
+                + validate(): void
+            }
+        }
+
+        package "response" {
+            class TripResponse {
+                - tripId: String
+                - name: String
+                - startDate: LocalDate
+                - endDate: LocalDate
+                - city: String
+                - status: String
+                - scheduleItems: List<ScheduleItemSummary>
+                + {static} from(trip: Trip): TripResponse
+            }
+            class ScheduleResponse {
+                - tripId: String
+                - name: String
+                - city: String
+                - scheduleItems: List<ScheduleItemSummary>
+                + {static} from(trip: Trip, items: List<ScheduleItem>): ScheduleResponse
+            }
+            class ScheduleItemResponse {
+                - scheduleItemId: String
+                - placeId: String
+                - placeName: String
+                - visitDatetime: LocalDateTime
+                - timezone: String
+                - order: int
+                - outsideBusinessHours: boolean
+                + {static} from(item: ScheduleItem): ScheduleItemResponse
+            }
+            class ScheduleItemSummary {
+                - scheduleItemId: String
+                - placeId: String
+                - placeName: String
+                - visitDatetime: LocalDateTime
+                - timezone: String
+                - order: int
+                - outsideBusinessHours: boolean
+            }
+            class ReplaceScheduleItemResponse {
+                - scheduleItemId: String
+                - originalPlace: PlaceRef
+                - newPlace: PlaceRef
+                - travelTimeDiffMinutes: int
+                - updatedScheduleItems: List<ScheduleItemSummary>
+            }
+            class BusinessHoursWarningResponse {
+                - warning: String
+                - message: String
+                - businessHours: String
+            }
+            class PlaceRef {
+                - placeId: String
+                - placeName: String
+            }
+        }
+
+        package "internal" {
+            class ScheduleItemAddResult {
+                - item: ScheduleItem
+                - outsideBusinessHours: boolean
+                - businessHoursRange: String
+            }
+            class ReplaceResult {
+                - item: ScheduleItem
+                - originalPlaceId: String
+                - travelTimeDiffMinutes: int
+                - updatedItems: List<ScheduleItem>
+            }
+            class ScheduleResult {
+                - trip: Trip
+                - items: List<ScheduleItem>
+            }
+            class ScheduleItemAddedEvent {
+                - scheduleItemId: String
+                - placeId: String
+                - visitDatetime: LocalDateTime
+                - tripId: String
+            }
+            class ScheduleItemDeletedEvent {
+                - scheduleItemId: String
+                - placeId: String
+                - tripId: String
+            }
+            class ScheduleItemReplacedEvent {
+                - oldPlaceId: String
+                - newPlaceId: String
+                - scheduleItemId: String
+                - tripId: String
+            }
+        }
+    }
+}
+
+' ===== 관계 =====
+SchdController --> TripService
+SchdController --> ScheduleItemService
+
+TripServiceImpl --> TripRepository
+TripServiceImpl --> ScheduleItemRepository
+TripServiceImpl --> ConsentRepository
+
+ScheduleItemServiceImpl --> ScheduleItemRepository
+ScheduleItemServiceImpl --> TripRepository
+ScheduleItemServiceImpl --> PlaceServiceClient
+ScheduleItemServiceImpl --> EventPublisher
+
+TripRepository ..> Trip
+ScheduleItemRepository ..> ScheduleItem
+
+PlaceServiceClient ..> PlaceDetail
+PlaceDetail "1" o-- "0..*" BusinessHour
+
+TripResponse ..> ScheduleItemSummary
+ScheduleResponse ..> ScheduleItemSummary
+ReplaceScheduleItemResponse ..> ScheduleItemSummary
+ReplaceScheduleItemResponse ..> PlaceRef
+
+EventPublisher ..> ScheduleItemAddedEvent
+EventPublisher ..> ScheduleItemDeletedEvent
+EventPublisher ..> ScheduleItemReplacedEvent
+
+@enduml

@@ -1,0 +1,215 @@
+@startuml
+!theme mono
+
+title PAYMENT 서비스 - 클래스 다이어그램
+
+package "com.travelplanner.payment" {
+
+    ' ===== Controller Layer =====
+    package "controller" {
+        class PayController {
+            - subscriptionService: SubscriptionService
+            + getSubscriptionPlans(principal: UserPrincipal): ResponseEntity<SubscriptionPlansResponse>
+            + purchaseSubscription(request: PurchaseRequest, principal: UserPrincipal): ResponseEntity<PurchaseResponse>
+            + getSubscriptionStatus(principal: UserPrincipal): ResponseEntity<SubscriptionStatusResponse>
+        }
+    }
+
+    ' ===== Service Layer =====
+    package "service" {
+        interface SubscriptionService {
+            + getSubscriptionPlans(): List<SubscriptionPlan>
+            + purchaseSubscription(userId: String, planId: String, receipt: String, provider: String): PurchaseResult
+            + getSubscriptionStatus(userId: String): SubscriptionStatus
+        }
+
+        class SubscriptionServiceImpl {
+            - subscriptionRepository: SubscriptionRepository
+            - iapVerificationClient: IapVerificationClient
+            - authServiceClient: AuthServiceClient
+            + getSubscriptionPlans(): List<SubscriptionPlan>
+            + purchaseSubscription(userId: String, planId: String, receipt: String, provider: String): PurchaseResult
+            + getSubscriptionStatus(userId: String): SubscriptionStatus
+            - resolveNewTier(planId: String): SubscriptionTier
+            - getActivatedFeatures(tier: SubscriptionTier): List<String>
+        }
+
+        SubscriptionServiceImpl ..|> SubscriptionService
+    }
+
+    ' ===== Repository Layer =====
+    package "repository" {
+        interface SubscriptionRepository {
+            + save(subscription: Subscription): Subscription
+            + findByUserId(userId: String): Optional<Subscription>
+            + findByUserIdAndStatus(userId: String, status: String): Optional<Subscription>
+            + savePaymentRecord(record: PaymentRecord): PaymentRecord
+        }
+    }
+
+    ' ===== External Client =====
+    package "client" {
+        class IapVerificationClient {
+            - appleVerifyUrl: String
+            - googleVerifyUrl: String
+            + verify(provider: String, receipt: String, productId: String): VerificationResult
+            + verifyApple(receipt: String, productId: String): VerificationResult
+            + verifyGoogle(receipt: String, productId: String): VerificationResult
+        }
+
+        class AuthServiceClient {
+            - baseUrl: String
+            + invalidateAndReissueToken(userId: String, newTier: String): String
+        }
+    }
+
+    ' ===== Domain Model =====
+    package "domain" {
+        class Subscription {
+            - id: String
+            - userId: String
+            - planId: String
+            - tier: SubscriptionTier
+            - status: SubscriptionStatus
+            - provider: String
+            - transactionId: String
+            - startedAt: LocalDateTime
+            - expiresAt: LocalDateTime
+            - createdAt: LocalDateTime
+            - updatedAt: LocalDateTime
+            + Subscription(userId: String, planId: String, tier: SubscriptionTier, provider: String)
+            + activate(): void
+            + cancel(): void
+            + isActive(): boolean
+            + isCancelling(): boolean
+        }
+
+        class PaymentRecord {
+            - id: String
+            - subscriptionId: String
+            - userId: String
+            - transactionId: String
+            - amount: int
+            - currency: String
+            - provider: String
+            - createdAt: LocalDateTime
+            + PaymentRecord(subscriptionId: String, userId: String, transactionId: String, amount: int, currency: String, provider: String)
+        }
+
+        class SubscriptionPlan {
+            - planId: String
+            - name: String
+            - tier: SubscriptionTier
+            - amount: int
+            - currency: String
+            - period: String
+            - features: List<String>
+            - appleProductId: String
+            - googleProductId: String
+        }
+
+        class VerificationResult {
+            - transactionId: String
+            - productId: String
+            - valid: boolean
+            - failureReason: String
+        }
+
+        enum SubscriptionStatusEnum {
+            ACTIVE
+            CANCELLED
+            CANCELLING
+        }
+
+        Subscription --> SubscriptionTier
+        Subscription --> SubscriptionStatusEnum
+    }
+
+    ' ===== DTO =====
+    package "dto" {
+        package "request" {
+            class PurchaseRequest {
+                - planId: String
+                - receipt: String
+                - provider: String
+                + validate(): void
+            }
+        }
+
+        package "response" {
+            class SubscriptionPlansResponse {
+                - plans: List<SubscriptionPlanDto>
+                + {static} of(plans: List<SubscriptionPlan>): SubscriptionPlansResponse
+            }
+            class SubscriptionPlanDto {
+                - planId: String
+                - name: String
+                - tier: String
+                - price: PriceDto
+                - features: List<String>
+                - appleProductId: String
+                - googleProductId: String
+                + {static} from(plan: SubscriptionPlan): SubscriptionPlanDto
+            }
+            class PurchaseResponse {
+                - subscriptionId: String
+                - tier: String
+                - status: String
+                - startedAt: LocalDateTime
+                - expiresAt: LocalDateTime
+                - newAccessToken: String
+                - activatedFeatures: List<String>
+                + {static} of(result: PurchaseResult): PurchaseResponse
+            }
+            class SubscriptionStatusResponse {
+                - tier: String
+                - status: String
+                - subscriptionId: String
+                - startedAt: LocalDateTime
+                - expiresAt: LocalDateTime
+                + {static} from(status: SubscriptionStatus): SubscriptionStatusResponse
+            }
+            class PriceDto {
+                - amount: int
+                - currency: String
+                - period: String
+            }
+        }
+
+        package "internal" {
+            class PurchaseResult {
+                - subscription: Subscription
+                - newAccessToken: String
+                - activatedFeatures: List<String>
+            }
+            class SubscriptionStatus {
+                - tier: SubscriptionTier
+                - status: SubscriptionStatusEnum
+                - subscriptionId: String
+                - startedAt: LocalDateTime
+                - expiresAt: LocalDateTime
+            }
+        }
+    }
+}
+
+' ===== 관계 =====
+PayController --> SubscriptionService
+
+SubscriptionServiceImpl --> SubscriptionRepository
+SubscriptionServiceImpl --> IapVerificationClient
+SubscriptionServiceImpl --> AuthServiceClient
+
+SubscriptionRepository ..> Subscription
+SubscriptionRepository ..> PaymentRecord
+
+IapVerificationClient ..> VerificationResult
+
+SubscriptionPlansResponse ..> SubscriptionPlanDto
+SubscriptionPlanDto ..> PriceDto
+PurchaseResponse ..> PurchaseResult
+
+SubscriptionStatus --> SubscriptionTier
+SubscriptionStatus --> SubscriptionStatusEnum
+
+@enduml

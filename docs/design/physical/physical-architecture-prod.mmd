@@ -1,0 +1,149 @@
+graph TB
+    Users["Mobile/Web Users<br/>1만~10만 명"] --> AFD
+
+    subgraph AZURE["Azure Cloud - Production Environment"]
+        AFD["Azure Front Door<br/>+ CDN<br/>(Global POP)"]
+        AFD --> AGW
+
+        subgraph VNET["VNet (10.0.0.0/16)"]
+
+            subgraph GW_SUBNET["Gateway Subnet (10.0.4.0/24)"]
+                AGW["Application Gateway<br/>+ WAF v2<br/>Zone Redundant"]
+            end
+
+            subgraph APP_SUBNET["Application Subnet (10.0.1.0/24)"]
+                subgraph AKS["AKS Premium Cluster - Multi-Zone (1.29+)"]
+                    subgraph SYS_POOL["System Node Pool<br/>D2s_v3 x 3 | Zone 1/2/3"]
+                        COREDNS["CoreDNS"]
+                        METRICS["metrics-server"]
+                        ARGO["ArgoCD"]
+                    end
+
+                    subgraph APP_POOL["Application Node Pool<br/>D4s_v3 x 3 | Zone 1/2/3"]
+                        AUTH["AUTH Service<br/>HPA: 2~6 pods<br/>CPU 70%"]
+                        SCHD["SCHD Service<br/>HPA: 2~8 pods<br/>CPU 60%"]
+                        PLCE["PLCE Service<br/>HPA: 2~8 pods<br/>CPU 60%"]
+                        MNTR["MNTR Service<br/>HPA: 2~6 pods<br/>CPU 70%"]
+                        BRIF["BRIF Service<br/>HPA: 2~6 pods<br/>CPU 65%"]
+                        ALTN["ALTN Service<br/>HPA: 2~6 pods<br/>CPU 65%"]
+                        PAY["PAY Service<br/>HPA: 2~4 pods<br/>CPU 50%"]
+                    end
+                end
+            end
+
+            subgraph DB_SUBNET["Database Subnet (10.0.2.0/24)"]
+                PG_PRIMARY["Azure PostgreSQL<br/>Flexible Server<br/>Primary (GP_Standard_D4s_v3)"]
+                PG_REPLICA["Azure PostgreSQL<br/>Flexible Server<br/>Read Replica"]
+                PG_PRIMARY -->|"비동기 복제"| PG_REPLICA
+            end
+
+            subgraph CACHE_SUBNET["Cache Subnet (10.0.3.0/24)"]
+                REDIS_PRIMARY["Azure Cache for Redis<br/>Premium P2<br/>Primary"]
+                REDIS_SECONDARY["Azure Cache for Redis<br/>Premium P2<br/>Secondary"]
+                REDIS_PRIMARY -->|"Geo-Replication"| REDIS_SECONDARY
+            end
+
+        end
+
+        SB["Azure Service Bus<br/>Premium (1 MU)<br/>Partitioned Queues"]
+
+        subgraph PE["Private Endpoints"]
+            PE_DB["PE: PostgreSQL<br/>10.0.2.10"]
+            PE_REDIS["PE: Redis<br/>10.0.3.10"]
+            PE_SB["PE: Service Bus<br/>10.0.1.50"]
+            PE_KV["PE: Key Vault<br/>10.0.1.51"]
+        end
+
+        subgraph SEC["Security & Identity"]
+            KV["Azure Key Vault<br/>(Secrets / Certs / Keys)"]
+            AAD["Azure AD<br/>+ Managed Identity"]
+            DFD["Microsoft Defender<br/>for Cloud"]
+        end
+
+        subgraph OBS["Observability"]
+            MON["Azure Monitor<br/>+ Log Analytics"]
+            AI["Application Insights"]
+            ALERT["Alert Rules<br/>+ Action Groups"]
+        end
+
+    end
+
+    subgraph DEVOPS["DevOps Pipeline"]
+        GH["GitHub Actions<br/>(CI)"]
+        ACR["Azure Container Registry<br/>Premium (Geo-Replication)"]
+        GH --> ACR
+        ACR --> ARGO
+    end
+
+    subgraph EXT["External Services"]
+        KAKAO["Kakao / Google<br/>OAuth 2.0"]
+        WEATHER["Weather API<br/>(OpenWeather)"]
+        GMAPS["Google Maps<br/>Places API"]
+        IAMPORT["아임포트<br/>결제 PG"]
+        OPENAI["OpenAI<br/>GPT-4o API"]
+    end
+
+    subgraph DR["Backup & DR"]
+        BACKUP["Azure Backup Vault<br/>(일 1회 백업, 30일 보관)"]
+        DR_SITE["DR Site<br/>Korea South Region<br/>(RTO 4h / RPO 1h)"]
+    end
+
+    AGW --> AUTH
+    AGW --> SCHD
+    AGW --> PLCE
+    AGW --> MNTR
+    AGW --> BRIF
+    AGW --> ALTN
+    AGW --> PAY
+
+    APP_POOL --> PE_DB
+    APP_POOL --> PE_REDIS
+    APP_POOL --> PE_SB
+    APP_POOL --> PE_KV
+
+    PE_DB --> PG_PRIMARY
+    PE_REDIS --> REDIS_PRIMARY
+    PE_SB --> SB
+    PE_KV --> KV
+
+    MNTR --> SB
+    SB --> BRIF
+    SB --> ALTN
+
+    AUTH --> KAKAO
+    MNTR --> WEATHER
+    PLCE --> GMAPS
+    PAY --> IAMPORT
+    BRIF --> OPENAI
+    ALTN --> OPENAI
+
+    KV --> AAD
+    AKS --> AAD
+    DFD --> AKS
+
+    AKS --> MON
+    AKS --> AI
+    MON --> ALERT
+
+    PG_PRIMARY --> BACKUP
+    REDIS_PRIMARY --> BACKUP
+    BACKUP --> DR_SITE
+
+    classDef azure fill:#0078D4,stroke:#005A9E,color:#fff
+    classDef aks fill:#326CE5,stroke:#1A56CC,color:#fff
+    classDef db fill:#0E7C7B,stroke:#095E5D,color:#fff
+    classDef cache fill:#D83B01,stroke:#A02D01,color:#fff
+    classDef security fill:#107C10,stroke:#0A5E0A,color:#fff
+    classDef external fill:#737373,stroke:#4F4F4F,color:#fff
+    classDef devops fill:#2B579A,stroke:#1D3F6E,color:#fff
+    classDef dr fill:#5C2D91,stroke:#3E1E61,color:#fff
+
+    class AFD,AGW,SB,MON,AI,ALERT azure
+    class AKS,SYS_POOL,APP_POOL,COREDNS,METRICS,ARGO aks
+    class AUTH,SCHD,PLCE,MNTR,BRIF,ALTN,PAY aks
+    class PG_PRIMARY,PG_REPLICA db
+    class REDIS_PRIMARY,REDIS_SECONDARY cache
+    class KV,AAD,DFD security
+    class KAKAO,WEATHER,GMAPS,IAMPORT,OPENAI external
+    class GH,ACR devops
+    class BACKUP,DR_SITE dr

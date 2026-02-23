@@ -1,148 +1,67 @@
-@startuml 외부데이터수집
+@startuml
 !theme mono
 
-title 외부 데이터 수집 플로우 - 시퀀스 다이어그램
+title 외부 데이터 수집 (MNTR, PLCE) - 스케줄러 주도
 
-control "스케줄러" as scheduler
-participant "MNTR 서비스\n(모니터링)" as mntr
-participant "Google Places API" as gplaces
-participant "OpenWeatherMap API" as owm
-participant "Google Directions API" as gdir
-database "Redis Cache" as cache
-queue "Event Bus" as bus
-participant "SCHD 서비스\n(일정)" as schd
-participant "BRIF 서비스\n(브리핑)" as brif
-participant "ALTN 서비스\n(대안)" as altn
-database "job_execution_log" as joblog
+actor "스케줄러" as scheduler
+participant "MNTR 서비스" as mntr
+participant "이벤트 버스" as bus
+database "Redis 캐시(E)" as cache
+participant "Azure App Config(E)" as config
+participant "Google Places API(E)" as gplaces
+participant "OpenWeatherMap API(E)" as weather
+participant "Google Directions API(E)" as gdirections
+participant "BRIF 서비스" as brif
 
-== 15분 주기 데이터 수집 트리거 ==
-scheduler -> mntr: POST /monitoring/collect\n방문 예정 장소 배치
+== 15분 주기 수집 트리거 ==
+scheduler -> mntr : 데이터 수집 트리거 (15분 주기)
 activate mntr
 
-mntr -> joblog: 수집 작업 등록\n(PENDING 상태)
-activate joblog
-joblog -> mntr: 작업 ID 반환
-deactivate joblog
+mntr -> config : 임계값 및 수집 설정 조회
+activate config
+config --> mntr : 수집 주기, 타임아웃(2초), 임계값 설정
+deactivate config
 
-== 병렬 외부 API 호출 (Circuit Breaker + Retry 적용) ==
-par 혼잡도 & 영업상태 수집
-    mntr -> gplaces: GET /details\n{place_id, fields: popular_times, opening_hours}
-    activate gplaces
-    alt API 성공
-        gplaces -> mntr: 200 OK\n{혼잡도, 영업상태, 평점}
-    else 일시적 실패 (Circuit Breaker)
-        gplaces -> mntr: 503 Service Unavailable
-        mntr -> cache: 캐시에서 이전 데이터 조회\n(Google Places)
-        activate cache
-        cache -> mntr: 캐시 데이터 반환 (최대 30분 전)
-        deactivate cache
-    end
-    deactivate gplaces
-else 날씨 정보 수집
-    mntr -> owm: GET /weather\n{lat, lng, appid}
-    activate owm
-    alt API 성공
-        owm -> mntr: 200 OK\n{온도, 습도, 강수확률, 풍속}
-    else 일시적 실패 (Circuit Breaker)
-        owm -> mntr: 503 Service Unavailable
-        mntr -> cache: 캐시에서 이전 데이터 조회\n(OpenWeatherMap)
-        activate cache
-        cache -> mntr: 캐시 데이터 반환 (최대 30분 전)
-        deactivate cache
-    end
-    deactivate owm
-else 교통 정보 & 이동시간 수집
-    mntr -> gdir: POST /directions\n{origin, destination, mode: walking}
-    activate gdir
-    alt API 성공
-        gdir -> mntr: 200 OK\n{이동시간, 거리, 교통상황}
-    else 일시적 실패 (Circuit Breaker)
-        gdir -> mntr: 503 Service Unavailable
-        mntr -> cache: 캐시에서 이전 데이터 조회\n(Google Directions)
-        activate cache
-        cache -> mntr: 캐시 데이터 반환 (최대 30분 전)
-        deactivate cache
-    end
-    deactivate gdir
+mntr -> mntr : 모니터링 대상 목록 조회\n(방문 예정 시간 2시간 전 대상만)
+
+== 외부 API 병렬 3종 호출 (Circuit Breaker + Retry) ==
+mntr ->> gplaces : 영업 상태 수집 요청 (비동기, Circuit Breaker)
+mntr ->> weather : 날씨 데이터 수집 요청 (비동기, Circuit Breaker)
+mntr ->> gdirections : 이동시간 수집 요청 (비동기, Circuit Breaker)
+
+alt 모든 API 정상 응답 (타임아웃 2초 이내)
+    gplaces -->> mntr : 영업 상태 반환
+    weather -->> mntr : 날씨 데이터 반환
+    gdirections -->> mntr : 이동시간 반환
+
+else 일부 API 실패 (부분 실패 처리 P20)
+    gplaces -->> mntr : 영업 상태 반환
+    weather -->> mntr : 타임아웃/오류
+    gdirections -->> mntr : 이동시간 반환
+
+    mntr -> cache : 날씨 캐시 조회 (Fallback)
+    activate cache
+    cache --> mntr : 마지막 캐시값 반환\n(is_cached=true, source_status=FALLBACK)
+    deactivate cache
+
+else 전체 실패 (3회 연속)
+    mntr -> mntr : 회색 상태 전환 처리
 end
 
-== 수집 데이터 캐시 저장 ==
-mntr -> cache: SET monitoring_status\n{place_id, 수집데이터}\nTTL=5분
+== 수집 결과 저장 및 상태 판정 ==
+mntr -> cache : 수집 데이터 캐시 저장 (TTL: 영업10분, 날씨10분, 이동30분)
 activate cache
-cache -> mntr: 저장 완료
+cache --> mntr : 저장 완료
 deactivate cache
 
-== 상태 배지 판정 (UFR-MNTR-020) ==
-mntr -> mntr: 상태 판정 로직 실행\n영업상태 + 날씨 + 혼잡도 + 이동시간 종합\n→ 초록(정상) / 노랑(주의) / 빨강(위험) / 회색(미확인)
+mntr -> mntr : 4단계 상태 판정\n(초록/노랑/빨강/회색)
 
-alt 상태 판정 성공
-    mntr -> cache: SET status_badge\n{place_id, status_color, icon}\nTTL=5분
-    activate cache
-    cache -> mntr: 저장 완료
-    deactivate cache
-else 데이터 부족 (3회 연속 실패)
-    mntr -> cache: SET status_badge\n{place_id, status_color=GRAY}\nTTL=5분
-    activate cache
-    cache -> mntr: 저장 완료
-    deactivate cache
+== 상태 변경 감지 시 이벤트 발행 ==
+alt 상태 변경 감지 (초록->노랑, 초록->빨강, 노랑->빨강)
+    mntr ->> bus : PlaceStatusChanged 이벤트 발행 (비동기)
+    bus --> brif : 브리핑 트리거 전달
 end
-
-== 상태 배지 업데이트 이벤트 발행 ==
-mntr -> bus: 발행 StatusBadgeUpdated\n{place_id, place_name, status_color, timestamp}
-activate bus
-deactivate bus
-
-== 이벤트 구독 처리 (Choreography) ==
-par SCHD 서비스 구독
-    bus -> schd: StatusBadgeUpdated 이벤트
-    activate schd
-    schd -> cache: 캐시 상태 배지 갱신
-    schd -> schd: 일정표 UI 갱신 준비\n(배지 색상 업데이트)
-    deactivate schd
-else BRIF 서비스 구독
-    bus -> brif: StatusBadgeUpdated 이벤트
-    activate brif
-    brif -> brif: 주의/위험 상태 감지 시\n브리핑 생성 준비
-    deactivate brif
-else ALTN 서비스 구독
-    bus -> altn: StatusBadgeUpdated 이벤트
-    activate altn
-    altn -> cache: 캐시 상태 배지 갱신
-    altn -> altn: 대안 검색 조건 갱신
-    deactivate altn
-end
-
-== 작업 완료 기록 ==
-mntr -> joblog: UPDATE job_execution_log\n상태=COMPLETED, 수집건수
-activate joblog
-joblog -> mntr: 작업 완료 확인
-deactivate joblog
 
 deactivate mntr
-
-== Supervisor 재시도 (5분 주기) ==
-note right of scheduler
-Supervisor 패턴:
-- job_execution_log 스캔 (5분 주기)
-- PENDING 상태 작업 재실행
-- 실패 횟수 > 3회: 회색 배지로 변경
-- 부분 실패: 개별 캐시 폴백 적용
-end note
-
-note right of mntr
-Circuit Breaker 상태:
-- CLOSED: 정상 (0/3 실패)
-- OPEN: 차단 (3회 연속 실패)
-  → 60초간 캐시 폴백
-- HALF_OPEN: 복구 중 (1회 테스트)
-end note
-
-note right of cache
-캐시 저장 항목:
-- monitoring_status: 수집 원본 데이터
-- status_badge: 판정된 배지 상태
-- 모두 TTL=5분으로 설정
-- 만료 시 다음 주기에 재수집
-end note
 
 @enduml

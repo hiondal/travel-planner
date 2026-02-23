@@ -1,232 +1,59 @@
 @startuml
 !theme mono
-title SCHD 서비스 - 배지 포함 일정표 조회 내부 시퀀스\n(UFR-SCHD-050)
 
-participant "ScheduleController" as ctrl
-participant "ScheduleService" as svc
-participant "PlaceScheduleRepository" as placeRepo
-database "DB" as db
+title SCHD 서비스 - 일정표 조회
+
+participant "SchdController" as ctrl
+participant "TripService" as svc
+participant "TripRepository" as repo
+participant "ScheduleItemRepository" as srepo
+participant "MntrService(E)" as mntr
+database "PostgreSQL(E)" as db
 database "Redis Cache(E)" as cache
-participant "MNTR 서비스(E)" as mntr
 
-note over ctrl, mntr
-    SCHD 서비스 내부: 배지 포함 일정표 조회
-    - 일정 목록 조회 (시간순 정렬)
-    - MNTR 서비스에서 배지 상태 조회
-    - 캐시 확인 및 응답 조합
-end note
+-> ctrl : GET /api/v1/trips/{trip_id}/schedule
+activate ctrl
 
-== 일정표 조회 요청 ==
+ctrl -> ctrl : trip_id 소유권 검증 (JWT user_id)
 
-ctrl -> svc: GET /schedules/{scheduleId}\n(Authorization: JWT Access Token)
+ctrl -> svc : getSchedule(trip_id, user_id)
 activate svc
 
-svc -> svc: 요청 데이터 검증
-activate svc
-note right
-    - scheduleId: 필수, UUID 형식
-    - user_id: JWT 토큰에서 추출
-    - tier: JWT 토큰에서 추출 (권한 확인용)
-end note
-deactivate svc
+svc -> repo : 여행 일정 조회
+activate repo
+repo -> db : trips 테이블 조회 (trip_id, user_id)
+db --> repo : 여행 정보
+deactivate repo
 
-== 일정 목록 조회 ==
+svc -> srepo : 일정 장소 목록 조회 (시간순)
+activate srepo
+srepo -> db : schedule_items 조회 (trip_id, ORDER BY visit_datetime)
+db --> srepo : 장소 목록 (place_id 목록 포함)
+deactivate srepo
 
-svc -> cache: 캐시 확인\n(key=schedule:{scheduleId})
-activate cache
-note right
-    TTL: 5분
-    캐시 히트 시 DB 조회 건너뜀
-end note
-
-alt 캐시 히트
-    cache --> svc: Schedule with PlaceSchedule[]
-    deactivate cache
-
-    svc -> svc: 캐시된 데이터 사용
-    note right
-        - 장소 목록
-        - 시간순 정렬 정보
-        - 각 장소의 메타정보
-    end note
-
-else 캐시 미스
-    cache --> svc: null
-    deactivate cache
-
-    svc -> placeRepo: 일정 조회\n(scheduleId)
-    activate placeRepo
-
-    placeRepo -> db: SELECT ps.* FROM place_schedule ps\nWHERE ps.schedule_id = ?\nORDER BY ps.order_index, ps.scheduled_departure_time
-    activate db
-    note right
-        - order_index로 시간순 정렬
-        - 모든 장소 정보 조회
-    end note
-
-    db --> placeRepo: PlaceSchedule[] (시간순)
-    deactivate db
-
-    placeRepo --> svc: PlaceSchedule[]
-    deactivate placeRepo
-
-    svc -> svc: 데이터 변환\n(PlaceSchedule -> ScheduleDTO)
-    activate svc
-    note right
-        - place_id
-        - scheduled_departure_time
-        - place_name (DB에서 조회 또는 캐시)
-        - order_index
-    end note
-    deactivate svc
-
-    svc -> cache: 일정 데이터 캐싱\n(key=schedule:{scheduleId},\n value=Schedule with PlaceSchedule[])
-    activate cache
-    note right
-        TTL: 5분
-        다음 조회 시 캐시 히트
-    end note
-    cache --> svc: OK
-    deactivate cache
-
-end
-
-== 배지 상태 조회 ==
-
-svc -> svc: place_ids 추출\n(모든 PlaceSchedule에서)
-activate svc
-note right
-    배지 조회를 위해 필요한 place_id 리스트 생성
-    예: [place_id_1, place_id_2, place_id_3, ...]
-end note
-deactivate svc
-
-svc -> mntr: GET /monitoring/status\n(place_ids=[...], trip_id, schedule_id)
+== 상태 배지 일괄 조회 ==
+svc -> mntr : 배지 상태 일괄 조회 (place_id 목록)
 activate mntr
 
-note right of mntr
-    MNTR 서비스 호출:
-    배지 상태를 여러 개 조회
-    - 캐시 확인
-    - DB 조회
-    - 응답 합성
-end note
-
-alt MNTR 서비스 응답 성공
-    mntr -> mntr: 배지 데이터 조회\n(place_id별 status 조회)
-    activate mntr
-    note right
-        MNTR 서비스 내부:
-        1. Redis 캐시 확인
-           (key=badge:place_id:trip_id)
-        2. 캐시 미스 시 DB 조회
-           (최근 status_badge 조회)
-        3. 배지 데이터 합성
-    end note
-    deactivate mntr
-
-    mntr --> svc: 배지 목록\n([{place_id, status, icon, label, reason}, ...])
-    deactivate mntr
-
-else MNTR 서비스 응답 실패 또는 느림 (3초 이상)
-    mntr --> svc: 부분 실패 또는 타임아웃
-    deactivate mntr
-
-    svc -> svc: 폴백 처리\n(배지 없이 기본값 반환)
-    activate svc
-    note right
-        - 배지 미확인: status="UNCONFIRMED", icon="?"
-        - 또는 기존 캐시된 배지 사용
-    end note
-    deactivate svc
-
+mntr -> cache : 배지 캐시 일괄 조회
+activate cache
+alt 캐시 HIT
+    cache --> mntr : 배지 상태 목록
+    deactivate cache
+else 캐시 MISS
+    cache --> mntr : 캐시 없음
+    deactivate cache
+    mntr -> mntr : DB 조회 후 캐시 갱신
 end
+mntr --> svc : 장소별 배지 상태 반환
+deactivate mntr
 
-== 응답 데이터 조합 ==
+svc -> svc : 일정표 + 배지 상태 통합
 
-svc -> svc: 일정 + 배지 응답 구성\n{schedules, badges}
-activate svc
-note right
-    응답 구조:
-    {
-        schedules: [
-            {
-                place_id,
-                place_name,
-                scheduled_departure_time,
-                order_index,
-                out_of_hours_flag
-            },
-            ...
-        ],
-        badges: [
-            {
-                place_id,
-                status,        // "SAFE", "CAUTION", "DANGER", "UNCONFIRMED"
-                icon,          // "🟢", "🟡", "🔴", "⚪"
-                label,         // "안심", "주의", "위험", "미확인"
-                reason,        // "정상 운영", "혼잡", "폐점", ...
-                updated_at
-            },
-            ...
-        ]
-    }
-end note
+svc --> ctrl : {trip_info, schedule_items [{place, visit_datetime, badge_status}]}
 deactivate svc
 
-== 색약 사용자 접근성 처리 ==
-
-svc -> svc: 색약 사용자 렌더링 정보 포함\n(icon + label + reason 병행)
-activate svc
-note right
-    접근성 고려:
-    - 색상만으로 상태 전달 금지
-    - icon(✓, !, ✕, ?) + label(텍스트) 병행
-    - reason으로 추가 정보 제공
-end note
-deactivate svc
-
-svc --> ctrl: 200 OK\n{schedules, badges}
-deactivate svc
-
-== 응답 반환 ==
-
-ctrl -> ctrl: 응답 검증
-note right
-    - schedules 배열 존재 여부
-    - badges 배열 존재 여부
-    - place_id 매칭 확인
-end
-
-ctrl --> db: 200 OK\n{schedules: [{place_id, place_name,\n scheduled_departure_time, order_index,\n out_of_hours_flag}, ...],\n badges: [{place_id, status, icon, label,\n reason, updated_at}, ...]}
+ctrl --> : 200 OK\n{일정표 + 배지 포함}
 deactivate ctrl
-
-== 최종 UI 렌더링 예시 ==
-
-note over ctrl, mntr
-    **프론트엔드 렌더링 결과**
-
-    12:00 이치란 라멘 시부야     🟢 안심
-         (영업시간: 11:00~22:00)
-
-    14:30 센소지 사찰           🟡 주의
-         (혼잡: 관광객 많음)
-
-    17:00 이디오트 카페          🔴 위험
-         (폐점: 본점 휴무)
-
-    19:30 시부야 스카이         ⚪ 미확인
-         (데이터 수집 대기 중)
-end note
-
-note over ctrl, mntr
-    **핵심 설계 사항**
-    1. 캐시 우선: 일정 데이터 5분 캐시 활용
-    2. 동기 조회: MNTR 서비스에서 배지 상태 조회
-    3. 폴백 처리: MNTR 응답 실패 시 기본값 반환
-    4. 색약 접근성: 색상 + 아이콘 + 라벨 + 텍스트 병행
-    5. 응답 구성: 일정 목록 + 배지 목록 분리
-    6. 정렬: order_index로 시간순 정렬
-end note
 
 @enduml

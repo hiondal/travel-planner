@@ -1,0 +1,147 @@
+@startuml
+!theme mono
+title BRIF 서비스 - 총평 생성 내부 시퀀스
+
+participant "BriefingController" as ctrl
+participant "BriefingService" as svc
+participant "BriefingTextGenerator\n<<interface>>" as iface
+participant "RuleBasedBriefingGenerator\n(MVP 구현체)" as rulegen
+participant "BriefingRepository" as repo
+database "PostgreSQL(E)" as db
+database "Redis Cache(E)" as cache
+
+note over ctrl, cache
+    UFR-BRIF-010 [T5]: 총평 생성 로직은 인터페이스로 추상화되어
+    Phase 2에서 LLMBriefingGenerator로 교체 가능 (코드 변경 없음)
+end note
+
+== 브리핑 생성 트리거 (출발 15~30분 전) ==
+
+-> ctrl : 브리핑 생성 요청\n(scheduleItemId, placeId, userId)
+activate ctrl
+
+ctrl -> svc : generateBriefing(scheduleItemId, placeId, userId)
+activate svc
+
+== 멱등성 확인 ==
+
+svc -> repo : 동일 scheduleItemId 브리핑 존재 여부 조회
+activate repo
+repo -> db : briefings 테이블에서 scheduleItemId로 조회
+db --> repo : 조회 결과
+deactivate repo
+
+alt 브리핑 이미 존재 (UFR-BRIF-020)
+    svc --> ctrl : 기존 브리핑 ID 반환 (멱등성 보장)
+    ctrl --> : 기존 브리핑 ID 응답
+else 브리핑 없음 — 신규 생성
+end
+
+== 모니터링 서비스 캐시 데이터 조회 ==
+
+svc -> cache : 장소 상태 캐시 조회\n(키: place:{placeId}:status)
+activate cache
+cache --> svc : 캐시 조회 결과
+deactivate cache
+
+alt 캐시 HIT — 5분 이내 데이터 (UFR-BRIF-010 [U7])
+    note right of svc : 재수집 없이 캐시 데이터 사용
+else 캐시 MISS 또는 5분 초과
+    svc -> cache : 비동기 수집 요청 이벤트 발행\n(백그라운드, 외부 API 재수집)
+    note right of svc : 수집 완료 전 최신 캐시 데이터로 진행
+end
+
+== 브리핑 컨텍스트 구성 ==
+
+svc -> svc : BriefingContext 구성
+note right of svc
+    BriefingContext {
+      placeStatus: PlaceStatus
+        (영업상태, 날씨, 혼잡도, 이동시간)
+      statusLevel: StatusLevel
+        (SAFE / CAUTION / DANGER)
+      riskItems: List<RiskItem>
+        (위험 항목 목록)
+      subscriptionTier: SubscriptionTier
+        (FREE / TRIP_PASS / PRO)
+    }
+end note
+
+== 총평 텍스트 생성 — 인터페이스 추상화 ==
+
+svc -> iface : generate(briefingContext)
+activate iface
+
+note over iface, rulegen
+    [Phase 2 전환점]
+    ai.briefing.provider=rule  → RuleBasedBriefingGenerator (현재 MVP)
+    ai.briefing.provider=llm   → LLMBriefingGenerator (Phase 2)
+    전환 시 application.yml 설정값 변경만으로 완료.
+    BriefingService 코드 변경 없음.
+end note
+
+iface -> rulegen : generate(briefingContext)
+activate rulegen
+
+rulegen -> rulegen : statusLevel 판별
+alt statusLevel == SAFE
+    rulegen -> rulegen : 안심 총평 템플릿 적용
+    note right : "현재까지 모든 항목 정상입니다.\n예정대로 출발하세요."
+else statusLevel == CAUTION 또는 DANGER
+    rulegen -> rulegen : 위험 항목 목록 문자열 조합
+    note right
+        riskItems 스트림에서 label 추출 후 조인
+        예: "임시 휴업, 폭우 예보이(가) 감지되었습니다.
+             대안을 확인해보세요."
+    end note
+end
+
+rulegen --> iface : BriefingText
+deactivate rulegen
+iface --> svc : BriefingText
+deactivate iface
+
+== 브리핑 저장 ==
+
+svc -> svc : Briefing 엔티티 구성
+note right of svc
+    Briefing {
+      briefingId: UUID
+      scheduleItemId
+      placeStatus (5가지 항목)
+      summaryText: BriefingText (총평)
+      statusLevel
+      riskItems
+      createdAt: now()
+    }
+end note
+
+svc -> repo : 브리핑 저장
+activate repo
+repo -> db : briefings 테이블에 신규 행 삽입
+db --> repo : 저장 완료 (briefingId 반환)
+deactivate repo
+
+== 분석 이벤트 기록 (UFR-BRIF-050 [P18]) ==
+
+svc -> cache : 브리핑 열람 분석 이벤트 버퍼 저장
+note right of svc : LLM 타이밍 최적화 데이터 수집\n(열람-발송 간격 측정용)
+
+svc --> ctrl : briefingId
+deactivate svc
+
+ctrl --> : 브리핑 생성 완료 응답 (briefingId)
+deactivate ctrl
+
+== 오류 처리 — Graceful Degradation ==
+
+alt RuleBasedBriefingGenerator 예외 발생
+    note over svc
+        계층 3: Graceful Degradation
+        총평 = "현재 상태 정보를 확인 중입니다."
+        브리핑은 총평 제외 4개 항목(영업상태/날씨/혼잡도/이동시간)으로 반드시 발송
+        핵심 원칙: AI 또는 규칙 엔진 장애와 무관하게 브리핑은 생성된다
+    end note
+end
+
+@enduml

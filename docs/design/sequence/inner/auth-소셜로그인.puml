@@ -1,245 +1,72 @@
 @startuml
 !theme mono
-title AUTH 서비스 - 소셜 로그인 내부 시퀀스\n(UFR-AUTH-010)
+
+title AUTH 서비스 - 소셜 로그인
 
 participant "AuthController" as ctrl
 participant "AuthService" as svc
-participant "TokenProvider" as token
 participant "UserRepository" as repo
-database "DB" as db
+database "PostgreSQL(E)" as db
 database "Redis Cache(E)" as cache
-participant "Google OAuth(E)" as goauth
-participant "Apple Sign In(E)" as aauth
+participant "Google/Apple OAuth(E)" as oauth
 
-note over ctrl, aauth
-    AUTH 서비스 내부: Google/Apple OAuth 기반 소셜 로그인 및 JWT 토큰 발급
-    - OAuth provider 검증
-    - 신규/기존 사용자 판정
-    - JWT Access Token(30분) + Refresh Token(7일) 발급
-end note
+-> ctrl : POST /api/v1/auth/social-login\n{provider, oauth_code}
+activate ctrl
 
-== Google 로그인 경로 ==
-
-ctrl -> svc: POST /auth/login\n(provider="google", auth_code)
+ctrl -> svc : socialLogin(provider, oauth_code)
 activate svc
 
-svc -> svc: 요청 데이터 검증\n(provider, auth_code 필수)
-activate svc
-note right
-    - provider 값 확인 (google/apple)
-    - auth_code 존재 여부 확인
-end note
-deactivate svc
+svc ->> oauth : OAuth 토큰 검증 요청 (비동기)
+activate oauth
 
-alt Google OAuth 검증 성공
-    svc -> goauth: Authorization Code 검증\n(code, client_id, client_secret)
-    activate goauth
-    note right
-        POST https://oauth2.googleapis.com/token
-        - code: authorization code
-        - client_id, client_secret
-    end note
-    goauth --> svc: Google 사용자 정보\n{sub, email, name, picture}
-    deactivate goauth
+alt OAuth 검증 성공
+    oauth -->> svc : 사용자 프로필 반환\n{provider_id, email, name, avatar_url}
+    deactivate oauth
 
-    svc -> repo: 사용자 조회\n(email)
+    svc -> repo : 사용자 조회 (provider_id 기준)
     activate repo
-    repo -> db: SELECT user WHERE email = ?
-    activate db
+    repo -> db : users 테이블 조회
+    db --> repo : 조회 결과
+    deactivate repo
 
-    alt 기존 사용자 존재
-        db --> repo: User 엔티티
-        deactivate db
-        repo --> svc: User (id, email, nickname, profile_image)
-        deactivate repo
-
-        svc -> svc: 기존 사용자 처리
-        note right
-            - 마지막 로그인 시간 업데이트
-            - 온보딩 상태 확인
-        end
-
-    else 신규 사용자
-        db --> repo: null
-        deactivate db
-        repo --> svc: null
-        deactivate repo
-
-        svc -> svc: 신규 사용자 생성\n(닉네임, 프로필 이미지 자동 설정)
-        note right
-            - user_id: 자동 생성
-            - email: Google 정보
-            - nickname: name (Google에서)
-            - profile_image: picture URL
-            - onboarding_status: PENDING
-            - subscription_tier: FREE
-        end
-
-        svc -> repo: 사용자 저장\n(newUser)
+    alt 신규 사용자 (최초 로그인)
+        svc -> repo : 사용자 생성
         activate repo
-        repo -> db: INSERT INTO user VALUES (...)
-        activate db
-        db --> repo: user_id
-        deactivate db
-        repo --> svc: User (신규 엔티티)
+        repo -> db : users 테이블 삽입\n(provider, provider_id, email, nickname, avatar_url)
+        db --> repo : 생성된 user_id
         deactivate repo
-
+        note right of svc : 닉네임/프로필 이미지 자동 설정
     end
 
-    svc -> token: JWT 토큰 생성\n(user_id, email, subscription_tier)
-    activate token
-    note right
-        Access Token:
-        - exp: +30분
-        - sub: user_id
-        - email, tier
+    svc -> svc : JWT Access Token 생성 (30분)\n+ Refresh Token 생성
+    note right of svc : JWT 클레임:\nuser_id, tier, email, exp
 
-        Refresh Token:
-        - exp: +7일
-        - sub: user_id
-        - type: "refresh"
-    end
-    token -> token: Access Token 서명\n(HS256 또는 RS256)
-    activate token
-    token -> token: Refresh Token 서명
-    deactivate token
-    token --> svc: {access_token, refresh_token, expires_in}
-    deactivate token
+    svc -> repo : auth_sessions 저장
+    activate repo
+    repo -> db : auth_sessions 테이블 삽입\n(user_id, refresh_token, expires_at)
+    db --> repo : 저장 완료
+    deactivate repo
 
-    svc -> cache: 세션 저장\n(key=session:{user_id}, value={token_info})
+    svc -> cache : 세션 정보 저장\n(sess:{user_id}:token, TTL 30분)
     activate cache
-    note right
-        TTL: Refresh Token 만료 시간 (7일)
-        - access_token (암호화 저장)
-        - token_issued_at
-        - device_info (선택)
-    end
-    cache --> svc: OK
+    cache --> svc : 저장 완료
     deactivate cache
 
-    svc -> svc: 응답 데이터 구성\n{access_token, refresh_token, user_info}
-    note right
-        user_info:
-        - user_id
-        - email
-        - nickname
-        - profile_image
-        - onboarding_status
-        - subscription_tier
-    end
+    svc --> ctrl : {access_token, refresh_token, user_profile}
 
-    svc --> ctrl: 200 OK\n{access_token, refresh_token, user_info}
-    deactivate svc
-
-else Google OAuth 검증 실패
-    goauth --> svc: 401 Unauthorized\n(invalid code or expired)
-    deactivate goauth
-    svc --> ctrl: 401 Unauthorized\n("Google 인증에 실패했습니다")
-    deactivate svc
-
+else OAuth 검증 실패
+    oauth -->> svc : 인증 실패
+    deactivate oauth
+    svc --> ctrl : AuthException (인증 실패)
 end
 
-== Apple 로그인 경로 ==
-
-ctrl -> svc: POST /auth/login\n(provider="apple", identity_token)
-activate svc
-
-svc -> svc: 요청 데이터 검증\n(provider, identity_token 필수)
-activate svc
 deactivate svc
 
-alt Apple Sign In 검증 성공
-    svc -> aauth: Identity Token 검증\n(token, Apple 공개키)
-    activate aauth
-    note right
-        Apple ID Token 검증 프로세스:
-        1. Apple의 공개키 세트 조회
-        2. JWT 서명 검증
-        3. iss, aud, iat, exp 확인
-    end note
-    aauth --> svc: Apple 사용자 정보\n{sub, email, name (첫 로그인만)}
-    deactivate aauth
-
-    svc -> repo: 사용자 조회\n(email)
-    activate repo
-    repo -> db: SELECT user WHERE email = ?
-    activate db
-
-    alt 기존 사용자 존재
-        db --> repo: User 엔티티
-        deactivate db
-        repo --> svc: User
-        deactivate repo
-        svc -> svc: 기존 사용자 처리
-
-    else 신규 사용자 (첫 로그인에만 Apple이 name 제공)
-        db --> repo: null
-        deactivate db
-        repo --> svc: null
-        deactivate repo
-
-        svc -> svc: 신규 사용자 생성\n(닉네임은 이메일 기반 또는 기본값)
-        note right
-            Apple은 첫 로그인 시만 name 제공
-            이후 로그인부터는 name이 없으므로 기존 nickname 유지
-
-            - user_id: 자동 생성
-            - email: Apple 이메일
-            - nickname: name이 있으면 사용, 없으면 email 앞부분
-            - profile_image: 기본 이미지 (Apple은 제공 안 함)
-            - hide_my_email: Apple의 Hide My Email 옵션 저장
-        end
-
-        svc -> repo: 사용자 저장
-        activate repo
-        repo -> db: INSERT INTO user VALUES (...)
-        activate db
-        db --> repo: user_id
-        deactivate db
-        repo --> svc: User (신규 엔티티)
-        deactivate repo
-
-    end
-
-    svc -> token: JWT 토큰 생성\n(user_id, email, subscription_tier)
-    activate token
-    token --> svc: {access_token, refresh_token, expires_in}
-    deactivate token
-
-    svc -> cache: 세션 저장
-    activate cache
-    cache --> svc: OK
-    deactivate cache
-
-    svc --> ctrl: 200 OK\n{access_token, refresh_token, user_info}
-    deactivate svc
-
-else Apple Sign In 검증 실패
-    aauth --> svc: 401 Unauthorized\n(invalid token or signature)
-    deactivate aauth
-    svc --> ctrl: 401 Unauthorized\n("Apple 인증에 실패했습니다")
-    deactivate svc
-
+alt 성공
+    ctrl --> : 200 OK\n{access_token, refresh_token, user_profile}
+else 실패
+    ctrl --> : 401 Unauthorized
 end
-
-== 응답 반환 ==
-
-ctrl -> ctrl: 응답 검증
-note right
-    - access_token 존재 여부
-    - user_info 완전성 확인
-end
-
-ctrl --> db: 200 OK\n{access_token, refresh_token,\n user_id, email, nickname,\n profile_image, onboarding_status,\n subscription_tier}
 deactivate ctrl
-
-note over ctrl, aauth
-    **핵심 설계 사항**
-    1. OAuth Provider 검증: 외부 OAuth 의존
-    2. 신규 사용자 자동 생성: 사용자 등록 자동화
-    3. JWT 토큰 발급: Access Token(30분) + Refresh Token(7일)
-    4. 세션 캐싱: Redis에 토큰 정보 저장 (7일 TTL)
-    5. 멱등성: 동일 OAuth ID에 대해 기존 사용자 반환
-end note
 
 @enduml

@@ -1,0 +1,116 @@
+@startuml
+!theme mono
+
+title ALTERNATIVE 서비스 - Entity Relationship Diagram
+
+!define TABLE(name,desc) class name as "desc" << (T,#FFAAAA) >>
+!define PK(x) <b>x</b>
+!define FK(x) <i>x</i>
+!define UNIQUE(x) <u>x</u>
+
+TABLE(alternatives, "ALTERNATIVES\n(대안 장소)") {
+    PK(id: VARCHAR(36))
+    --
+    user_id: VARCHAR(36) NOT NULL
+    original_place_id: VARCHAR(200) NOT NULL
+    place_id: VARCHAR(200) NOT NULL
+    name: VARCHAR(200) NOT NULL
+    distance_m: INTEGER NOT NULL
+    rating: NUMERIC(3,1)
+    congestion: VARCHAR(20)
+    reason: VARCHAR(200)
+    status_label: VARCHAR(50)
+    lat: NUMERIC(10,7) NOT NULL
+    lng: NUMERIC(10,7) NOT NULL
+    walking_minutes: INTEGER
+    transit_minutes: INTEGER
+    score: NUMERIC(5,4) NOT NULL
+    --
+    created_at: TIMESTAMPTZ NOT NULL
+}
+
+TABLE(alternative_card_snapshots, "ALTERNATIVE_CARD_SNAPSHOTS\n(카드 노출 스냅샷 - ML[T3])") {
+    PK(id: VARCHAR(36))
+    --
+    user_id: VARCHAR(36) NOT NULL
+    place_id: VARCHAR(200) NOT NULL
+    candidate_place_id: VARCHAR(200) NOT NULL
+    score_weights: JSONB NOT NULL
+    scores: JSONB NOT NULL
+    --
+    exposed_at: TIMESTAMPTZ NOT NULL
+}
+
+TABLE(selection_logs, "SELECTION_LOGS\n(선택 로그 - ML[T3])") {
+    PK(id: VARCHAR(36))
+    --
+    FK(alt_card_id: VARCHAR(36)) NOT NULL
+    user_id: VARCHAR(36) NOT NULL
+    selected_rank: INTEGER NOT NULL
+    elapsed_seconds: INTEGER NOT NULL
+    adopted: BOOLEAN NOT NULL DEFAULT FALSE
+    --
+    created_at: TIMESTAMPTZ NOT NULL
+}
+
+' 관계 정의
+alternative_card_snapshots ||--o{ selection_logs : "selected from"
+
+note top of alternatives
+  <b>Indexes:</b>
+  • idx_alternatives_user_id (user_id)
+  • idx_alternatives_original_place_id (original_place_id)
+  • idx_alternatives_place_id (place_id)
+  • idx_alternatives_created_at (created_at)
+
+  <b>External References (no FK):</b>
+  • user_id → AUTH.users.id
+  • original_place_id → PLACE.places.id
+  • place_id → PLACE.places.id
+
+  <b>Design Note:</b>
+  • 검색 시점 스냅샷 저장 (name, status_label)
+  • score: FixedScoreWeightsProvider 계산 결과
+end note
+
+note top of alternative_card_snapshots
+  <b>Indexes:</b>
+  • idx_alt_card_snapshots_user_id (user_id)
+  • idx_alt_card_snapshots_place_id (place_id)
+  • idx_alt_card_snapshots_exposed_at (exposed_at)
+
+  <b>JSONB 구조:</b>
+  score_weights: {distanceWeight, ratingWeight, congestionWeight}
+  scores: {distanceScore, ratingScore, congestionScore, totalScore}
+
+  <b>Retention:</b>
+  ML 학습 데이터 — 최소 1년 보존 [T3]
+end note
+
+note bottom of selection_logs
+  <b>Indexes:</b>
+  • idx_selection_logs_user_id (user_id)
+  • idx_selection_logs_alt_card_id (alt_card_id)
+  • idx_selection_logs_created_at (created_at)
+
+  <b>Foreign Key Actions:</b>
+  • alt_card_id: ON DELETE RESTRICT
+
+  <b>Retention:</b>
+  ML 학습 데이터 — 최소 1년 보존 [T3]
+end note
+
+legend right
+  <b>Redis Cache (DB 6):</b>
+  altn:cards:{placeId}:{cat}:{rad}  TTL 10분
+  altn:alt:{altId}                  TTL 30분
+
+  <b>Events Consumed:</b>
+  PlaceStatusChangedEvent → 캐시 무효화
+
+  <b>Legend:</b>
+  PK = Primary Key
+  FK = Foreign Key (서비스 내부)
+end legend
+
+@enduml

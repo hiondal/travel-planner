@@ -1,0 +1,193 @@
+@startuml
+!theme mono
+title ALTN 서비스 - 대안 점수 계산 내부 시퀀스
+
+participant "AlternativeController" as ctrl
+participant "AlternativeService" as svc
+participant "ScoreWeightsProvider\n<<interface>>" as iface
+participant "FixedScoreWeightsProvider\n(MVP 구현체)" as fixedprovider
+participant "ScoreCalculator" as calc
+participant "AlternativeRepository" as repo
+database "PostgreSQL(E)" as db
+database "Redis Cache(E)" as cache
+participant "PLCE 서비스(E)" as plce
+participant "MNTR 서비스(E)" as mntr
+
+note over ctrl, mntr
+    UFR-ALTN-010 [T2]: 대안 카드 정렬 가중치는 인터페이스로 추상화되어
+    Phase 2에서 MLScoreWeightsProvider로 교체 가능 (코드 변경 없음)
+end note
+
+== 대안 장소 검색 요청 ==
+
+-> ctrl : 대안 장소 검색 요청\n(placeId, userId, location, category)
+activate ctrl
+
+ctrl -> ctrl : 요청 파라미터 검증
+note right : placeId, userId, location(위도/경도),\ncategory 필수값 확인
+
+ctrl -> svc : searchAlternatives(placeId, userId, location, category)
+activate svc
+
+== 후보 장소 조회 (PLCE 서비스) ==
+
+svc -> plce : 반경 1km 동일 카테고리 영업 중 장소 검색\n(location, radius=1km, category, status=OPEN)
+activate plce
+plce --> svc : 후보 장소 목록 (List<PlaceCandidate>)
+deactivate plce
+
+alt 후보 3장 미만 — 반경 단계적 확장 (UFR-ALTN-010 P22)
+    svc -> plce : 반경 2km로 재검색
+    activate plce
+    plce --> svc : 확장 후보 장소 목록
+    deactivate plce
+
+    alt 여전히 3장 미만
+        svc -> plce : 반경 3km로 재검색 (최대)
+        activate plce
+        plce --> svc : 최종 후보 장소 목록
+        deactivate plce
+    end
+end
+
+== 후보 장소 상태 필터링 (UFR-ALTN-010 [U19]) ==
+
+svc -> mntr : 후보 장소 상태 배지 일괄 조회\n(placeIds[])
+activate mntr
+mntr --> svc : 장소별 상태 배지 맵\n(placeId -> StatusBadge)
+deactivate mntr
+
+svc -> svc : 상태 기반 후보 필터링 및 레이블 분류
+note right of svc
+    빨강(DANGER) 상태 → 후보 제외
+    초록(SAFE) 상태   → 최우선 후보
+    노랑(CAUTION) 상태 → "주의 필요" 레이블 포함
+    회색(UNKNOWN) 상태 → "정보 미확인" 레이블로 최후 후보
+end note
+
+== 가중치 조회 — 인터페이스 추상화 ==
+
+svc -> cache : 가중치 캐시 조회\n(키: weights:{userId}:{category})
+activate cache
+cache --> svc : 캐시 조회 결과
+deactivate cache
+
+alt 캐시 HIT (TTL: 1시간)
+    note right of svc : 캐시 가중치 반환 (<5ms)
+else 캐시 MISS
+    svc -> iface : getWeights(weightsContext)
+    activate iface
+
+    note over iface, fixedprovider
+        [Phase 2 전환점]
+        ai.weights.provider=fixed → FixedScoreWeightsProvider (현재 MVP)
+        ai.weights.provider=ml    → MLScoreWeightsProvider (Phase 2)
+        전환 시 application.yml 설정값 변경만으로 완료.
+        AlternativeService 코드 변경 없음.
+
+        Phase 2 MLScoreWeightsProvider:
+          POST /ai/weights/infer 동기 HTTP 호출 (타임아웃 500ms)
+          타임아웃 초과 시 FixedScoreWeightsProvider 폴백 적용
+    end note
+
+    iface -> fixedprovider : getWeights(weightsContext)
+    activate fixedprovider
+
+    fixedprovider -> fixedprovider : 고정 가중치 반환
+    note right of fixedprovider
+        WeightsContext {
+          userId, category, timeOfDay
+        }
+        ScoreWeights {
+          w1 = 0.5 (거리 우선)
+          w2 = 0.3 (평점)
+          w3 = 0.2 (혼잡도)
+        }
+        MVP: 사용자/카테고리/시간대 무관하게 고정값
+    end note
+
+    fixedprovider --> iface : ScoreWeights
+    deactivate fixedprovider
+    iface --> svc : ScoreWeights
+    deactivate iface
+
+    svc -> cache : 가중치 캐시 저장\n(TTL: 1시간)
+end
+
+== 합산 점수 계산 ==
+
+svc -> calc : calculateScores(candidates, scoreWeights)
+activate calc
+
+loop 각 후보 장소별 점수 계산
+    calc -> calc : distance_score 계산
+    note right : Google Directions API 기반 도보 실제 이동 거리\n거리 역수 정규화 (가까울수록 높은 점수) [U9 반영]
+
+    calc -> calc : rating_score 계산
+    note right : Google Places 평점(0~5) 정규화
+
+    calc -> calc : congestion_score 계산
+    note right : 혼잡도 역수 정규화 (혼잡도 낮을수록 높은 점수)
+
+    calc -> calc : 합산 점수 계산
+    note right
+        score = w1 * distance_score
+              + w2 * rating_score
+              + w3 * congestion_score
+        (P11: UFR-ALTN-010 정렬 공식)
+    end note
+end
+
+calc --> svc : 점수가 포함된 후보 목록 (List<ScoredCandidate>)
+deactivate calc
+
+== 대안 카드 정렬 및 상위 3장 선정 ==
+
+svc -> svc : 합산 점수 내림차순 정렬 후 상위 3개 선택
+note right of svc
+    각 카드 구성 요소:
+    - 장소명, 거리, 평점, 혼잡도, 추천이유
+    - 확장 반경 정보 (반경 확장된 경우 표시)
+    - 상태 레이블 ("주의 필요" / "정보 미확인")
+end note
+
+== 카드 점수 스냅샷 저장 (UFR-ALTN-010 [T3], [P18]) ==
+
+svc -> repo : 대안 카드 노출 스냅샷 저장
+activate repo
+repo -> db : alternative_card_snapshots 테이블에 삽입
+note right of db
+    ML 가중치 학습 레이블 데이터 수집 목적
+    {userId, placeId, candidatePlaceId,
+     scoreWeights, scores, exposedAt}
+    Phase 2 MLScoreWeightsProvider 학습셋으로 활용
+end note
+db --> repo : 저장 완료
+deactivate repo
+
+svc --> ctrl : 대안 카드 3장 (List<AlternativeCard>)
+deactivate svc
+
+ctrl --> : 200 OK — 대안 카드 3장 응답
+deactivate ctrl
+
+== 오류 처리 ==
+
+alt PLCE 서비스 호출 실패
+    note over svc
+        최대 반경 3km 내 후보 없음 또는 서비스 장애
+        → 빈 대안 목록 반환 (3초 SLA 유지 우선)
+        → "주변에 적합한 대안이 없습니다" 안내 메시지 포함
+    end note
+end
+
+alt MLScoreWeightsProvider 타임아웃 (Phase 2 해당)
+    note over svc
+        500ms 타임아웃 초과 시
+        → FixedScoreWeightsProvider 즉시 폴백
+        → 대안 카드 3장 정상 생성 (3초 SLA 유지)
+        → 사용자 체감 영향 없음
+    end note
+end
+
+@enduml

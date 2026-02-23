@@ -1,0 +1,293 @@
+@startuml
+!theme mono
+
+title BRIEFING 서비스 - 클래스 다이어그램
+
+package "com.travelplanner.briefing" {
+
+    ' ===== Controller Layer =====
+    package "controller" {
+        class BriefController {
+            - briefingService: BriefingService
+            + getBriefing(briefingId: String, principal: UserPrincipal): ResponseEntity<BriefingDetailResponse>
+            + getBriefingList(date: LocalDate, principal: UserPrincipal): ResponseEntity<BriefingListResponse>
+            - validateOwnership(briefingId: String, userId: String): void
+        }
+
+        class BriefingScheduler {
+            - briefingService: BriefingService
+            + generateBriefing(request: GenerateBriefingRequest): ResponseEntity<GenerateBriefingResponse>
+        }
+    }
+
+    ' ===== Service Layer =====
+    package "service" {
+        interface BriefingService {
+            + generateBriefing(request: GenerateBriefingRequest): GenerateBriefingResult
+            + getBriefing(briefingId: String, userId: String): Briefing
+            + getBriefingList(userId: String, date: LocalDate): List<Briefing>
+        }
+
+        class BriefingServiceImpl {
+            - briefingRepository: BriefingRepository
+            - briefingTextGenerator: BriefingTextGenerator
+            - monitorServiceClient: MonitorServiceClient
+            - payServiceClient: PayServiceClient
+            - fcmClient: FcmClient
+            - eventPublisher: EventPublisher
+            + generateBriefing(request: GenerateBriefingRequest): GenerateBriefingResult
+            + getBriefing(briefingId: String, userId: String): Briefing
+            + getBriefingList(userId: String, date: LocalDate): List<Briefing>
+            - checkIdempotency(placeId: String, departureTime: LocalDateTime): Optional<Briefing>
+            - checkFreeTierLimit(userId: String, tier: String): boolean
+            - buildIdempotencyKey(placeId: String, departureTime: LocalDateTime): String
+            - determineBriefingType(statusLevel: StatusLevel): BriefingType
+            - buildBriefingContext(data: MonitorData, tier: String): BriefingContext
+            - isExpired(briefing: Briefing): boolean
+        }
+
+        BriefingServiceImpl ..|> BriefingService
+    }
+
+    ' ===== Repository Layer =====
+    package "repository" {
+        interface BriefingRepository {
+            + save(briefing: Briefing): Briefing
+            + findById(briefingId: String): Optional<Briefing>
+            + findByIdAndUserId(briefingId: String, userId: String): Optional<Briefing>
+            + findByIdempotencyKey(key: String): Optional<Briefing>
+            + findByUserIdAndDate(userId: String, date: LocalDate): List<Briefing>
+            + countByUserIdAndCreatedAtDate(userId: String, date: LocalDate): int
+            + saveBriefingLog(log: BriefingLog): void
+        }
+    }
+
+    ' ===== Text Generator (Interface + Impl) =====
+    package "generator" {
+        interface BriefingTextGenerator {
+            + generate(context: BriefingContext): BriefingText
+        }
+
+        class RuleBasedBriefingGenerator {
+            + generate(context: BriefingContext): BriefingText
+            - buildSafeText(): String
+            - buildWarningText(riskItems: List<RiskItem>): String
+            - joinRiskLabels(riskItems: List<RiskItem>): String
+        }
+
+        RuleBasedBriefingGenerator ..|> BriefingTextGenerator
+    }
+
+    ' ===== External Client =====
+    package "client" {
+        class MonitorServiceClient {
+            - baseUrl: String
+            + getLatestStatus(placeId: String): MonitorData
+        }
+
+        class PayServiceClient {
+            - baseUrl: String
+            + getSubscriptionInfo(userId: String): SubscriptionInfo
+        }
+
+        class FcmClient {
+            - fcmServerKey: String
+            + sendPush(userId: String, title: String, body: String, data: Map<String, String>): void
+        }
+
+        class EventPublisher {
+            + publishBriefingCreated(event: BriefingCreatedEvent): void
+        }
+    }
+
+    ' ===== Domain Model =====
+    package "domain" {
+        class Briefing {
+            - id: String
+            - userId: String
+            - scheduleItemId: String
+            - placeId: String
+            - placeName: String
+            - type: BriefingType
+            - departureTime: LocalDateTime
+            - idempotencyKey: String
+            - content: BriefingContent
+            - summaryText: String
+            - statusLevel: StatusLevel
+            - riskItems: List<RiskItem>
+            - createdAt: LocalDateTime
+            + Briefing()
+            + isExpired(): boolean
+            + getAlternativeLink(): String
+            + isSafe(): boolean
+        }
+
+        class BriefingContent {
+            - businessStatus: String
+            - congestion: String
+            - weather: String
+            - walkingMinutes: int
+            - transitMinutes: Integer
+            - distanceM: int
+            + BriefingContent()
+        }
+
+        class BriefingContext {
+            - placeStatus: MonitorData
+            - statusLevel: StatusLevel
+            - riskItems: List<RiskItem>
+            - subscriptionTier: String
+            + BriefingContext(placeStatus: MonitorData, statusLevel: StatusLevel, riskItems: List<RiskItem>, subscriptionTier: String)
+        }
+
+        class BriefingText {
+            - text: String
+            + BriefingText(text: String)
+            + getText(): String
+        }
+
+        class RiskItem {
+            - label: String
+            - severity: String
+            + RiskItem(label: String, severity: String)
+        }
+
+        class BriefingLog {
+            - id: String
+            - briefingId: String
+            - userId: String
+            - status: String
+            - reason: String
+            - readAt: LocalDateTime
+            - readLatencySeconds: int
+            - createdAt: LocalDateTime
+        }
+
+        enum StatusLevel {
+            SAFE
+            CAUTION
+            DANGER
+        }
+
+        Briefing o-- BriefingContent
+        Briefing "1" o-- "0..*" RiskItem
+        Briefing --> BriefingType
+        Briefing --> StatusLevel
+        BriefingContext o-- "0..*" RiskItem
+        BriefingContext --> StatusLevel
+    }
+
+    ' ===== DTO =====
+    package "dto" {
+        package "request" {
+            class GenerateBriefingRequest {
+                - scheduleItemId: String
+                - placeId: String
+                - userId: String
+                - departureTime: LocalDateTime
+                - triggeredAt: LocalDateTime
+                + validate(): void
+            }
+        }
+
+        package "response" {
+            class BriefingDetailResponse {
+                - briefingId: String
+                - type: String
+                - placeId: String
+                - placeName: String
+                - departureTime: LocalDateTime
+                - createdAt: LocalDateTime
+                - expired: boolean
+                - expireMessage: String
+                - content: BriefingContentDto
+                - alternativeLink: String
+                + {static} from(briefing: Briefing, expired: boolean): BriefingDetailResponse
+            }
+            class BriefingListResponse {
+                - date: LocalDate
+                - briefings: List<BriefingListItemDto>
+                + {static} of(date: LocalDate, briefings: List<Briefing>): BriefingListResponse
+            }
+            class BriefingListItemDto {
+                - briefingId: String
+                - type: String
+                - placeName: String
+                - createdAt: LocalDateTime
+                - expired: boolean
+                + {static} from(briefing: Briefing): BriefingListItemDto
+            }
+            class BriefingContentDto {
+                - businessStatus: String
+                - congestion: String
+                - weather: String
+                - travelTime: TravelTimeDto
+                - summary: String
+            }
+            class GenerateBriefingResponse {
+                - briefingId: String
+                - status: String
+                - type: String
+                + {static} created(briefingId: String, type: BriefingType): GenerateBriefingResponse
+                + {static} existing(briefingId: String, type: BriefingType): GenerateBriefingResponse
+            }
+        }
+
+        package "internal" {
+            class GenerateBriefingResult {
+                - briefingId: String
+                - status: String
+                - type: BriefingType
+                + isCreated(): boolean
+                + isSkipped(): boolean
+            }
+            class MonitorData {
+                - placeId: String
+                - businessStatus: String
+                - congestion: String
+                - weather: String
+                - precipitationProb: int
+                - walkingMinutes: int
+                - transitMinutes: Integer
+                - distanceM: int
+                - overallStatus: String
+            }
+            class SubscriptionInfo {
+                - tier: String
+                - todayBriefingCount: int
+            }
+            class BriefingCreatedEvent {
+                - briefingId: String
+                - userId: String
+                - placeId: String
+                - type: BriefingType
+            }
+        }
+    }
+}
+
+' ===== 관계 =====
+BriefController --> BriefingService
+BriefingScheduler --> BriefingService
+
+BriefingServiceImpl --> BriefingRepository
+BriefingServiceImpl --> BriefingTextGenerator
+BriefingServiceImpl --> MonitorServiceClient
+BriefingServiceImpl --> PayServiceClient
+BriefingServiceImpl --> FcmClient
+BriefingServiceImpl --> EventPublisher
+
+BriefingRepository ..> Briefing
+BriefingRepository ..> BriefingLog
+
+BriefingTextGenerator ..> BriefingContext
+BriefingTextGenerator ..> BriefingText
+
+MonitorServiceClient ..> MonitorData
+PayServiceClient ..> SubscriptionInfo
+
+BriefingDetailResponse ..> BriefingContentDto
+BriefingListResponse ..> BriefingListItemDto
+EventPublisher ..> BriefingCreatedEvent
+
+@enduml

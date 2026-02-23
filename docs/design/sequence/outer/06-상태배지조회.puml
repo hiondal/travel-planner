@@ -1,110 +1,53 @@
-@startuml 상태배지조회
+@startuml
 !theme mono
 
-title 상태 배지 조회 플로우 - 시퀀스 다이어그램
+title 상태 배지 조회 (MNTR) [S05]
 
 actor "여행자" as user
-participant "프론트엔드\n(React Native)" as fe
+participant "모바일 클라이언트" as fe
 participant "API Gateway" as gw
-participant "MNTR 서비스\n(모니터링)" as mntr
-database "Redis Cache" as cache
+participant "MNTR 서비스" as mntr
+database "Redis 캐시(E)" as cache
 
-== 일정표 조회 및 배지 목록 보기 ==
-user -> fe: 일정표 탭 터치
-activate fe
-fe -> gw: GET /api/v1/schedules/{scheduleId}\n(Authorization: Bearer {token})
+== 상태 배지 목록 조회 ==
+user -> fe : 일정표 배지 새로고침 또는 화면 진입
+fe -> gw : GET /api/v1/badges?place_ids={ids}
 activate gw
-
-gw -> gw: JWT 토큰 검증
-gw -> mntr: GET /api/v1/monitoring/badges\n?place_ids={place_id1,place_id2,...}
+gw -> mntr : 배지 상태 목록 조회
 activate mntr
 
-alt 캐시 히트
-    mntr -> cache: GET status_badges\n(다중 place_id)
-    activate cache
-    cache -> mntr: {place_id: status_color, icon}
+mntr -> cache : 배지 캐시 일괄 조회\n(mntr:{place_id}:badge)
+activate cache
+
+alt 캐시 HIT (TTL 10분 이내)
+    cache --> mntr : 배지 상태 목록 반환
     deactivate cache
-else 캐시 미스
-    mntr -> mntr: 데이터 미확인 상태(회색) 반환
+    mntr --> gw : 초록+체크/노랑+느낌표/빨강+X/회색+물음표
+
+else 캐시 MISS
+    cache --> mntr : 캐시 없음
+    deactivate cache
+    mntr -> mntr : DB에서 최신 상태 조회
+    mntr -> cache : 캐시 갱신 (TTL 10분)
+    mntr --> gw : 배지 상태 목록 반환
 end
 
-mntr -> gw: 200 OK\n[{place_id, place_name, status_color, icon}, ...]
 deactivate mntr
-
-gw -> fe: 배지 목록 데이터 반환
+gw --> fe : 배지 상태 응답
 deactivate gw
+fe --> user : 장소별 상태 배지 표시\n(색상 + 아이콘 조합, 색약 지원)
 
-fe -> fe: 일정표 UI 렌더링\n색상 배지 + 아이콘 표시\n(초록/노랑/빨강/회색)
-deactivate fe
-
-fe -> user: 일정표 화면 표시
-
-== 배지 탭하여 상세 정보 조회 ==
-user -> fe: 노랑/빨강 배지 탭
-activate fe
-
-fe -> gw: GET /api/v1/monitoring/status/{placeId}\n(Authorization: Bearer {token})
+== 상태 상세 조회 ==
+user -> fe : 배지 탭 (노랑 또는 빨강)
+fe -> gw : GET /api/v1/badges/{place_id}/detail
 activate gw
-
-gw -> gw: JWT 토큰 검증
-gw -> mntr: GET /api/v1/monitoring/status/{placeId}
+gw -> mntr : 배지 상세 조회
 activate mntr
-
-alt 캐시 히트
-    mntr -> cache: GET monitoring_status\n{place_id}
-    activate cache
-    cache -> mntr: {영업상태, 혼잡도, 날씨, 이동시간, 수집시각}
-    deactivate cache
-else 캐시 미스
-    mntr -> mntr: 데이터 미확인 상태 반환\n"데이터를 일시적으로 사용할 수 없습니다"
-end
-
-mntr -> gw: 200 OK\nplace_name: 카페 A\nstatus_color: YELLOW\noperating_hours: 09:00 - 22:00 (영업 중)\ncrowdedness: 혼잡\nweather: 맑음 25도\ntravel_time: 15분 (도보)\nreason: 혼잡도 높음
+mntr --> gw : 영업상태, 혼잡도, 날씨,\n이동시간(도보/대중교통), 판정사유
 deactivate mntr
-
-gw -> fe: 상태 상세 정보 반환
+gw --> fe : 상세 정보 응답
 deactivate gw
 
-fe -> fe: 상태 상세 팝업 렌더링\n- 영업상태 표시\n- 혼잡도 바 그래프\n- 날씨 아이콘\n- 이동시간 표시\n- 판정 사유 안내
-
-alt 노랑/빨강 배지 & 대안 지원 상태
-    fe -> fe: "대안 보기" 버튼 표시\n(Trip Pass/Pro 티어)
-else 회색 배지 (데이터 미확인)
-    fe -> fe: "데이터 미확인" 메시지 표시\n새로고침 권장
-end
-
-deactivate fe
-
-fe -> user: 상태 상세 정보 팝업 표시
-
-== 분석 이벤트 기록 (P18) ==
-fe -> gw: POST /api/v1/analytics/events\n{event_type: "badge_details_viewed", place_id, status_color, timestamp}
-activate gw
-gw -> gw: 분석 이벤트 저장
-deactivate gw
-
-note right of fe
-배지 색상 및 아이콘:
-- 초록(GREEN): ✓ 모두 정상
-- 노랑(YELLOW): ⚠ 주의 필요
-- 빨강(RED): ✗ 위험
-- 회색(GRAY): ? 데이터 미확인
-end note
-
-note right of mntr
-상태 상세 조회 데이터:
-- 영업상태 (Open/Closed/Unknown)
-- 혼잡도 (Low/Moderate/High/Unknown)
-- 날씨 (온도, 습도, 강수확률)
-- 이동시간 (분 단위)
-- 판정 사유 (어떤 항목이 주의/위험인지)
-end note
-
-note right of cache
-캐시 구조:
-- Key: monitoring_status:{place_id}
-- TTL: 5분
-- 데이터: 원본 수집 데이터 + 수집 시각
-end note
+fe --> user : 상태 상세 팝업\n(노랑/빨강 시 "대안 보기" 버튼 포함)
 
 @enduml

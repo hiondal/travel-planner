@@ -1,0 +1,354 @@
+@startuml
+!theme mono
+
+title AI Pipeline 서비스 - 클래스 다이어그램 (Python/FastAPI)
+
+' ─────────────────────────────────────────────
+' Router Layer (FastAPI APIRouter — Controller 역할)
+' ─────────────────────────────────────────────
+package "app.routers" {
+
+    class BriefingRouter <<FastAPI Router>> {
+        - briefing_service: BriefingSummaryService
+        + generate_summary(request: BriefingSummaryRequest): BriefingSummaryResponse
+    }
+
+    class AlternativeRouter <<FastAPI Router>> {
+        - weight_service: WeightCalculationService
+        + calculate_weights(request: WeightsCalculationRequest): WeightsCalculationResponse
+    }
+
+    class HealthRouter <<FastAPI Router>> {
+        - cache_manager: CacheManager
+        - llm_client: LLMClient
+        + get_health(): HealthResponse
+    }
+}
+
+' ─────────────────────────────────────────────
+' Service Layer
+' ─────────────────────────────────────────────
+package "app.services" {
+
+    class BriefingSummaryService {
+        - prompt_builder: PromptBuilder
+        - llm_client: LLMClient
+        - response_parser: ResponseParser
+        - cache_manager: CacheManager
+        + generate(request: BriefingSummaryRequest): BriefingSummaryResponse
+        - _build_cache_key(request: BriefingSummaryRequest): str
+        - _apply_rule_fallback(request: BriefingSummaryRequest): str
+        - _graceful_degradation(): str
+    }
+
+    class WeightCalculationService {
+        - cache_manager: CacheManager
+        - prompt_builder: PromptBuilder
+        - llm_client: LLMClient
+        - response_parser: ResponseParser
+        + calculate(request: WeightsCalculationRequest): WeightsCalculationResponse
+        - _build_cache_key(user_id: str, category: str): str
+        - _fixed_weights_fallback(): ScoreWeights
+    }
+}
+
+' ─────────────────────────────────────────────
+' AI Core
+' ─────────────────────────────────────────────
+package "app.ai" {
+
+    class PromptBuilder {
+        - templates: dict
+        + build_briefing_prompt(request: BriefingSummaryRequest): str
+        + build_weights_prompt(request: WeightsCalculationRequest): str
+        - _render_template(template_name: str, context: dict): str
+        - _format_risk_items(risk_items: list): str
+        - _format_candidates(candidates: list): str
+    }
+
+    class LLMClient {
+        - settings: Settings
+        - _circuit_breaker: CircuitBreaker
+        - _http_client: AsyncClient
+        + call_async(prompt: str, max_tokens: int, temperature: float): str
+        - _build_request_body(prompt: str, max_tokens: int, temperature: float): dict
+        - _handle_response(response: dict): str
+        - _retry_with_backoff(prompt: str, max_tokens: int, temperature: float): str
+    }
+
+    class CircuitBreaker {
+        - failure_count: int
+        - failure_threshold: int
+        - recovery_timeout_sec: int
+        - last_failure_time: float
+        - state: str
+        + is_open(): bool
+        + record_failure(): None
+        + record_success(): None
+        + reset(): None
+    }
+
+    class ResponseParser {
+        + parse_briefing_summary(raw_response: str): str
+        + parse_weights(raw_response: str): ScoreWeights
+        - _validate_json(raw: str): dict
+        - _validate_weights_sum(weights: ScoreWeights): bool
+        - _sanitize_text(text: str): str
+    }
+}
+
+' ─────────────────────────────────────────────
+' Cache
+' ─────────────────────────────────────────────
+package "app.cache" {
+
+    class CacheManager {
+        - settings: Settings
+        - _redis: Redis
+        + get(key: str): str
+        + set(key: str, value: str, ttl_sec: int): None
+        + delete(key: str): None
+        + ping(): bool
+    }
+}
+
+' ─────────────────────────────────────────────
+' Models (Pydantic)
+' ─────────────────────────────────────────────
+package "app.models" {
+
+    package "app.models.request" {
+
+        class BriefingSummaryRequest <<pydantic>> {
+            + briefing_id: str
+            + place_info: PlaceInfo
+            + collected_data: CollectedData
+            + status_level: StatusLevel
+            + risk_items: list[RiskItem]
+            + subscription_tier: SubscriptionTier
+            + locale: str
+        }
+
+        class WeightsCalculationRequest <<pydantic>> {
+            + user_id: str
+            + category: PlaceCategory
+            + time_of_day: str
+            + user_profile: UserProfile
+            + selection_history: list[SelectionHistoryItem]
+            + place_candidates: list[PlaceCandidate]
+        }
+
+        class PlaceInfo <<pydantic>> {
+            + place_id: str
+            + name: str
+            + category: PlaceCategory
+            + address: str
+        }
+
+        class CollectedData <<pydantic>> {
+            + business_status: str
+            + weather: WeatherData
+            + congestion: CongestionData
+            + travel_time_min: int
+            + collected_at: str
+        }
+
+        class WeatherData <<pydantic>> {
+            + condition: str
+            + temperature_celsius: float
+            + precipitation_mm: float
+        }
+
+        class CongestionData <<pydantic>> {
+            + level: str
+            + occupancy_rate: float
+        }
+
+        class RiskItem <<pydantic>> {
+            + code: str
+            + label: str
+        }
+
+        class UserProfile <<pydantic>> {
+            + preferred_categories: list[PlaceCategory]
+            + travel_style: str
+        }
+
+        class SelectionHistoryItem <<pydantic>> {
+            + place_id: str
+            + category: PlaceCategory
+            + selected_at: str
+            + rank_at_selection: int
+        }
+
+        class PlaceCandidate <<pydantic>> {
+            + place_id: str
+            + name: str
+            + distance_m: int
+            + rating: float
+            + congestion_level: str
+        }
+    }
+
+    package "app.models.response" {
+
+        class BriefingSummaryResponse <<pydantic>> {
+            + summary_text: str
+            + source: str
+            + model_used: str
+            + latency_ms: int
+            + token_usage: TokenUsage
+            + cache_hit: bool
+        }
+
+        class WeightsCalculationResponse <<pydantic>> {
+            + weights: ScoreWeights
+            + source: str
+            + model_used: str
+            + latency_ms: int
+            + token_usage: TokenUsage
+            + cache_hit: bool
+        }
+
+        class ScoreWeights <<pydantic>> {
+            + w1: float
+            + w2: float
+            + w3: float
+        }
+
+        class TokenUsage <<pydantic>> {
+            + prompt_tokens: int
+            + completion_tokens: int
+            + total_tokens: int
+        }
+
+        class HealthResponse <<pydantic>> {
+            + status: str
+            + timestamp: str
+            + version: str
+            + components: ComponentsStatus
+        }
+
+        class ComponentsStatus <<pydantic>> {
+            + llm_api: ComponentStatus
+            + ml_model: ComponentStatus
+            + redis_cache: ComponentStatus
+        }
+
+        class ComponentStatus <<pydantic>> {
+            + status: str
+            + latency_ms: int
+            + detail: str
+        }
+    }
+
+    package "app.models.enums" {
+
+        enum StatusLevel {
+            SAFE
+            CAUTION
+            DANGER
+        }
+
+        enum SubscriptionTier {
+            FREE
+            TRIP_PASS
+            PRO
+        }
+
+        enum PlaceCategory {
+            RESTAURANT
+            CAFE
+            ATTRACTION
+            SHOPPING
+            ACCOMMODATION
+            TRANSPORT
+            OTHER
+        }
+    }
+}
+
+' ─────────────────────────────────────────────
+' Config
+' ─────────────────────────────────────────────
+package "app.config" {
+
+    class Settings <<pydantic>> {
+        + azure_openai_endpoint: str
+        + azure_openai_api_key: str
+        + azure_openai_deployment: str
+        + azure_openai_api_version: str
+        + redis_url: str
+        + briefing_cache_ttl_sec: int
+        + weights_cache_ttl_sec: int
+        + llm_circuit_breaker_threshold: int
+        + llm_circuit_breaker_recovery_sec: int
+        + llm_max_tokens: int
+        + llm_temperature: float
+        + app_version: str
+    }
+}
+
+' ─────────────────────────────────────────────
+' 관계 정의
+' ─────────────────────────────────────────────
+
+' Router -> Service
+BriefingRouter --> BriefingSummaryService
+AlternativeRouter --> WeightCalculationService
+HealthRouter --> CacheManager
+HealthRouter --> LLMClient
+
+' Service -> AI Core / Cache
+BriefingSummaryService --> PromptBuilder
+BriefingSummaryService --> LLMClient
+BriefingSummaryService --> ResponseParser
+BriefingSummaryService --> CacheManager
+
+WeightCalculationService --> PromptBuilder
+WeightCalculationService --> LLMClient
+WeightCalculationService --> ResponseParser
+WeightCalculationService --> CacheManager
+
+' AI Core 내부
+LLMClient --> CircuitBreaker
+LLMClient --> Settings
+
+' Cache -> Config
+CacheManager --> Settings
+
+' Router <-> Request/Response Models
+BriefingRouter ..> BriefingSummaryRequest
+BriefingRouter ..> BriefingSummaryResponse
+AlternativeRouter ..> WeightsCalculationRequest
+AlternativeRouter ..> WeightsCalculationResponse
+HealthRouter ..> HealthResponse
+
+' Request 모델 내부 구성
+BriefingSummaryRequest *-- PlaceInfo
+BriefingSummaryRequest *-- CollectedData
+BriefingSummaryRequest *-- RiskItem
+BriefingSummaryRequest --> StatusLevel
+BriefingSummaryRequest --> SubscriptionTier
+
+CollectedData *-- WeatherData
+CollectedData *-- CongestionData
+
+WeightsCalculationRequest *-- UserProfile
+WeightsCalculationRequest *-- SelectionHistoryItem
+WeightsCalculationRequest *-- PlaceCandidate
+WeightsCalculationRequest --> PlaceCategory
+
+PlaceInfo --> PlaceCategory
+
+' Response 모델 내부 구성
+BriefingSummaryResponse *-- TokenUsage
+WeightsCalculationResponse *-- ScoreWeights
+WeightsCalculationResponse *-- TokenUsage
+HealthResponse *-- ComponentsStatus
+ComponentsStatus *-- ComponentStatus
+
+' ResponseParser -> 모델
+ResponseParser ..> ScoreWeights
+
+@enduml

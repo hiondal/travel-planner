@@ -1,0 +1,53 @@
+@startuml
+!theme mono
+
+title AUTH 서비스 - 요약 클래스 다이어그램
+
+package "com.travelplanner.auth" {
+    package "controller" {
+        class AuthController
+    }
+    package "service" {
+        interface AuthService
+        class AuthServiceImpl
+    }
+    package "repository" {
+        interface UserRepository
+        interface ConsentRepository
+        interface AuthSessionRepository
+    }
+    package "client" {
+        class OAuthClient
+    }
+    package "domain" {
+        class User
+        class Consent
+        class AuthSession
+    }
+}
+
+note right of AuthController
+  API 매핑표
+  ---
+  socialLogin: POST /auth/social-login 소셜 로그인
+  refreshToken: POST /auth/token/refresh Access Token 갱신
+  logout: POST /auth/logout 로그아웃
+  invalidateAndReissueToken: POST /auth/token/invalidate 토큰 즉시 무효화
+  saveConsent: POST /users/consent 사용자 동의 이력 저장
+end note
+
+AuthController --> AuthService
+AuthServiceImpl ..|> AuthService
+AuthServiceImpl --> UserRepository
+AuthServiceImpl --> ConsentRepository
+AuthServiceImpl --> AuthSessionRepository
+AuthServiceImpl --> OAuthClient
+AuthServiceImpl --> JwtProvider
+
+UserRepository ..> User
+ConsentRepository ..> Consent
+AuthSessionRepository ..> AuthSession
+
+User --> SubscriptionTier
+
+@enduml

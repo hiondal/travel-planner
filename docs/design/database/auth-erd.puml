@@ -1,0 +1,92 @@
+@startuml
+!theme mono
+
+title AUTH 서비스 - Entity Relationship Diagram
+
+!define TABLE(name,desc) class name as "desc" << (T,#FFAAAA) >>
+!define PK(x) <b>x</b>
+!define FK(x) <i>x</i>
+!define UNIQUE(x) <u>x</u>
+
+TABLE(users, "USERS\n(사용자)") {
+    PK(id: VARCHAR(36))
+    --
+    UNIQUE(provider_id: VARCHAR(200)) NOT NULL
+    provider: VARCHAR(20) NOT NULL
+    email: VARCHAR(200) NOT NULL
+    nickname: VARCHAR(100) NOT NULL
+    avatar_url: VARCHAR(500)
+    tier: VARCHAR(20) NOT NULL DEFAULT 'FREE'
+    --
+    created_at: TIMESTAMPTZ NOT NULL
+    updated_at: TIMESTAMPTZ NOT NULL
+}
+
+TABLE(consents, "CONSENTS\n(사용자 동의)") {
+    PK(id: VARCHAR(36))
+    --
+    FK(user_id: VARCHAR(36)) NOT NULL
+    location: BOOLEAN NOT NULL
+    push: BOOLEAN NOT NULL
+    consented_at: TIMESTAMPTZ NOT NULL
+    --
+    created_at: TIMESTAMPTZ NOT NULL
+}
+
+TABLE(refresh_tokens, "REFRESH_TOKENS\n(리프레시 토큰)") {
+    PK(id: VARCHAR(36))
+    --
+    FK(user_id: VARCHAR(36)) NOT NULL
+    UNIQUE(refresh_token: VARCHAR(500)) NOT NULL
+    expires_at: TIMESTAMPTZ NOT NULL
+    --
+    created_at: TIMESTAMPTZ NOT NULL
+}
+
+' 관계 정의
+users ||--o{ consents : "has consents"
+users ||--o{ refresh_tokens : "has tokens"
+
+note top of users
+  <b>Indexes:</b>
+  • idx_users_provider_provider_id (provider, provider_id) UNIQUE
+  • idx_users_email (email)
+
+  <b>Check Constraints:</b>
+  • tier IN ('FREE', 'TRIP_PASS', 'PRO')
+  • provider IN ('GOOGLE', 'APPLE')
+end note
+
+note bottom of consents
+  <b>Indexes:</b>
+  • idx_consents_user_id_created_at (user_id, created_at DESC)
+
+  <b>Design Note:</b>
+  • Append-only: 동의 이력 전체 보존
+  • findLatestByUserId로 최신 동의 조회
+end note
+
+note bottom of refresh_tokens
+  <b>Indexes:</b>
+  • idx_refresh_tokens_user_id (user_id)
+  • idx_refresh_tokens_refresh_token (refresh_token) UNIQUE
+  • idx_refresh_tokens_expires_at (expires_at)
+
+  <b>Design Note:</b>
+  • Redis DB1 폴백용 영속 저장소
+  • TTL 만료 토큰 배치 삭제 대상
+end note
+
+legend right
+  <b>Redis Cache:</b>
+  DB 0 (공통): auth:blacklist:{jti}
+  DB 1 (AUTH):  auth:refresh:{userId}
+                auth:session:{refreshToken}
+
+  <b>Legend:</b>
+  PK = Primary Key
+  FK = Foreign Key (서비스 내부)
+  UNIQUE = Unique Constraint
+end legend
+
+@enduml

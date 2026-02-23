@@ -1,0 +1,103 @@
+@startuml
+!theme mono
+
+title BRIEFING 서비스 - Entity Relationship Diagram
+
+!define TABLE(name,desc) class name as "desc" << (T,#FFAAAA) >>
+!define PK(x) <b>x</b>
+!define FK(x) <i>x</i>
+!define UNIQUE(x) <u>x</u>
+
+TABLE(briefings, "BRIEFINGS\n(브리핑)") {
+    PK(id: VARCHAR(36))
+    --
+    user_id: VARCHAR(36) NOT NULL
+    schedule_item_id: VARCHAR(36) NOT NULL
+    place_id: VARCHAR(200) NOT NULL
+    place_name: VARCHAR(200) NOT NULL
+    type: VARCHAR(10) NOT NULL
+    departure_time: TIMESTAMPTZ NOT NULL
+    UNIQUE(idempotency_key: VARCHAR(200)) NOT NULL
+    --
+    summary_text: TEXT NOT NULL
+    status_level: VARCHAR(10) NOT NULL
+    business_status: VARCHAR(50)
+    congestion: VARCHAR(50)
+    weather: VARCHAR(100)
+    walking_minutes: INTEGER
+    transit_minutes: INTEGER
+    distance_m: INTEGER
+    risk_items: JSONB
+    --
+    created_at: TIMESTAMPTZ NOT NULL
+}
+
+TABLE(briefing_logs, "BRIEFING_LOGS\n(브리핑 이력)") {
+    PK(id: VARCHAR(36))
+    --
+    FK(briefing_id: VARCHAR(36)) NOT NULL
+    user_id: VARCHAR(36) NOT NULL
+    status: VARCHAR(20) NOT NULL
+    reason: VARCHAR(200)
+    read_at: TIMESTAMPTZ
+    read_latency_seconds: INTEGER
+    --
+    created_at: TIMESTAMPTZ NOT NULL
+}
+
+' 관계 정의
+briefings ||--o{ briefing_logs : "has logs"
+
+note top of briefings
+  <b>Indexes:</b>
+  • idx_briefings_user_id_created_at (user_id, created_at DESC)
+  • idx_briefings_user_id_departure_date
+    (user_id, DATE(departure_time))
+  • idx_briefings_idempotency_key UNIQUE
+  • idx_briefings_schedule_item_id (schedule_item_id)
+
+  <b>Check Constraints:</b>
+  • type IN ('SAFE', 'WARNING')
+  • status_level IN ('SAFE', 'CAUTION', 'DANGER')
+
+  <b>External References (no FK):</b>
+  • user_id → AUTH.users.id
+  • schedule_item_id → SCHEDULE.schedule_items.id
+  • place_id → PLACE.places.id
+
+  <b>Idempotency Key:</b>
+  {placeId}:{departureTime 시간 단위 반올림}
+end note
+
+note bottom of briefing_logs
+  <b>Indexes:</b>
+  • idx_briefing_logs_user_id_created_at
+    (user_id, created_at DESC)
+  • idx_briefing_logs_briefing_id (briefing_id)
+  • idx_briefing_logs_user_id_date
+    (user_id, DATE(created_at))
+
+  <b>Status Values:</b>
+  • CREATED: 신규 생성
+  • SKIPPED: 멱등성 중복
+  • FAILED: 생성 실패
+end note
+
+legend right
+  <b>Redis Cache (DB 5):</b>
+  brif:briefing:{briefingId}    TTL 30분
+  brif:list:{userId}:{date}     TTL 10분
+  brif:count:{userId}:{date}    TTL 자정까지
+  brif:idem:{idempotencyKey}    TTL 2시간
+
+  <b>External Services:</b>
+  MonitorServiceClient (상태 조회)
+  PayServiceClient (구독 정보/제한 확인)
+  FcmClient (푸시 발송)
+
+  <b>Legend:</b>
+  PK = Primary Key
+  FK = Foreign Key
+end legend
+
+@enduml

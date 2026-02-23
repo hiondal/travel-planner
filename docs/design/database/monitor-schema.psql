@@ -1,0 +1,107 @@
+-- =============================================================
+-- MONITOR 서비스 스키마 스크립트
+-- DBMS: PostgreSQL
+-- 서비스: com.travelplanner.monitor
+-- =============================================================
+
+CREATE SCHEMA IF NOT EXISTS monitor;
+
+SET search_path = monitor;
+
+-- =============================================================
+-- TABLE: monitoring_targets
+-- =============================================================
+CREATE TABLE monitoring_targets (
+    id                          VARCHAR(36)     NOT NULL,
+    place_id                    VARCHAR(200)    NOT NULL,
+    trip_id                     VARCHAR(36)     NOT NULL,
+    schedule_item_id            VARCHAR(36)     NOT NULL,
+    user_id                     VARCHAR(36)     NOT NULL,
+    visit_datetime              TIMESTAMPTZ     NOT NULL,
+    lat                         NUMERIC(10,7)   NOT NULL,
+    lng                         NUMERIC(10,7)   NOT NULL,
+    category                    VARCHAR(50),
+    current_status              VARCHAR(10)     NOT NULL DEFAULT 'GREY',
+    current_status_updated_at   TIMESTAMPTZ,
+    consecutive_failure_count   INTEGER         NOT NULL DEFAULT 0,
+    created_at                  TIMESTAMPTZ     NOT NULL DEFAULT NOW(),
+
+    CONSTRAINT pk_monitoring_targets PRIMARY KEY (id),
+    CONSTRAINT uq_monitoring_targets_schedule_item_id UNIQUE (schedule_item_id),
+    CONSTRAINT chk_monitoring_targets_status CHECK (
+        current_status IN ('GREEN', 'YELLOW', 'RED', 'GREY')
+    )
+);
+
+CREATE INDEX idx_monitoring_targets_place_id ON monitoring_targets (place_id);
+CREATE INDEX idx_monitoring_targets_visit_datetime ON monitoring_targets (visit_datetime);
+CREATE INDEX idx_monitoring_targets_user_id ON monitoring_targets (user_id);
+CREATE UNIQUE INDEX idx_monitoring_targets_schedule_item_id ON monitoring_targets (schedule_item_id);
+
+COMMENT ON TABLE monitoring_targets IS '모니터링 대상 장소 (ScheduleItemAddedEvent 수신 시 등록)';
+COMMENT ON COLUMN monitoring_targets.place_id IS 'PLACE 서비스 참조 (DB FK 없음)';
+COMMENT ON COLUMN monitoring_targets.trip_id IS 'SCHEDULE 서비스 참조 (DB FK 없음)';
+COMMENT ON COLUMN monitoring_targets.schedule_item_id IS 'SCHEDULE 서비스 참조 (DB FK 없음), 서비스 내 UNIQUE';
+COMMENT ON COLUMN monitoring_targets.current_status IS '비정규화 현재 상태 — 배지 조회 성능 최적화';
+COMMENT ON COLUMN monitoring_targets.consecutive_failure_count IS '연속 외부 API 수집 실패 횟수';
+
+-- =============================================================
+-- TABLE: status_history (append-only, 월별 파티셔닝 대상)
+-- =============================================================
+CREATE TABLE status_history (
+    id                  VARCHAR(36)     NOT NULL,
+    place_id            VARCHAR(200)    NOT NULL,
+    schedule_item_id    VARCHAR(36)     NOT NULL,
+    status              VARCHAR(10)     NOT NULL,
+    reason              TEXT,
+    judgment_at         TIMESTAMPTZ     NOT NULL,
+    confidence_score    NUMERIC(4,3),
+
+    CONSTRAINT pk_status_history PRIMARY KEY (id),
+    CONSTRAINT chk_status_history_status CHECK (
+        status IN ('GREEN', 'YELLOW', 'RED', 'GREY')
+    ),
+    CONSTRAINT chk_status_history_confidence CHECK (
+        confidence_score IS NULL OR confidence_score BETWEEN 0.000 AND 1.000
+    )
+) PARTITION BY RANGE (judgment_at);
+
+-- 초기 파티션 생성 (운영 시 월별 자동 생성 필요)
+CREATE TABLE status_history_2026_02
+    PARTITION OF status_history
+    FOR VALUES FROM ('2026-02-01') TO ('2026-03-01');
+
+CREATE TABLE status_history_2026_03
+    PARTITION OF status_history
+    FOR VALUES FROM ('2026-03-01') TO ('2026-04-01');
+
+CREATE INDEX idx_status_history_place_id_judgment_at ON status_history (place_id, judgment_at DESC);
+CREATE INDEX idx_status_history_schedule_item_id ON status_history (schedule_item_id);
+CREATE INDEX idx_status_history_judgment_at ON status_history (judgment_at);
+
+COMMENT ON TABLE status_history IS '상태 판정 이력 (append-only, 6개월+ 보존 [T4])';
+COMMENT ON COLUMN status_history.confidence_score IS 'Phase 2 ML 모델 학습 레이블용';
+
+-- =============================================================
+-- TABLE: collected_data
+-- =============================================================
+CREATE TABLE collected_data (
+    id                  VARCHAR(36)     NOT NULL,
+    place_id            VARCHAR(200)    NOT NULL,
+    business_status     VARCHAR(20),
+    precipitation_prob  INTEGER,
+    weather_condition   VARCHAR(50),
+    walking_minutes     INTEGER,
+    transit_minutes     INTEGER,
+    distance_m          INTEGER,
+    congestion_level    VARCHAR(20),
+    has_fallback        BOOLEAN         NOT NULL DEFAULT FALSE,
+    collected_at        TIMESTAMPTZ     NOT NULL DEFAULT NOW(),
+
+    CONSTRAINT pk_collected_data PRIMARY KEY (id)
+);
+
+CREATE INDEX idx_collected_data_place_id_collected_at ON collected_data (place_id, collected_at DESC);
+
+COMMENT ON TABLE collected_data IS '외부 API 수집 원본 데이터 (폴백 캐시 및 판정 근거 보존)';
+COMMENT ON COLUMN collected_data.has_fallback IS '폴백 데이터 포함 시 TRUE — 신뢰도 낮음 표시';

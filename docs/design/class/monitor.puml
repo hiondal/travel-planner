@@ -1,0 +1,340 @@
+@startuml
+!theme mono
+
+title MONITOR 서비스 - 클래스 다이어그램
+
+package "com.travelplanner.monitor" {
+
+    ' ===== Controller Layer =====
+    package "controller" {
+        class MntrController {
+            - badgeService: BadgeService
+            - dataCollectionService: DataCollectionService
+            + getBadges(placeIds: String, principal: UserPrincipal): ResponseEntity<BadgeListResponse>
+            + getStatusDetail(placeId: String, principal: UserPrincipal): ResponseEntity<StatusDetailResponse>
+            + triggerDataCollection(request: CollectTriggerRequest): ResponseEntity<CollectTriggerResponse>
+            - parsePlaceIds(placeIds: String): List<String>
+        }
+    }
+
+    ' ===== Service Layer =====
+    package "service" {
+        interface BadgeService {
+            + getBadgeStatuses(placeIds: List<String>): List<StatusBadge>
+            + getStatusDetail(placeId: String): StatusDetail
+        }
+
+        class BadgeServiceImpl {
+            - monitoringRepository: MonitoringRepository
+            - statusHistoryRepository: StatusHistoryRepository
+            - cacheManager: CacheManager
+            + getBadgeStatuses(placeIds: List<String>): List<StatusBadge>
+            + getStatusDetail(placeId: String): StatusDetail
+            - buildBadge(status: PlaceStatusEnum): StatusBadge
+            - buildCacheKey(placeId: String): String
+        }
+
+        interface DataCollectionService {
+            + triggerCollection(triggeredBy: String, triggeredAt: LocalDateTime): CollectionJob
+            + collectForTarget(target: MonitoringTarget): CollectedData
+        }
+
+        class DataCollectionServiceImpl {
+            - monitoringRepository: MonitoringRepository
+            - statusHistoryRepository: StatusHistoryRepository
+            - googlePlacesClient: GooglePlacesClient
+            - weatherClient: OpenWeatherMapClient
+            - directionsClient: GoogleDirectionsClient
+            - statusJudgmentService: StatusJudgmentService
+            - eventPublisher: EventPublisher
+            - cacheManager: CacheManager
+            + triggerCollection(triggeredBy: String, triggeredAt: LocalDateTime): CollectionJob
+            + collectForTarget(target: MonitoringTarget): CollectedData
+            - collectBusinessStatus(placeId: String): BusinessStatusData
+            - collectWeatherData(lat: double, lng: double): WeatherData
+            - collectTravelTimeData(originLat: double, originLng: double, destLat: double, destLng: double): TravelTimeData
+            - applyFallback(placeId: String, dataType: String): Object
+            - incrementFailureCount(placeId: String): int
+        }
+
+        class StatusJudgmentService {
+            - configClient: AzureAppConfigClient
+            + judge(data: CollectedData): PlaceStatusEnum
+            - judgeBusinessStatus(status: String): ItemStatus
+            - judgeWeather(precipitationProb: int): ItemStatus
+            - judgeCongestion(popularity: Integer): ItemStatus
+            - judgeTravelTime(actualMinutes: int, expectedMinutes: int): ItemStatus
+            - aggregateStatus(statuses: List<ItemStatus>): PlaceStatusEnum
+        }
+
+        BadgeServiceImpl ..|> BadgeService
+        DataCollectionServiceImpl ..|> DataCollectionService
+        DataCollectionServiceImpl --> StatusJudgmentService
+    }
+
+    ' ===== Repository Layer =====
+    package "repository" {
+        interface MonitoringRepository {
+            + findByPlaceId(placeId: String): Optional<MonitoringTarget>
+            + findUpcomingTargets(from: LocalDateTime, to: LocalDateTime): List<MonitoringTarget>
+            + save(target: MonitoringTarget): MonitoringTarget
+            + updateCurrentStatus(placeId: String, status: PlaceStatusEnum, updatedAt: LocalDateTime): void
+            + findCurrentStatus(placeId: String): Optional<CurrentStatus>
+        }
+
+        interface StatusHistoryRepository {
+            + save(history: StatusHistory): StatusHistory
+            + findLatestByPlaceId(placeId: String, limit: int): List<StatusHistory>
+            + findByPlaceIdAndJudgedAtBetween(placeId: String, from: LocalDateTime, to: LocalDateTime): List<StatusHistory>
+        }
+    }
+
+    ' ===== External Client =====
+    package "client" {
+        class GooglePlacesClient {
+            - apiKey: String
+            + getBusinessStatus(placeId: String): String
+            + getCurrentPopularity(placeId: String): Integer
+        }
+
+        class OpenWeatherMapClient {
+            - apiKey: String
+            + getForecast(lat: double, lng: double): WeatherForecast
+        }
+
+        class GoogleDirectionsClient {
+            - apiKey: String
+            + getTravelTime(originLat: double, originLng: double, destLat: double, destLng: double): int
+            + getTravelTimeWalking(originLat: double, originLng: double, destLat: double, destLng: double): int
+        }
+
+        class AzureAppConfigClient {
+            - connectionString: String
+            + getThreshold(key: String): int
+            + getCollectionConfig(): CollectionConfig
+        }
+
+        class EventPublisher {
+            + publishStatusChanged(event: PlaceStatusChangedEvent): void
+        }
+    }
+
+    ' ===== Domain Model =====
+    package "domain" {
+        class MonitoringTarget {
+            - id: String
+            - placeId: String
+            - tripId: String
+            - scheduleItemId: String
+            - userId: String
+            - visitDatetime: LocalDateTime
+            - lat: double
+            - lng: double
+            - category: String
+            - consecutiveFailureCount: int
+            - createdAt: LocalDateTime
+            + MonitoringTarget(placeId: String, tripId: String, scheduleItemId: String, userId: String, visitDatetime: LocalDateTime, lat: double, lng: double)
+            + incrementFailure(): void
+            + resetFailure(): void
+            + isWithinCollectionWindow(now: LocalDateTime, windowHours: int): boolean
+        }
+
+        class StatusBadge {
+            - placeId: String
+            - status: PlaceStatusEnum
+            - icon: BadgeIcon
+            - label: String
+            - colorHex: String
+            - updatedAt: LocalDateTime
+            + StatusBadge(placeId: String, status: PlaceStatusEnum, updatedAt: LocalDateTime)
+            + hasAlert(): boolean
+            + shouldShowAlternativeButton(): boolean
+        }
+
+        class CollectedData {
+            - placeId: String
+            - businessStatus: BusinessStatusData
+            - weatherData: WeatherData
+            - travelTimeData: TravelTimeData
+            - collectedAt: LocalDateTime
+            - hasFallback: boolean
+            + CollectedData(placeId: String)
+            + isComplete(): boolean
+        }
+
+        class StatusHistory {
+            - id: String
+            - placeId: String
+            - status: PlaceStatusEnum
+            - reason: String
+            - judgmentAt: LocalDateTime
+            - confidenceScore: Double
+            + StatusHistory(placeId: String, status: PlaceStatusEnum, reason: String, judgmentAt: LocalDateTime)
+        }
+
+        class CurrentStatus {
+            - placeId: String
+            - status: PlaceStatusEnum
+            - reason: String
+            - updatedAt: LocalDateTime
+        }
+
+        class BusinessStatusData {
+            - status: String
+            - isFallback: boolean
+        }
+
+        class WeatherData {
+            - precipitationProb: int
+            - condition: String
+            - isFallback: boolean
+        }
+
+        class TravelTimeData {
+            - walkingMinutes: int
+            - transitMinutes: Integer
+            - distanceM: int
+            - isFallback: boolean
+        }
+
+        class CollectionJob {
+            - jobId: String
+            - status: String
+            - targetCount: int
+            - triggeredAt: LocalDateTime
+        }
+
+        enum PlaceStatusEnum {
+            GREEN
+            YELLOW
+            RED
+            GREY
+            + isAlert(): boolean
+        }
+
+        enum BadgeIcon {
+            CHECK
+            EXCLAMATION
+            X
+            QUESTION
+        }
+
+        enum ItemStatus {
+            NORMAL
+            WARNING
+            DANGER
+        }
+
+        CollectedData o-- BusinessStatusData
+        CollectedData o-- WeatherData
+        CollectedData o-- TravelTimeData
+        StatusBadge --> PlaceStatusEnum
+        StatusBadge --> BadgeIcon
+    }
+
+    ' ===== DTO =====
+    package "dto" {
+        package "response" {
+            class BadgeListResponse {
+                - badges: List<BadgeItemDto>
+                + {static} of(badges: List<StatusBadge>): BadgeListResponse
+            }
+            class BadgeItemDto {
+                - placeId: String
+                - status: String
+                - icon: String
+                - label: String
+                - colorHex: String
+                - updatedAt: LocalDateTime
+                + {static} from(badge: StatusBadge): BadgeItemDto
+            }
+            class StatusDetailResponse {
+                - placeId: String
+                - placeName: String
+                - overallStatus: String
+                - details: StatusDetailsDto
+                - reason: String
+                - showAlternativeButton: boolean
+                - updatedAt: LocalDateTime
+            }
+            class StatusDetailsDto {
+                - businessStatus: StatusItemDto
+                - congestion: CongestionItemDto
+                - weather: WeatherItemDto
+                - travelTime: TravelTimeItemDto
+            }
+            class CollectTriggerResponse {
+                - jobId: String
+                - status: String
+                - targetCount: int
+                - triggeredAt: LocalDateTime
+                + {static} from(job: CollectionJob): CollectTriggerResponse
+            }
+        }
+
+        package "request" {
+            class CollectTriggerRequest {
+                - triggeredBy: String
+                - triggeredAt: LocalDateTime
+            }
+        }
+
+        package "internal" {
+            class StatusDetail {
+                - placeId: String
+                - placeName: String
+                - overallStatus: PlaceStatusEnum
+                - businessStatus: BusinessStatusData
+                - weatherData: WeatherData
+                - travelTimeData: TravelTimeData
+                - congestionValue: String
+                - reason: String
+                - showAlternativeButton: boolean
+                - updatedAt: LocalDateTime
+            }
+            class CollectionConfig {
+                - timeoutMs: int
+                - collectionWindowHours: int
+                - maxConsecutiveFailures: int
+            }
+            class PlaceStatusChangedEvent {
+                - placeId: String
+                - prevStatus: PlaceStatusEnum
+                - newStatus: PlaceStatusEnum
+                - changedAt: LocalDateTime
+            }
+            class WeatherForecast {
+                - precipitationProb: int
+                - condition: String
+            }
+        }
+    }
+}
+
+' ===== 관계 =====
+MntrController --> BadgeService
+MntrController --> DataCollectionService
+
+BadgeServiceImpl --> MonitoringRepository
+BadgeServiceImpl --> StatusHistoryRepository
+
+DataCollectionServiceImpl --> MonitoringRepository
+DataCollectionServiceImpl --> StatusHistoryRepository
+DataCollectionServiceImpl --> GooglePlacesClient
+DataCollectionServiceImpl --> OpenWeatherMapClient
+DataCollectionServiceImpl --> GoogleDirectionsClient
+DataCollectionServiceImpl --> EventPublisher
+
+StatusJudgmentService --> AzureAppConfigClient
+
+MonitoringRepository ..> MonitoringTarget
+MonitoringRepository ..> CurrentStatus
+StatusHistoryRepository ..> StatusHistory
+
+CollectedData ..> CollectionConfig
+EventPublisher ..> PlaceStatusChangedEvent
+
+BadgeListResponse ..> BadgeItemDto
+StatusDetailResponse ..> StatusDetailsDto
+
+@enduml

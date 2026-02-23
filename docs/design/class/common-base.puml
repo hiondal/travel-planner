@@ -1,0 +1,186 @@
+@startuml
+!theme mono
+
+title Travel Planner - 공통 컴포넌트 클래스 다이어그램
+
+package "com.travelplanner.common" {
+
+    ' ===== Exception =====
+    package "exception" {
+        class BusinessException {
+            - errorCode: String
+            - message: String
+            - status: int
+            + BusinessException(errorCode: String, message: String, status: int)
+            + getErrorCode(): String
+            + getMessage(): String
+            + getStatus(): int
+        }
+
+        class ValidationException {
+            - field: String
+            - rejectedValue: Object
+            + ValidationException(field: String, message: String, rejectedValue: Object)
+            + getField(): String
+            + getRejectedValue(): Object
+        }
+
+        class ConsentRequiredException {
+            + ConsentRequiredException()
+        }
+
+        class ResourceNotFoundException {
+            - resourceName: String
+            - resourceId: String
+            + ResourceNotFoundException(resourceName: String, resourceId: String)
+            + getResourceName(): String
+            + getResourceId(): String
+        }
+
+        class PaywallException {
+            - upgradeUrl: String
+            + PaywallException(upgradeUrl: String)
+            + getUpgradeUrl(): String
+        }
+
+        class ExternalApiException {
+            - provider: String
+            - cause: Throwable
+            + ExternalApiException(provider: String, message: String, cause: Throwable)
+            + getProvider(): String
+        }
+
+        ValidationException --|> BusinessException
+        ConsentRequiredException --|> BusinessException
+        ResourceNotFoundException --|> BusinessException
+        PaywallException --|> BusinessException
+        ExternalApiException --|> BusinessException
+    }
+
+    ' ===== Response Wrapper =====
+    package "response" {
+        class ApiResponse<T> {
+            - success: boolean
+            - data: T
+            - timestamp: LocalDateTime
+            + {static} ok(data: T): ApiResponse<T>
+            + {static} created(data: T): ApiResponse<T>
+            + {static} noContent(): ApiResponse<Void>
+        }
+
+        class ErrorResponse {
+            - error: String
+            - message: String
+            - timestamp: LocalDateTime
+            + {static} of(errorCode: String, message: String): ErrorResponse
+        }
+
+        class PageResponse<T> {
+            - content: List<T>
+            - page: int
+            - size: int
+            - totalElements: long
+            - totalPages: int
+            + {static} of(content: List<T>, page: int, size: int, total: long): PageResponse<T>
+        }
+    }
+
+    ' ===== Domain Base =====
+    package "domain" {
+        abstract class BaseEntity {
+            # id: String
+            + BaseEntity()
+            + getId(): String
+            # {static} generateId(prefix: String): String
+        }
+
+        abstract class BaseTimeEntity {
+            # createdAt: LocalDateTime
+            # updatedAt: LocalDateTime
+            + BaseTimeEntity()
+            # onPrePersist(): void
+            # onPreUpdate(): void
+        }
+
+        BaseTimeEntity --|> BaseEntity
+    }
+
+    ' ===== Security =====
+    package "security" {
+        class JwtToken {
+            - accessToken: String
+            - refreshToken: String
+            - expiresIn: int
+            + JwtToken(accessToken: String, refreshToken: String, expiresIn: int)
+            + getAccessToken(): String
+            + getRefreshToken(): String
+            + getExpiresIn(): int
+        }
+
+        class UserPrincipal {
+            - userId: String
+            - email: String
+            - tier: SubscriptionTier
+            + UserPrincipal(userId: String, email: String, tier: SubscriptionTier)
+            + getUserId(): String
+            + getEmail(): String
+            + getTier(): SubscriptionTier
+            + isFreeTier(): boolean
+            + isPaidTier(): boolean
+        }
+
+        class JwtProvider {
+            - secretKey: String
+            - accessTokenExpiry: int
+            - refreshTokenExpiry: int
+            + generateAccessToken(principal: UserPrincipal): String
+            + generateRefreshToken(userId: String): String
+            + validateToken(token: String): boolean
+            + parseToken(token: String): UserPrincipal
+            + invalidateToken(userId: String): void
+        }
+
+        JwtProvider ..> JwtToken : creates
+        JwtProvider ..> UserPrincipal : parses
+    }
+
+    ' ===== Enums =====
+    package "enums" {
+        enum SubscriptionTier {
+            FREE
+            TRIP_PASS
+            PRO
+            + isPaid(): boolean
+        }
+
+        enum OAuthProvider {
+            GOOGLE
+            APPLE
+        }
+
+        enum PlaceStatus {
+            GREEN
+            YELLOW
+            RED
+            GREY
+            + isAlert(): boolean
+        }
+
+        enum TripStatus {
+            ACTIVE
+            COMPLETED
+            CANCELLED
+        }
+
+        enum BriefingType {
+            SAFE
+            WARNING
+        }
+    }
+}
+
+' 관계
+UserPrincipal --> SubscriptionTier
+JwtProvider ..> UserPrincipal
+
+@enduml

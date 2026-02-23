@@ -1,0 +1,69 @@
+plugins {
+    id 'java'
+    id 'org.springframework.boot' version '3.4.3' apply false
+    id 'io.spring.dependency-management' version '1.1.6' apply false
+    id 'io.freefair.lombok' version '8.10' apply false
+}
+
+group = 'com.travelplanner'
+version = '1.0.0'
+
+allprojects {
+    repositories {
+        mavenCentral()
+        gradlePluginPortal()
+    }
+}
+
+subprojects {
+    apply plugin: 'java'
+    apply plugin: 'io.freefair.lombok'
+
+    java {
+        sourceCompatibility = JavaVersion.VERSION_21
+        targetCompatibility = JavaVersion.VERSION_21
+    }
+
+    configurations {
+        compileOnly {
+            extendsFrom annotationProcessor
+        }
+    }
+
+    tasks.named('test') {
+        useJUnitPlatform()
+    }
+
+    ext {
+        jjwtVersion = '0.12.5'
+        springdocVersion = '2.5.0'
+        mapstructVersion = '1.5.5.Final'
+        commonsLang3Version = '3.14.0'
+        resilience4jVersion = '2.2.0'
+    }
+}
+
+subprojects {
+    apply plugin: 'io.spring.dependency-management'
+
+    dependencyManagement {
+        imports {
+            mavenBom "org.springframework.cloud:spring-cloud-dependencies:2023.0.2"
+        }
+    }
+}
+
+configure(subprojects.findAll { it.name != 'common' }) {
+    apply plugin: 'org.springframework.boot'
+
+    dependencies {
+        implementation project(':common')
+        implementation 'org.springframework.boot:spring-boot-starter-actuator'
+        implementation "org.springdoc:springdoc-openapi-starter-webmvc-ui:${springdocVersion}"
+        testImplementation 'org.springframework.boot:spring-boot-starter-test'
+        testImplementation 'org.springframework.security:spring-security-test'
+        testImplementation 'org.testcontainers:junit-jupiter'
+        testImplementation 'org.mockito:mockito-junit-jupiter'
+        annotationProcessor 'org.springframework.boot:spring-boot-configuration-processor'
+    }
+}

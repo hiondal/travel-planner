@@ -1,0 +1,94 @@
+@startuml
+!theme mono
+
+title PAYMENT 서비스 - Entity Relationship Diagram
+
+!define TABLE(name,desc) class name as "desc" << (T,#FFAAAA) >>
+!define PK(x) <b>x</b>
+!define FK(x) <i>x</i>
+!define UNIQUE(x) <u>x</u>
+
+TABLE(subscriptions, "SUBSCRIPTIONS\n(구독)") {
+    PK(id: VARCHAR(36))
+    --
+    UNIQUE(user_id: VARCHAR(36)) NOT NULL
+    plan_id: VARCHAR(50) NOT NULL
+    tier: VARCHAR(20) NOT NULL
+    status: VARCHAR(20) NOT NULL
+    provider: VARCHAR(20) NOT NULL
+    transaction_id: VARCHAR(200)
+    started_at: TIMESTAMPTZ NOT NULL
+    expires_at: TIMESTAMPTZ
+    --
+    created_at: TIMESTAMPTZ NOT NULL
+    updated_at: TIMESTAMPTZ NOT NULL
+}
+
+TABLE(payment_records, "PAYMENT_RECORDS\n(결제 이력 - insert-only)") {
+    PK(id: VARCHAR(36))
+    --
+    FK(subscription_id: VARCHAR(36)) NOT NULL
+    user_id: VARCHAR(36) NOT NULL
+    UNIQUE(transaction_id: VARCHAR(200)) NOT NULL
+    amount: INTEGER NOT NULL
+    currency: VARCHAR(10) NOT NULL
+    provider: VARCHAR(20) NOT NULL
+    --
+    created_at: TIMESTAMPTZ NOT NULL
+}
+
+' 관계 정의
+subscriptions ||--o{ payment_records : "has payment records"
+
+note top of subscriptions
+  <b>Indexes:</b>
+  • idx_subscriptions_user_id (user_id) UNIQUE
+  • idx_subscriptions_status (status)
+  • idx_subscriptions_expires_at (expires_at)
+
+  <b>Check Constraints:</b>
+  • tier IN ('FREE', 'TRIP_PASS', 'PRO')
+  • status IN ('ACTIVE', 'CANCELLED', 'CANCELLING')
+  • provider IN ('APPLE', 'GOOGLE')
+
+  <b>External Reference (no FK):</b>
+  • user_id → AUTH.users.id
+
+  <b>Design Note:</b>
+  • user_id UNIQUE: 사용자당 1개 활성 구독
+  • SubscriptionPlan은 코드/설정 파일로 관리
+end note
+
+note bottom of payment_records
+  <b>Indexes:</b>
+  • idx_payment_records_user_id (user_id)
+  • idx_payment_records_subscription_id (subscription_id)
+  • idx_payment_records_transaction_id UNIQUE
+  • idx_payment_records_created_at (created_at)
+
+  <b>Foreign Key Actions:</b>
+  • subscription_id: ON DELETE RESTRICT
+
+  <b>Check Constraints:</b>
+  • amount > 0
+
+  <b>Design Note:</b>
+  • Insert-only (불변 레코드)
+  • transaction_id UNIQUE: 중복 결제 방지
+end note
+
+legend right
+  <b>Redis Cache (DB 7):</b>
+  pay:subscription:{userId}    TTL 5분
+
+  <b>External Services:</b>
+  IapVerificationClient (Apple/Google IAP)
+  AuthServiceClient (tier 업데이트 동기 호출)
+
+  <b>Legend:</b>
+  PK = Primary Key
+  FK = Foreign Key
+  UNIQUE = Unique Constraint
+end legend
+
+@enduml

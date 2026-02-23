@@ -1,0 +1,86 @@
+@startuml
+!theme mono
+
+title SCHEDULE 서비스 - Entity Relationship Diagram
+
+!define TABLE(name,desc) class name as "desc" << (T,#FFAAAA) >>
+!define PK(x) <b>x</b>
+!define FK(x) <i>x</i>
+!define UNIQUE(x) <u>x</u>
+
+TABLE(trips, "TRIPS\n(여행)") {
+    PK(id: VARCHAR(36))
+    --
+    user_id: VARCHAR(36) NOT NULL
+    name: VARCHAR(200) NOT NULL
+    start_date: DATE NOT NULL
+    end_date: DATE NOT NULL
+    city: VARCHAR(100) NOT NULL
+    status: VARCHAR(20) NOT NULL DEFAULT 'ACTIVE'
+    --
+    created_at: TIMESTAMPTZ NOT NULL
+    updated_at: TIMESTAMPTZ NOT NULL
+}
+
+TABLE(schedule_items, "SCHEDULE_ITEMS\n(일정 항목)") {
+    PK(id: VARCHAR(36))
+    --
+    FK(trip_id: VARCHAR(36)) NOT NULL
+    place_id: VARCHAR(200) NOT NULL
+    place_name: VARCHAR(200) NOT NULL
+    visit_datetime: TIMESTAMPTZ NOT NULL
+    timezone: VARCHAR(50) NOT NULL
+    sort_order: INTEGER NOT NULL DEFAULT 0
+    outside_business_hours: BOOLEAN NOT NULL DEFAULT FALSE
+    status: VARCHAR(20) NOT NULL DEFAULT 'ACTIVE'
+    --
+    created_at: TIMESTAMPTZ NOT NULL
+}
+
+' 관계 정의
+trips ||--o{ schedule_items : "contains items"
+
+note top of trips
+  <b>Indexes:</b>
+  • idx_trips_user_id (user_id)
+  • idx_trips_user_id_status (user_id, status)
+  • idx_trips_start_date_end_date (start_date, end_date)
+
+  <b>Check Constraints:</b>
+  • end_date >= start_date
+  • status IN ('ACTIVE', 'COMPLETED', 'CANCELLED')
+
+  <b>External Reference (no FK):</b>
+  • user_id → AUTH.users.id
+end note
+
+note bottom of schedule_items
+  <b>Indexes:</b>
+  • idx_schedule_items_trip_id (trip_id)
+  • idx_schedule_items_trip_id_visit_datetime (trip_id, visit_datetime)
+  • idx_schedule_items_trip_id_sort_order (trip_id, sort_order)
+  • idx_schedule_items_place_id (place_id)
+
+  <b>Foreign Key Actions:</b>
+  • trip_id: ON DELETE CASCADE
+
+  <b>External Reference (no FK):</b>
+  • place_id → PLACE.places.id
+  • place_name: 생성 시점 스냅샷 저장
+
+  <b>Events Published:</b>
+  • ScheduleItemAddedEvent → MONITOR
+  • ScheduleItemReplacedEvent → MONITOR
+end note
+
+legend right
+  <b>Redis Cache (DB 2):</b>
+  schd:trip:{tripId}      TTL 10분
+  schd:schedule:{tripId}  TTL 5분
+
+  <b>Legend:</b>
+  PK = Primary Key
+  FK = Foreign Key
+end legend
+
+@enduml

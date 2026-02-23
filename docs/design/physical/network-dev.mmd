@@ -1,0 +1,139 @@
+graph TB
+    %% =====================================================
+    %% Development Environment Network Diagram
+    %% travel-planner - Azure Cloud
+    %% =====================================================
+
+    %% External Zone
+    Dev[👨‍💻 개발자\nVPN/Direct]
+    QA[🧪 QA팀\nVPN/Direct]
+
+    %% =====================================================
+    subgraph AZURE["☁️ Azure Cloud"]
+
+        subgraph VNET["VNet  10.0.0.0/16"]
+
+            subgraph AKS_SUBNET["AKS Subnet  10.0.1.0/24"]
+
+                %% Ingress Layer
+                LB["🔀 LoadBalancer\nNGINX Ingress\nExternal IP\nHTTPS:443"]
+
+                subgraph INGRESS_POD["IngressPod"]
+                    ING["nginx-ingress-controller\n/api/auth/**  →  auth-svc\n/api/schedules/**  →  schedule-svc\n/api/places/**  →  place-svc\n/api/monitor/**  →  monitor-svc\n/api/briefings/**  →  briefing-svc\n/api/alternatives/**  →  alternative-svc\n/api/payments/**  →  payment-svc"]
+                end
+
+                LB --> ING
+
+                %% Application Tier
+                subgraph APP_TIER["Application Tier"]
+                    AUTH["AUTH Service Pod\nauth-service:8081"]
+                    SCHD["SCHD Service Pod\nschedule-service:8082"]
+                    PLCE["PLCE Service Pod\nplace-service:8083"]
+                    MNTR["MNTR Service Pod\nmonitor-service:8084"]
+                    BRIF["BRIF Service Pod\nbriefing-service:8085"]
+                    ALTN["ALTN Service Pod\nalternative-service:8086"]
+                    PAY["PAY Service Pod\npayment-service:8087"]
+                end
+
+                %% ClusterIP Services
+                subgraph CLUSTER_SVC["ClusterIP Services"]
+                    AUTH_SVC["auth-svc.default.svc\nClusterIP:8081"]
+                    SCHD_SVC["schedule-svc.default.svc\nClusterIP:8082"]
+                    PLCE_SVC["place-svc.default.svc\nClusterIP:8083"]
+                    MNTR_SVC["monitor-svc.default.svc\nClusterIP:8084"]
+                    BRIF_SVC["briefing-svc.default.svc\nClusterIP:8085"]
+                    ALTN_SVC["alternative-svc.default.svc\nClusterIP:8086"]
+                    PAY_SVC["pay-svc.default.svc\nClusterIP:8087"]
+                end
+
+                ING -->|ClusterIP| AUTH_SVC
+                ING -->|ClusterIP| SCHD_SVC
+                ING -->|ClusterIP| PLCE_SVC
+                ING -->|ClusterIP| MNTR_SVC
+                ING -->|ClusterIP| BRIF_SVC
+                ING -->|ClusterIP| ALTN_SVC
+                ING -->|ClusterIP| PAY_SVC
+
+                AUTH_SVC -->|Pod LB| AUTH
+                SCHD_SVC -->|Pod LB| SCHD
+                PLCE_SVC -->|Pod LB| PLCE
+                MNTR_SVC -->|Pod LB| MNTR
+                BRIF_SVC -->|Pod LB| BRIF
+                ALTN_SVC -->|Pod LB| ALTN
+                PAY_SVC -->|Pod LB| PAY
+
+                %% Database Tier
+                subgraph DB_TIER["Database Tier"]
+                    PG[("PostgreSQL Pod\npostgres:5432")]
+                    DISK["Azure Managed Disk\nPersistentVolume\n32GB Premium SSD"]
+                end
+
+                PG -->|데이터 영속화| DISK
+
+                AUTH -->|TCP:5432| PG
+                SCHD -->|TCP:5432| PG
+                PLCE -->|TCP:5432| PG
+                MNTR -->|TCP:5432| PG
+                BRIF -->|TCP:5432| PG
+                ALTN -->|TCP:5432| PG
+                PAY -->|TCP:5432| PG
+
+                %% Cache Tier
+                subgraph CACHE_TIER["Cache Tier"]
+                    REDIS[("Redis Pod\nredis:6379")]
+                end
+
+                PLCE -->|TCP:6379| REDIS
+                MNTR -->|TCP:6379| REDIS
+                ALTN -->|TCP:6379| REDIS
+
+            end
+
+            subgraph SB_SUBNET["Service Bus Subnet  10.0.2.0/24"]
+
+                subgraph SERVICE_BUS["Azure Service Bus Basic Tier"]
+                    SB_MQ1["Queue\nmonitor-status-change"]
+                    SB_MQ2["Queue\nbriefing-generation"]
+                    SB_MQ3["Queue\nalternative-search"]
+                end
+
+            end
+
+        end
+
+    end
+
+    %% External Connections
+    Dev -->|HTTPS:443| LB
+    QA -->|HTTPS:443| LB
+
+    %% Service → Service Bus (비동기 메시징)
+    MNTR -->|HTTPS/AMQP| SB_MQ1
+    SCHD -->|HTTPS/AMQP| SB_MQ2
+    ALTN -->|HTTPS/AMQP| SB_MQ3
+
+    BRIF -->|Subscribe| SB_MQ2
+    ALTN -->|Subscribe| SB_MQ1
+    SCHD -->|Subscribe| SB_MQ3
+
+    %% =====================================================
+    %% Styling
+    %% =====================================================
+    classDef azureStyle fill:#0078D4,stroke:#005A9E,color:#fff
+    classDef k8sStyle fill:#326CE5,stroke:#1A4DAB,color:#fff
+    classDef appStyle fill:#107C10,stroke:#0A5A0A,color:#fff
+    classDef dbStyle fill:#B45309,stroke:#7C3A00,color:#fff
+    classDef cacheStyle fill:#DC2626,stroke:#991B1B,color:#fff
+    classDef serviceStyle fill:#7C3AED,stroke:#5B21B6,color:#fff
+    classDef queueStyle fill:#D97706,stroke:#92400E,color:#fff
+    classDef externalStyle fill:#374151,stroke:#1F2937,color:#fff
+
+    class AZURE,SERVICE_BUS azureStyle
+    class AKS_SUBNET,SB_SUBNET,INGRESS_POD,APP_TIER,DB_TIER,CACHE_TIER,CLUSTER_SVC k8sStyle
+    class AUTH,SCHD,PLCE,MNTR,BRIF,ALTN,PAY appStyle
+    class PG,DISK dbStyle
+    class REDIS cacheStyle
+    class AUTH_SVC,SCHD_SVC,PLCE_SVC,MNTR_SVC,BRIF_SVC,ALTN_SVC,PAY_SVC serviceStyle
+    class SB_MQ1,SB_MQ2,SB_MQ3 queueStyle
+    class Dev,QA externalStyle
+    class LB,ING k8sStyle

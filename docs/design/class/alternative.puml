@@ -1,0 +1,298 @@
+@startuml
+!theme mono
+
+title ALTERNATIVE 서비스 - 클래스 다이어그램
+
+package "com.travelplanner.alternative" {
+
+    ' ===== Controller Layer =====
+    package "controller" {
+        class AltnController {
+            - alternativeService: AlternativeService
+            + searchAlternatives(request: AlternativeSearchRequest, principal: UserPrincipal): ResponseEntity<AlternativeSearchResponse>
+            + selectAlternative(altId: String, request: SelectAlternativeRequest, principal: UserPrincipal): ResponseEntity<SelectAlternativeResponse>
+            - checkPaywall(principal: UserPrincipal): void
+        }
+    }
+
+    ' ===== Service Layer =====
+    package "service" {
+        interface AlternativeService {
+            + searchAlternatives(userId: String, placeId: String, category: String, lat: double, lng: double): AlternativeSearchResult
+            + selectAlternative(userId: String, altId: String, originalPlaceId: String, scheduleItemId: String, tripId: String, selectedRank: int, elapsedSeconds: int): SelectResult
+        }
+
+        class AlternativeServiceImpl {
+            - alternativeRepository: AlternativeRepository
+            - placeServiceClient: PlaceServiceClient
+            - monitorServiceClient: MonitorServiceClient
+            - scheduleServiceClient: ScheduleServiceClient
+            - scoreWeightsProvider: ScoreWeightsProvider
+            - scoreCalculator: ScoreCalculator
+            - cacheManager: CacheManager
+            + searchAlternatives(userId: String, placeId: String, category: String, lat: double, lng: double): AlternativeSearchResult
+            + selectAlternative(userId: String, altId: String, originalPlaceId: String, scheduleItemId: String, tripId: String, selectedRank: int, elapsedSeconds: int): SelectResult
+            - fetchCandidates(lat: double, lng: double, category: String): List<PlaceCandidate>
+            - expandRadius(lat: double, lng: double, category: String, currentRadius: int): List<PlaceCandidate>
+            - filterByStatus(candidates: List<PlaceCandidate>, badgeMap: Map<String, StatusBadge>): List<PlaceCandidate>
+            - buildAlternativeCards(scored: List<ScoredCandidate>): List<Alternative>
+            - buildCacheKey(placeId: String, category: String, radius: int): String
+            - invalidateCache(placeId: String): void
+        }
+
+        AlternativeServiceImpl ..|> AlternativeService
+    }
+
+    ' ===== Score Weight (Interface + Impl) =====
+    package "scoring" {
+        interface ScoreWeightsProvider {
+            + getWeights(context: WeightsContext): ScoreWeights
+        }
+
+        class FixedScoreWeightsProvider {
+            - distanceWeight: double
+            - ratingWeight: double
+            - congestionWeight: double
+            + getWeights(context: WeightsContext): ScoreWeights
+        }
+
+        class ScoreCalculator {
+            + calculateScores(candidates: List<PlaceCandidate>, weights: ScoreWeights): List<ScoredCandidate>
+            - normalizeDistance(distanceM: int, maxDistance: int): double
+            - normalizeRating(rating: float): double
+            - normalizeCongestion(congestionLevel: String): double
+            - computeScore(distScore: double, ratingScore: double, congestionScore: double, weights: ScoreWeights): double
+        }
+
+        FixedScoreWeightsProvider ..|> ScoreWeightsProvider
+    }
+
+    ' ===== Repository Layer =====
+    package "repository" {
+        interface AlternativeRepository {
+            + save(alternative: Alternative): Alternative
+            + findById(altId: String): Optional<Alternative>
+            + saveCardSnapshot(snapshot: AlternativeCardSnapshot): void
+            + saveSelectionLog(log: SelectionLog): void
+        }
+    }
+
+    ' ===== External Client =====
+    package "client" {
+        class PlaceServiceClient {
+            - baseUrl: String
+            + searchNearby(lat: double, lng: double, category: String, radiusM: int): List<PlaceCandidate>
+        }
+
+        class MonitorServiceClient {
+            - baseUrl: String
+            + getBadges(placeIds: List<String>): Map<String, StatusBadge>
+        }
+
+        class ScheduleServiceClient {
+            - baseUrl: String
+            + replaceScheduleItem(scheduleItemId: String, newPlaceId: String): ReplaceResult
+        }
+    }
+
+    ' ===== Domain Model =====
+    package "domain" {
+        class Alternative {
+            - id: String
+            - userId: String
+            - originalPlaceId: String
+            - placeId: String
+            - name: String
+            - distanceM: int
+            - rating: float
+            - congestion: String
+            - reason: String
+            - statusLabel: String
+            - lat: double
+            - lng: double
+            - walkingMinutes: int
+            - transitMinutes: Integer
+            - score: double
+            - createdAt: LocalDateTime
+            + Alternative()
+            + hasStatusLabel(): boolean
+        }
+
+        class ScoreWeights {
+            - distanceWeight: double
+            - ratingWeight: double
+            - congestionWeight: double
+            + ScoreWeights(distanceWeight: double, ratingWeight: double, congestionWeight: double)
+            + validate(): void
+        }
+
+        class WeightsContext {
+            - userId: String
+            - category: String
+            - timeOfDay: String
+            + WeightsContext(userId: String, category: String, timeOfDay: String)
+        }
+
+        class PlaceCandidate {
+            - placeId: String
+            - name: String
+            - distanceM: int
+            - rating: float
+            - lat: double
+            - lng: double
+            - category: String
+            - isOpen: boolean
+            - statusBadge: StatusBadge
+            - statusLabel: String
+        }
+
+        class ScoredCandidate {
+            - candidate: PlaceCandidate
+            - distanceScore: double
+            - ratingScore: double
+            - congestionScore: double
+            - totalScore: double
+            + ScoredCandidate(candidate: PlaceCandidate, totalScore: double)
+        }
+
+        class StatusBadge {
+            - placeId: String
+            - status: String
+            - icon: String
+        }
+
+        class AlternativeCardSnapshot {
+            - id: String
+            - userId: String
+            - placeId: String
+            - candidatePlaceId: String
+            - scoreWeights: String
+            - scores: String
+            - exposedAt: LocalDateTime
+        }
+
+        class SelectionLog {
+            - id: String
+            - altCardId: String
+            - userId: String
+            - selectedRank: int
+            - elapsedSeconds: int
+            - adopted: boolean
+            - createdAt: LocalDateTime
+        }
+
+        ScoredCandidate o-- PlaceCandidate
+    }
+
+    ' ===== DTO =====
+    package "dto" {
+        package "request" {
+            class AlternativeSearchRequest {
+                - placeId: String
+                - category: String
+                - location: CoordinatesDto
+                + validate(): void
+            }
+            class SelectAlternativeRequest {
+                - originalPlaceId: String
+                - scheduleItemId: String
+                - tripId: String
+                - selectedRank: int
+                - elapsedSeconds: int
+                + validate(): void
+            }
+            class CoordinatesDto {
+                - lat: double
+                - lng: double
+            }
+        }
+
+        package "response" {
+            class AlternativeSearchResponse {
+                - originalPlaceId: String
+                - cards: List<AlternativeCardDto>
+                - radiusUsed: int
+                + {static} of(originalPlaceId: String, alternatives: List<Alternative>, radiusUsed: int): AlternativeSearchResponse
+            }
+            class AlternativeCardDto {
+                - altId: String
+                - placeId: String
+                - name: String
+                - distanceM: int
+                - rating: float
+                - congestion: String
+                - reason: String
+                - statusLabel: String
+                - coordinates: CoordinatesDto
+                - travelTime: TravelTimeDto
+                + {static} from(alternative: Alternative): AlternativeCardDto
+            }
+            class SelectAlternativeResponse {
+                - scheduleItemId: String
+                - originalPlace: PlaceRefDto
+                - newPlace: PlaceRefDto
+                - travelTimeDiffMinutes: int
+                + {static} of(result: SelectResult): SelectAlternativeResponse
+            }
+            class PaywallResponse {
+                - paywall: boolean
+                - message: String
+                - upgradeUrl: String
+            }
+            class PlaceRefDto {
+                - placeId: String
+                - name: String
+            }
+            class TravelTimeDto {
+                - walkingMinutes: int
+                - transitMinutes: Integer
+            }
+        }
+
+        package "internal" {
+            class AlternativeSearchResult {
+                - alternatives: List<Alternative>
+                - radiusUsed: int
+            }
+            class SelectResult {
+                - scheduleItemId: String
+                - originalPlaceId: String
+                - newPlaceId: String
+                - newPlaceName: String
+                - travelTimeDiffMinutes: int
+            }
+            class ReplaceResult {
+                - success: boolean
+                - travelTimeDiffMinutes: int
+            }
+        }
+    }
+}
+
+' ===== 관계 =====
+AltnController --> AlternativeService
+
+AlternativeServiceImpl --> AlternativeRepository
+AlternativeServiceImpl --> PlaceServiceClient
+AlternativeServiceImpl --> MonitorServiceClient
+AlternativeServiceImpl --> ScheduleServiceClient
+AlternativeServiceImpl --> ScoreWeightsProvider
+AlternativeServiceImpl --> ScoreCalculator
+
+ScoreCalculator ..> ScoreWeights
+ScoreCalculator ..> ScoredCandidate
+ScoreWeightsProvider ..> WeightsContext
+ScoreWeightsProvider ..> ScoreWeights
+
+AlternativeRepository ..> Alternative
+AlternativeRepository ..> AlternativeCardSnapshot
+AlternativeRepository ..> SelectionLog
+
+PlaceServiceClient ..> PlaceCandidate
+MonitorServiceClient ..> StatusBadge
+ScheduleServiceClient ..> ReplaceResult
+
+AlternativeSearchResponse ..> AlternativeCardDto
+SelectAlternativeResponse ..> PlaceRefDto
+
+@enduml

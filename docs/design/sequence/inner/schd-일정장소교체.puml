@@ -1,242 +1,56 @@
 @startuml
 !theme mono
-title SCHD 서비스 - 대안 선택 후 일정 장소 교체 내부 시퀀스\n(UFR-SCHD-040)
 
+title SCHD 서비스 - 일정 장소 교체
+
+participant "SchdController" as ctrl
 participant "ScheduleService" as svc
-participant "PlaceScheduleRepository" as placeRepo
-database "DB" as db
-database "Redis Cache(E)" as cache
-queue "Event Bus(E)" as bus
-participant "PLCE 서비스(E)" as plce
+participant "ScheduleItemRepository" as repo
+participant "EventBus(E)" as bus
+participant "Google Directions API(E)" as gdirections
+database "PostgreSQL(E)" as db
 
-note over svc, plce
-    SCHD 서비스 내부: AlternativeAdopted 이벤트 수신 후 일정 교체 처리
-    - 기존 장소를 대안 장소로 교체
-    - 이동시간 재계산 (직전/직후 2구간)
-    - MonitoringTargetChanged 이벤트 발행
-end note
+-> ctrl : PUT /api/v1/trips/{trip_id}/schedule-items/{item_id}/replace\n{new_place_id}
+activate ctrl
 
-== AlternativeAdopted 이벤트 수신 ==
+ctrl -> ctrl : 요청 데이터 검증\n(trip_id 소유권, item_id 존재 여부)
 
-bus -> svc: AlternativeAdopted 이벤트 수신\n{userId, scheduleId, original_placeId,\n alternative_placeId, adopted_at}
+ctrl -> svc : replaceScheduleItem(trip_id, item_id, new_place_id)
 activate svc
 
-note right of svc
-    Event 발행처: ALTN 서비스
-    발행 시점: 사용자가 대안 카드 선택 시
-end note
+svc -> repo : 현재 일정 장소 조회 (전후 장소 포함)
+activate repo
+repo -> db : schedule_items 조회 (trip_id, 시간순)
+db --> repo : 일정 목록 (직전, 교체 대상, 직후 장소)
+deactivate repo
 
-svc -> svc: 이벤트 데이터 검증
-activate svc
-note right
-    - scheduleId: 필수
-    - original_placeId: 필수
-    - alternative_placeId: 필수
-    - userId: 필수 (권한 확인용)
-end note
-deactivate svc
+== 이동시간 재계산 (2구간) ==
+svc ->> gdirections : 직전 장소→새 장소 이동시간 요청 (비동기)
+activate gdirections
 
-== 기존 일정 조회 ==
-
-svc -> placeRepo: 일정 조회\n(scheduleId)
-activate placeRepo
-
-placeRepo -> db: SELECT place_schedule WHERE schedule_id = ?\nORDER BY order_index
-activate db
-note right
-    - 현재 scheduleId의 모든 장소 조회
-    - order_index 순서대로 정렬
-end note
-
-db --> placeRepo: PlaceSchedule[] (모든 장소)
-deactivate db
-
-placeRepo --> svc: PlaceSchedule[] 리스트
-deactivate placeRepo
-
-== 교체 대상 장소 식별 ==
-
-svc -> svc: 기존 장소 찾기\n(place_id = original_placeId)
-activate svc
-
-alt 기존 장소 찾음
-    svc -> svc: 교체 전 상태 저장\n(백업)
-    note right
-        롤백이 필요한 경우를 대비
-        - original_placeId
-        - original_scheduled_time
-        - original_order_index
-    end note
-    deactivate svc
-
-else 기존 장소 찾지 못함
-    svc --> bus: 에러 이벤트 발행\n("기존 장소를 찾을 수 없습니다")
-    deactivate svc
-    deactivate bus
-
+alt Google Directions API 정상
+    gdirections -->> svc : 이동시간 반환 (2구간)
+    deactivate gdirections
+else API 실패 (Fallback)
+    gdirections -->> svc : API 오류
+    deactivate gdirections
+    svc -> svc : 직선거리 기반 추정값 계산
+    note right of svc : 폴백 추정값 사용 표시
 end
 
-== 이동시간 재계산 (직전/직후 2구간) ==
+== 단일 DB 트랜잭션으로 교체 ==
+svc -> repo : 일정 장소 교체 및 이동시간 갱신 (트랜잭션)
+activate repo
+repo -> db : schedule_items 갱신\n(place_id=new_place_id, 이동시간 2구간 갱신)
+db --> repo : 갱신 완료
+deactivate repo
 
-svc -> svc: 이전/이후 장소 식별
-activate svc
-note right
-    현재 배열: [Place A, Place B(교체), Place C]
-    교체 대상: Place B
+svc ->> bus : ScheduleItemReplaced 이벤트 발행\n{old_place_id, new_place_id, schedule_item_id} (비동기)
 
-    - 이전 구간: Place A -> Place B (교체될 부분)
-    - 이후 구간: Place B (교체될 부분) -> Place C
+svc --> ctrl : {변경요약: {원래장소, 대안장소, 이동시간변화}}
 
-    재계산할 구간:
-    - 이전: Place A -> Place B(대안)
-    - 이후: Place B(대안) -> Place C
-end note
 deactivate svc
-
-alt 이전 장소 존재
-    svc -> svc: 이전 구간 식별\n(prev_place, place_to_replace)
-    activate svc
-    note right
-        prev_place: order_index = current - 1
-        출발 시간: prev_place의 scheduled_departure_time
-    end note
-    deactivate svc
-
-    svc -> plce: 이동시간 계산\n(from: prev_place, to: alternative_place,\n departure_time: prev_scheduled_time)
-    activate plce
-    note right
-        PLCE 서비스 호출:
-        POST /directions/calculate
-        {
-            origin: {lat, lng},
-            destination: {lat, lng},
-            departure_time: prev_scheduled_time,
-            city: city
-        }
-    end note
-
-    plce --> svc: {duration_prev: XX분, distance_prev: XXkm}
-    deactivate plce
-
-else 이전 장소 미존재 (첫 번째 장소)
-    svc -> svc: 이전 구간 건너뜀
-    note right
-        첫 번째 장소인 경우 직전 구간 없음
-    end note
-
-end
-
-alt 이후 장소 존재
-    svc -> svc: 이후 구간 식별\n(place_to_replace, next_place)
-    activate svc
-    note right
-        next_place: order_index = current + 1
-        출발 시간: alternative_place의 scheduled_departure_time
-    end note
-    deactivate svc
-
-    svc -> plce: 이동시간 계산\n(from: alternative_place, to: next_place,\n departure_time: alternative_scheduled_time)
-    activate plce
-    note right
-        PLCE 서비스 호출:
-        POST /directions/calculate
-        {
-            origin: {lat, lng},
-            destination: {lat, lng},
-            departure_time: alternative_scheduled_time,
-            city: city
-        }
-    end note
-
-    plce --> svc: {duration_next: XX분, distance_next: XXkm}
-    deactivate plce
-
-else 이후 장소 미존재 (마지막 장소)
-    svc -> svc: 이후 구간 건너뜀
-    note right
-        마지막 장소인 경우 직후 구간 없음
-    end note
-
-end
-
-== 장소 교체 및 저장 ==
-
-svc -> placeRepo: 장소 교체\n(schedule_id, original_placeId, alternative_placeId,\n duration_prev, duration_next)
-activate placeRepo
-
-placeRepo -> db: UPDATE place_schedule\nSET place_id = ?,\n     duration_to_next = ?,\n     updated_at = ?,\n     monitoring_status = 'CHANGED'\nWHERE schedule_id = ? AND place_id = ?
-activate db
-note right
-    업데이트 필드:
-    - place_id: alternative_placeId
-    - duration_to_next: 계산된 이동시간
-    - monitoring_status: "CHANGED"
-    - updated_at: 현재 시간
-end note
-
-db --> placeRepo: 영향받은 행 수
-deactivate db
-
-placeRepo --> svc: UpdateResult
-deactivate placeRepo
-
-== 캐시 갱신 ==
-
-svc -> cache: 일정 캐시 갱신\n(key=schedule:{scheduleId},\n value=Schedule with replaced place)
-activate cache
-note right
-    TTL: 5분
-    교체된 장소 정보와 이동시간 포함
-end note
-
-cache --> svc: OK
-deactivate cache
-
-== MonitoringTargetChanged 이벤트 발행 ==
-
-svc -> bus: MonitoringTargetChanged 이벤트 발행
-activate bus
-note right
-    Event payload:
-    {
-        trip_id: trip_id,
-        schedule_id: scheduleId,
-        old_placeId: original_placeId,
-        new_placeId: alternative_placeId,
-        scheduled_departure_time: alternative_scheduled_time,
-        city: city,
-        duration_change: {
-            prev: duration_prev,
-            next: duration_next
-        },
-        event_timestamp: now()
-    }
-end note
-
-bus --> svc: 이벤트 발행 완료
-deactivate bus
-
-svc -> svc: 응답 데이터 구성\n{status: "success", summary}
-activate svc
-note right
-    summary:
-    {
-        original_place: place_name,
-        alternative_place: place_name,
-        duration_change: "-5분",
-        distance_change: "+0.2km"
-    }
-end note
-deactivate svc
-
-note over svc, plce
-    **핵심 설계 사항**
-    1. 이벤트 기반: AlternativeAdopted 이벤트 수신으로 시작
-    2. 2구간 재계산: 이전/이후 구간 독립적 계산
-    3. 외부 API 호출: PLCE 서비스를 통한 이동시간 계산
-    4. 모니터링 변경 이벤트: MonitoringTargetChanged 발행
-    5. 캐시 갱신: Redis에 교체된 장소 정보 저장
-    6. 트랜잭션 안전성: 이벤트 기반으로 최종 일관성 보장
-end note
+ctrl --> : 200 OK\n{변경 요약}
+deactivate ctrl
 
 @enduml

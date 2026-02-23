@@ -1,0 +1,112 @@
+# docker-compose.yml
+# 기본: docker compose up -d
+# Mock 서버 포함: docker compose --profile mock up -d
+
+services:
+
+  # 기본 서비스 (항상 기동)
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: ${DB_USER:-travel}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-P@ssw0rd$}
+    ports:
+      - "${DB_PORT:-5432}:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./docker/postgres/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-travel}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # mock 프로파일: Prism Mock 서버 (auth-service-api.yaml 대표 마운트)
+  # 여러 API 명세를 동시에 사용하려면 서비스를 복수로 구성하거나 멀티 포트를 활용
+  prism-mock-auth:
+    image: stoplight/prism:latest
+    profiles: ["mock"]
+    command: mock -h 0.0.0.0 /api/auth-service-api.yaml
+    volumes:
+      - ./docs/design/api:/api:ro
+    ports:
+      - "${MOCK_PORT_AUTH:-4010}:4010"
+
+  prism-mock-schedule:
+    image: stoplight/prism:latest
+    profiles: ["mock"]
+    command: mock -h 0.0.0.0 /api/schedule-service-api.yaml
+    volumes:
+      - ./docs/design/api:/api:ro
+    ports:
+      - "${MOCK_PORT_SCHEDULE:-4011}:4010"
+
+  prism-mock-place:
+    image: stoplight/prism:latest
+    profiles: ["mock"]
+    command: mock -h 0.0.0.0 /api/place-service-api.yaml
+    volumes:
+      - ./docs/design/api:/api:ro
+    ports:
+      - "${MOCK_PORT_PLACE:-4012}:4010"
+
+  prism-mock-monitor:
+    image: stoplight/prism:latest
+    profiles: ["mock"]
+    command: mock -h 0.0.0.0 /api/monitor-service-api.yaml
+    volumes:
+      - ./docs/design/api:/api:ro
+    ports:
+      - "${MOCK_PORT_MONITOR:-4013}:4010"
+
+  prism-mock-briefing:
+    image: stoplight/prism:latest
+    profiles: ["mock"]
+    command: mock -h 0.0.0.0 /api/briefing-service-api.yaml
+    volumes:
+      - ./docs/design/api:/api:ro
+    ports:
+      - "${MOCK_PORT_BRIEFING:-4014}:4010"
+
+  prism-mock-alternative:
+    image: stoplight/prism:latest
+    profiles: ["mock"]
+    command: mock -h 0.0.0.0 /api/alternative-service-api.yaml
+    volumes:
+      - ./docs/design/api:/api:ro
+    ports:
+      - "${MOCK_PORT_ALTERNATIVE:-4015}:4010"
+
+  prism-mock-payment:
+    image: stoplight/prism:latest
+    profiles: ["mock"]
+    command: mock -h 0.0.0.0 /api/payment-service-api.yaml
+    volumes:
+      - ./docs/design/api:/api:ro
+    ports:
+      - "${MOCK_PORT_PAYMENT:-4016}:4010"
+
+  prism-mock-ai-pipeline:
+    image: stoplight/prism:latest
+    profiles: ["mock"]
+    command: mock -h 0.0.0.0 /api/ai-pipeline-api.yaml
+    volumes:
+      - ./docs/design/api:/api:ro
+    ports:
+      - "${MOCK_PORT_AI_PIPELINE:-4017}:4010"
+
+volumes:
+  postgres-data:
+  redis-data:

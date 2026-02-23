@@ -1,0 +1,379 @@
+openapi: 3.0.0
+info:
+  title: Monitor Service API
+  description: 상태 배지 조회, 상태 상세 조회, 외부 데이터 수집 트리거 서비스 API
+  version: 1.0.0
+  contact:
+    name: travel-planner Team
+
+servers:
+  - url: https://virtserver.swaggerhub.com/travel-planner/monitor-service/1.0.0
+    description: SwaggerHub Mock Server
+  - url: https://api.travel-planner.com/v1
+    description: Production Server
+  - url: https://dev-api.travel-planner.com/v1
+    description: Development Server
+
+tags:
+  - name: Badges
+    description: 상태 배지 조회
+  - name: StatusDetail
+    description: 장소 상태 상세 조회
+  - name: DataCollection
+    description: 외부 데이터 수집 (내부/스케줄러 호출용)
+
+paths:
+  /badges:
+    get:
+      tags:
+        - Badges
+      summary: 장소별 상태 배지 목록 조회
+      description: 장소 ID 목록을 기준으로 각 장소의 상태 배지를 일괄 조회한다. 배지는 색상+아이콘 조합으로 색약 사용자를 지원한다. 캐시(TTL 10분) 기반으로 응답한다.
+      operationId: getBadges
+      x-user-story: UFR-MNTR-030
+      x-controller: MntrController
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: place_ids
+          in: query
+          required: true
+          description: 조회할 장소 ID 목록 (콤마 구분)
+          schema:
+            type: string
+            example: "place_abc123,place_def456,place_xyz789"
+      responses:
+        '200':
+          description: 배지 조회 성공
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BadgeListResponse'
+              example:
+                badges:
+                  - place_id: "place_abc123"
+                    status: "GREEN"
+                    icon: "CHECK"
+                    label: null
+                    color_hex: "#4CAF50"
+                    updated_at: "2026-03-16T11:45:00+09:00"
+                  - place_id: "place_def456"
+                    status: "YELLOW"
+                    icon: "EXCLAMATION"
+                    label: null
+                    color_hex: "#FFC107"
+                    updated_at: "2026-03-16T11:45:00+09:00"
+                  - place_id: "place_xyz789"
+                    status: "GREY"
+                    icon: "QUESTION"
+                    label: "데이터 미확인"
+                    color_hex: "#9E9E9E"
+                    updated_at: "2026-03-16T10:30:00+09:00"
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /badges/{place_id}/detail:
+    get:
+      tags:
+        - StatusDetail
+      summary: 장소 상태 상세 조회
+      description: 특정 장소의 영업상태, 혼잡도, 날씨, 이동시간, 판정 사유 등 상세 상태 정보를 조회한다. 노랑/빨강 배지인 경우 대안 보기 링크가 포함된다. 분석 이벤트(배지 상세 조회됨)가 기록된다.
+      operationId: getStatusDetail
+      x-user-story: UFR-MNTR-040
+      x-controller: MntrController
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: place_id
+          in: path
+          required: true
+          description: 장소 ID
+          schema:
+            type: string
+            example: "place_def456"
+      responses:
+        '200':
+          description: 상태 상세 조회 성공
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StatusDetailResponse'
+              example:
+                place_id: "place_def456"
+                place_name: "시부야 스크램블 교차로"
+                overall_status: "YELLOW"
+                details:
+                  business_status:
+                    status: "NORMAL"
+                    value: "영업 중"
+                  congestion:
+                    status: "WARNING"
+                    value: "혼잡"
+                    is_unknown: false
+                  weather:
+                    status: "NORMAL"
+                    value: "맑음"
+                    precipitation_prob: 15
+                  travel_time:
+                    status: "NORMAL"
+                    walking_minutes: 15
+                    transit_minutes: 8
+                    distance_m: 620
+                reason: "혼잡도 높음"
+                show_alternative_button: true
+                updated_at: "2026-03-16T11:45:00+09:00"
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /monitor/collect:
+    post:
+      tags:
+        - DataCollection
+      summary: 외부 데이터 수집 트리거 (내부 스케줄러 호출용)
+      description: 스케줄러가 15분 주기로 호출하여 방문 예정 시간 2시간 전 대상 장소의 영업상태/날씨/혼잡도/이동시간 데이터를 수집한다. 3종 API를 병렬 호출하며 전체 타임아웃은 2초. 부분 실패 시 캐시 폴백 적용.
+      operationId: triggerDataCollection
+      x-user-story: UFR-MNTR-010
+      x-controller: MntrController
+      security:
+        - InternalServiceKey: []
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CollectTriggerRequest'
+            example:
+              triggered_by: "scheduler"
+              triggered_at: "2026-03-16T10:00:00Z"
+      responses:
+        '202':
+          description: 수집 트리거 수락 (비동기 처리)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CollectTriggerResponse'
+              example:
+                job_id: "job_01HX..."
+                status: "ACCEPTED"
+                target_count: 5
+                triggered_at: "2026-03-16T10:00:00Z"
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+components:
+  schemas:
+    BadgeListResponse:
+      type: object
+      properties:
+        badges:
+          type: array
+          items:
+            $ref: '#/components/schemas/BadgeItem'
+
+    BadgeItem:
+      type: object
+      properties:
+        place_id:
+          type: string
+          example: "place_abc123"
+        status:
+          type: string
+          enum: [GREEN, YELLOW, RED, GREY]
+          description: "상태: GREEN=정상, YELLOW=주의, RED=위험, GREY=미확인"
+          example: "GREEN"
+        icon:
+          type: string
+          enum: [CHECK, EXCLAMATION, X, QUESTION]
+          description: "아이콘: CHECK=체크, EXCLAMATION=느낌표, X=X표, QUESTION=물음표"
+          example: "CHECK"
+        label:
+          type: string
+          nullable: true
+          description: 회색 배지의 경우 '데이터 미확인' 레이블
+          example: null
+        color_hex:
+          type: string
+          description: 배지 색상 HEX 코드
+          example: "#4CAF50"
+        updated_at:
+          type: string
+          format: date-time
+          example: "2026-03-16T11:45:00+09:00"
+
+    StatusDetailResponse:
+      type: object
+      properties:
+        place_id:
+          type: string
+          example: "place_def456"
+        place_name:
+          type: string
+          example: "시부야 스크램블 교차로"
+        overall_status:
+          type: string
+          enum: [GREEN, YELLOW, RED, GREY]
+          example: "YELLOW"
+        details:
+          $ref: '#/components/schemas/StatusDetails'
+        reason:
+          type: string
+          description: 종합 판정 사유
+          example: "혼잡도 높음"
+        show_alternative_button:
+          type: boolean
+          description: 노랑/빨강 배지인 경우 대안 보기 버튼 표시 여부
+          example: true
+        updated_at:
+          type: string
+          format: date-time
+          example: "2026-03-16T11:45:00+09:00"
+
+    StatusDetails:
+      type: object
+      properties:
+        business_status:
+          type: object
+          properties:
+            status:
+              type: string
+              enum: [NORMAL, WARNING, DANGER]
+              example: "NORMAL"
+            value:
+              type: string
+              example: "영업 중"
+        congestion:
+          type: object
+          properties:
+            status:
+              type: string
+              enum: [NORMAL, WARNING, DANGER]
+              example: "WARNING"
+            value:
+              type: string
+              example: "혼잡"
+            is_unknown:
+              type: boolean
+              description: 혼잡도 데이터 미확인 여부
+              example: false
+        weather:
+          type: object
+          properties:
+            status:
+              type: string
+              enum: [NORMAL, WARNING, DANGER]
+              example: "NORMAL"
+            value:
+              type: string
+              example: "맑음"
+            precipitation_prob:
+              type: integer
+              description: 강수 확률 (%)
+              example: 15
+        travel_time:
+          type: object
+          properties:
+            status:
+              type: string
+              enum: [NORMAL, WARNING, DANGER]
+              example: "NORMAL"
+            walking_minutes:
+              type: integer
+              description: 도보 이동시간 (분)
+              example: 15
+            transit_minutes:
+              type: integer
+              nullable: true
+              description: 대중교통 이동시간 (500m 이상 시 제공)
+              example: 8
+            distance_m:
+              type: integer
+              description: 이동 거리 (미터)
+              example: 620
+
+    CollectTriggerRequest:
+      type: object
+      properties:
+        triggered_by:
+          type: string
+          example: "scheduler"
+        triggered_at:
+          type: string
+          format: date-time
+          example: "2026-03-16T10:00:00Z"
+
+    CollectTriggerResponse:
+      type: object
+      properties:
+        job_id:
+          type: string
+          example: "job_01HX..."
+        status:
+          type: string
+          enum: [ACCEPTED, REJECTED]
+          example: "ACCEPTED"
+        target_count:
+          type: integer
+          description: 수집 대상 장소 수
+          example: 5
+        triggered_at:
+          type: string
+          format: date-time
+          example: "2026-03-16T10:00:00Z"
+
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+          example: "NOT_FOUND"
+        message:
+          type: string
+          example: "요청한 리소스를 찾을 수 없습니다."
+        timestamp:
+          type: string
+          format: date-time
+          example: "2026-03-15T09:00:00Z"
+
+  responses:
+    BadRequest:
+      description: 잘못된 요청
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error: "BAD_REQUEST"
+            message: "place_ids 파라미터가 필요합니다."
+    Unauthorized:
+      description: 인증 실패
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error: "UNAUTHORIZED"
+            message: "유효하지 않은 토큰입니다."
+    NotFound:
+      description: 리소스 없음
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error: "NOT_FOUND"
+            message: "장소 상태 정보를 찾을 수 없습니다."
+
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+    InternalServiceKey:
+      type: apiKey
+      in: header
+      name: X-Internal-Service-Key
+      description: 내부 서비스 간 호출용 API 키

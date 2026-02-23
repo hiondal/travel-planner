@@ -1,0 +1,124 @@
+@startuml
+!theme mono
+
+title MONITOR 서비스 - Entity Relationship Diagram
+
+!define TABLE(name,desc) class name as "desc" << (T,#FFAAAA) >>
+!define PK(x) <b>x</b>
+!define FK(x) <i>x</i>
+!define UNIQUE(x) <u>x</u>
+
+TABLE(monitoring_targets, "MONITORING_TARGETS\n(모니터링 대상)") {
+    PK(id: VARCHAR(36))
+    --
+    place_id: VARCHAR(200) NOT NULL
+    trip_id: VARCHAR(36) NOT NULL
+    UNIQUE(schedule_item_id: VARCHAR(36)) NOT NULL
+    user_id: VARCHAR(36) NOT NULL
+    visit_datetime: TIMESTAMPTZ NOT NULL
+    lat: NUMERIC(10,7) NOT NULL
+    lng: NUMERIC(10,7) NOT NULL
+    category: VARCHAR(50)
+    --
+    current_status: VARCHAR(10) NOT NULL DEFAULT 'GREY'
+    current_status_updated_at: TIMESTAMPTZ
+    consecutive_failure_count: INTEGER NOT NULL DEFAULT 0
+    --
+    created_at: TIMESTAMPTZ NOT NULL
+}
+
+TABLE(status_history, "STATUS_HISTORY\n(상태 이력 - append-only)") {
+    PK(id: VARCHAR(36))
+    --
+    place_id: VARCHAR(200) NOT NULL
+    schedule_item_id: VARCHAR(36) NOT NULL
+    status: VARCHAR(10) NOT NULL
+    reason: TEXT
+    judgment_at: TIMESTAMPTZ NOT NULL
+    confidence_score: NUMERIC(4,3)
+}
+
+TABLE(collected_data, "COLLECTED_DATA\n(수집 원본 데이터)") {
+    PK(id: VARCHAR(36))
+    --
+    place_id: VARCHAR(200) NOT NULL
+    business_status: VARCHAR(20)
+    precipitation_prob: INTEGER
+    weather_condition: VARCHAR(50)
+    walking_minutes: INTEGER
+    transit_minutes: INTEGER
+    distance_m: INTEGER
+    congestion_level: VARCHAR(20)
+    has_fallback: BOOLEAN NOT NULL DEFAULT FALSE
+    --
+    collected_at: TIMESTAMPTZ NOT NULL
+}
+
+' 논리적 관계 (FK 없음 - 서비스 내 독립)
+monitoring_targets "1" ..o{ status_history : "place_id (논리적 참조)"
+monitoring_targets "1" ..o{ collected_data : "place_id (논리적 참조)"
+
+note top of monitoring_targets
+  <b>Indexes:</b>
+  • idx_monitoring_targets_place_id (place_id)
+  • idx_monitoring_targets_visit_datetime (visit_datetime)
+  • idx_monitoring_targets_user_id (user_id)
+  • idx_monitoring_targets_schedule_item_id UNIQUE
+
+  <b>Check Constraints:</b>
+  • current_status IN ('GREEN','YELLOW','RED','GREY')
+
+  <b>External References (no FK):</b>
+  • place_id → PLACE.places.id
+  • trip_id → SCHEDULE.trips.id
+  • schedule_item_id → SCHEDULE.schedule_items.id
+  • user_id → AUTH.users.id
+
+  <b>Trigger:</b>
+  ScheduleItemAddedEvent 수신 시 등록
+end note
+
+note right of status_history
+  <b>Indexes:</b>
+  • idx_status_history_place_id_judgment_at
+    (place_id, judgment_at DESC)
+  • idx_status_history_schedule_item_id
+  • idx_status_history_judgment_at
+
+  <b>Check Constraints:</b>
+  • status IN ('GREEN','YELLOW','RED','GREY')
+  • confidence_score BETWEEN 0.000 AND 1.000
+
+  <b>Retention Policy:</b>
+  • Append-only (UPDATE/DELETE 금지)
+  • 월별 RANGE 파티셔닝
+  • 6개월 경과 → S3 아카이빙 후 삭제
+  • ML 학습 데이터 소스 [T4]
+end note
+
+note bottom of collected_data
+  <b>Indexes:</b>
+  • idx_collected_data_place_id_collected_at
+    (place_id, collected_at DESC)
+
+  <b>Design Note:</b>
+  • 폴백 캐시 역할 (수집 실패 시 재사용)
+  • 외부 API: Google Places, OpenWeatherMap,
+    Google Directions
+end note
+
+legend right
+  <b>Redis Cache (DB 4):</b>
+  mntr:badge:{placeId}      TTL 5분
+  mntr:collected:{placeId}  TTL 30분
+  mntr:status:{placeId}     TTL 5분
+
+  <b>Events Published:</b>
+  PlaceStatusChangedEvent → BRIEFING, ALTERNATIVE
+
+  <b>Legend:</b>
+  PK = Primary Key
+  .. = 논리적 참조 (DB FK 없음)
+end legend
+
+@enduml

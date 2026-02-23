@@ -1,0 +1,399 @@
+openapi: 3.0.0
+info:
+  title: Alternative Service API
+  description: 대안 장소 검색, 카드 선택, 일정 반영 서비스 API
+  version: 1.0.0
+  contact:
+    name: travel-planner Team
+
+servers:
+  - url: https://virtserver.swaggerhub.com/travel-planner/alternative-service/1.0.0
+    description: SwaggerHub Mock Server
+  - url: https://api.travel-planner.com/v1
+    description: Production Server
+  - url: https://dev-api.travel-planner.com/v1
+    description: Development Server
+
+tags:
+  - name: Alternatives
+    description: 대안 장소 검색 및 카드 선택
+
+paths:
+  /alternatives/search:
+    post:
+      tags:
+        - Alternatives
+      summary: 대안 장소 검색 (대안 카드 3장 생성)
+      description: |
+        원래 장소와 동일 카테고리, 반경 1km 이내, 영업 중인 대안 장소를 검색하여 카드 3장을 생성한다.
+        - Free 티어 사용자는 402 Payment Required(Paywall) 응답을 받는다.
+        - 결과 3장 미만 시 반경을 1km → 2km → 3km로 단계 확장한다.
+        - 빨강 상태 장소는 후보에서 제외, 노랑은 "주의 필요", 회색은 "정보 미확인" 레이블 부여.
+        - 합산 점수(거리 0.5 + 평점 0.3 + 혼잡도 0.2)로 정렬.
+        - 결과는 TTL 5분 캐시.
+        - 전체 파이프라인 타임아웃: 정상 3초, 반경 확장 포함 5초.
+      operationId: searchAlternatives
+      x-user-story: UFR-ALTN-010
+      x-controller: AltnController
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AlternativeSearchRequest'
+            example:
+              place_id: "place_abc123"
+              category: "라멘"
+              location:
+                lat: 35.6595
+                lng: 139.7004
+      responses:
+        '200':
+          description: 대안 카드 검색 성공
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AlternativeSearchResponse'
+              example:
+                original_place_id: "place_abc123"
+                cards:
+                  - alt_id: "alt_01HX..."
+                    place_id: "place_xyz789"
+                    name: "후쿠로쿠 라멘"
+                    distance_m: 320
+                    rating: 4.0
+                    congestion: "낮음"
+                    reason: "근거리 영업 중 동일 카테고리"
+                    status_label: null
+                    coordinates:
+                      lat: 35.6621
+                      lng: 139.6982
+                    travel_time:
+                      walking_minutes: 5
+                      transit_minutes: null
+                  - alt_id: "alt_02HX..."
+                    place_id: "place_ghi012"
+                    name: "멘야 무사시"
+                    distance_m: 650
+                    rating: 4.3
+                    congestion: "보통"
+                    reason: "높은 평점"
+                    status_label: null
+                    coordinates:
+                      lat: 35.6571
+                      lng: 139.7031
+                    travel_time:
+                      walking_minutes: 9
+                      transit_minutes: 4
+                  - alt_id: "alt_03HX..."
+                    place_id: "place_jkl345"
+                    name: "라멘 산쿠로"
+                    distance_m: 820
+                    rating: 3.8
+                    congestion: "낮음"
+                    reason: "혼잡도 낮음"
+                    status_label: "주의 필요"
+                    coordinates:
+                      lat: 35.6610
+                      lng: 139.7051
+                    travel_time:
+                      walking_minutes: 12
+                      transit_minutes: 5
+                radius_used: 1000
+        '402':
+          description: Free 티어 Paywall
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaywallResponse'
+              example:
+                paywall: true
+                message: "대안 카드는 Trip Pass/Pro 전용 기능입니다."
+                upgrade_url: "/subscriptions/plans"
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /alternatives/{alt_id}/select:
+    post:
+      tags:
+        - Alternatives
+      summary: 대안 카드 선택 및 일정 반영
+      description: |
+        선택한 대안 카드를 기존 일정에 반영한다.
+        - SCHD 서비스에 일정 교체를 동기 호출한다.
+        - 원래 장소 모니터링 해제, 대안 장소 모니터링 등록은 SCHD 서비스가 이벤트 발행.
+        - 기존 장소의 대안 카드 캐시를 무효화한다.
+        - 선택 이력(순위, 경과 시간)을 분석/ML 학습 데이터로 저장한다.
+      operationId: selectAlternative
+      x-user-story: UFR-ALTN-030
+      x-controller: AltnController
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: alt_id
+          in: path
+          required: true
+          description: 대안 카드 ID
+          schema:
+            type: string
+            example: "alt_01HX..."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SelectAlternativeRequest'
+            example:
+              original_place_id: "place_abc123"
+              schedule_item_id: "si_01HX..."
+              trip_id: "trip_01HX..."
+              selected_rank: 1
+              elapsed_seconds: 12
+      responses:
+        '200':
+          description: 일정 반영 성공
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SelectAlternativeResponse'
+              example:
+                schedule_item_id: "si_01HX..."
+                original_place:
+                  place_id: "place_abc123"
+                  name: "이치란 라멘 시부야"
+                new_place:
+                  place_id: "place_xyz789"
+                  name: "후쿠로쿠 라멘"
+                travel_time_diff_minutes: -3
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+components:
+  schemas:
+    AlternativeSearchRequest:
+      type: object
+      required:
+        - place_id
+        - category
+        - location
+      properties:
+        place_id:
+          type: string
+          description: 원래 장소 ID
+          example: "place_abc123"
+        category:
+          type: string
+          description: 검색할 장소 카테고리 (원래 장소와 동일)
+          example: "라멘"
+        location:
+          $ref: '#/components/schemas/Coordinates'
+
+    AlternativeSearchResponse:
+      type: object
+      properties:
+        original_place_id:
+          type: string
+          example: "place_abc123"
+        cards:
+          type: array
+          maxItems: 3
+          description: 대안 카드 목록 (최대 3장)
+          items:
+            $ref: '#/components/schemas/AlternativeCard'
+        radius_used:
+          type: integer
+          description: 실제 사용된 검색 반경 (미터)
+          example: 1000
+
+    AlternativeCard:
+      type: object
+      properties:
+        alt_id:
+          type: string
+          description: 대안 카드 식별자
+          example: "alt_01HX..."
+        place_id:
+          type: string
+          example: "place_xyz789"
+        name:
+          type: string
+          example: "후쿠로쿠 라멘"
+        distance_m:
+          type: integer
+          description: 기준점으로부터의 도보 이동거리 (미터)
+          example: 320
+        rating:
+          type: number
+          format: float
+          minimum: 0
+          maximum: 5
+          example: 4.0
+        congestion:
+          type: string
+          enum: [낮음, 보통, 혼잡]
+          example: "낮음"
+        reason:
+          type: string
+          description: 추천 이유
+          example: "근거리 영업 중 동일 카테고리"
+        status_label:
+          type: string
+          nullable: true
+          description: "상태 레이블: 노랑='주의 필요', 회색='정보 미확인', null=정상"
+          example: null
+        coordinates:
+          $ref: '#/components/schemas/Coordinates'
+        travel_time:
+          type: object
+          properties:
+            walking_minutes:
+              type: integer
+              example: 5
+            transit_minutes:
+              type: integer
+              nullable: true
+              description: 대중교통 이동시간 (500m 이상 시)
+              example: null
+
+    SelectAlternativeRequest:
+      type: object
+      required:
+        - original_place_id
+        - schedule_item_id
+        - trip_id
+        - selected_rank
+        - elapsed_seconds
+      properties:
+        original_place_id:
+          type: string
+          description: 교체 대상 원래 장소 ID
+          example: "place_abc123"
+        schedule_item_id:
+          type: string
+          description: 일정 항목 ID
+          example: "si_01HX..."
+        trip_id:
+          type: string
+          description: 여행 일정 ID
+          example: "trip_01HX..."
+        selected_rank:
+          type: integer
+          minimum: 1
+          maximum: 3
+          description: 선택한 카드 순위 (1/2/3)
+          example: 1
+        elapsed_seconds:
+          type: integer
+          description: 대안 검색 시작 ~ 카드 선택까지 경과 시간 (핵심 KPI 측정용)
+          example: 12
+
+    SelectAlternativeResponse:
+      type: object
+      properties:
+        schedule_item_id:
+          type: string
+          example: "si_01HX..."
+        original_place:
+          type: object
+          properties:
+            place_id:
+              type: string
+              example: "place_abc123"
+            name:
+              type: string
+              example: "이치란 라멘 시부야"
+        new_place:
+          type: object
+          properties:
+            place_id:
+              type: string
+              example: "place_xyz789"
+            name:
+              type: string
+              example: "후쿠로쿠 라멘"
+        travel_time_diff_minutes:
+          type: integer
+          description: 이동시간 변화 (분, 음수=단축)
+          example: -3
+
+    PaywallResponse:
+      type: object
+      properties:
+        paywall:
+          type: boolean
+          example: true
+        message:
+          type: string
+          example: "대안 카드는 Trip Pass/Pro 전용 기능입니다."
+        upgrade_url:
+          type: string
+          example: "/subscriptions/plans"
+
+    Coordinates:
+      type: object
+      properties:
+        lat:
+          type: number
+          format: double
+          example: 35.6595
+        lng:
+          type: number
+          format: double
+          example: 139.7004
+
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+          example: "NOT_FOUND"
+        message:
+          type: string
+          example: "요청한 리소스를 찾을 수 없습니다."
+        timestamp:
+          type: string
+          format: date-time
+          example: "2026-03-15T09:00:00Z"
+
+  responses:
+    BadRequest:
+      description: 잘못된 요청
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error: "BAD_REQUEST"
+            message: "필수 파라미터가 누락되었습니다."
+    Unauthorized:
+      description: 인증 실패
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error: "UNAUTHORIZED"
+            message: "유효하지 않은 토큰입니다."
+    NotFound:
+      description: 리소스 없음
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error: "NOT_FOUND"
+            message: "대안 카드를 찾을 수 없습니다."
+
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT

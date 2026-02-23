@@ -1,0 +1,933 @@
+openapi: 3.0.3
+info:
+  title: AI Pipeline Service API
+  description: |
+    travel-planner AI Pipeline 서비스 내부 API 명세.
+
+    백엔드 서비스(Java/Spring Boot) → AI Pipeline(Python/FastAPI) 호출용 내부 API.
+    API Gateway 미경유. 내부 서비스 간 직접 통신.
+
+    ## Phase 전환 전략
+    - **MVP (Phase 1)**: 메인 서비스 내부 인터페이스 구현체(RuleBased/Fixed)가 처리. 이 API 호출 없음.
+    - **Phase 2**: `ai.briefing.provider=llm` 또는 `ai.weights.provider=ml` 설정 시 이 API를 호출.
+    - **Phase 3**: `/api/v1/schedule/replan` 추가 (AI 자동 일정 재조정)
+
+    ## 폴백 전략
+    - AI 서비스 장애 시 메인 서비스가 RuleBasedBriefingGenerator / FixedScoreWeightsProvider로 자동 폴백
+    - 브리핑 총평 없이도 브리핑은 반드시 발송됨 (Graceful Degradation)
+  version: 1.0.0
+  contact:
+    name: 한승우/마법사 (AI 엔지니어)
+    email: ai-team@travel-planner.internal
+
+servers:
+  - url: https://mock.swaggerhub.com/travel-planner/ai-pipeline/1.0.0
+    description: SwaggerHub Mock Server
+  - url: http://ai-pipeline:8000
+    description: 내부 서비스 (Docker Compose / Kubernetes)
+  - url: http://localhost:8000
+    description: 로컬 개발
+
+tags:
+  - name: Briefing
+    description: 브리핑 총평 생성 API (UFR-BRIF-010)
+  - name: Alternative
+    description: 대안 카드 가중치 계산 API (UFR-ALTN-010)
+  - name: Health
+    description: AI 서비스 헬스체크
+
+paths:
+  /api/v1/briefing/generate-summary:
+    post:
+      tags:
+        - Briefing
+      summary: 브리핑 총평 생성
+      description: |
+        수집 데이터(영업상태, 날씨, 혼잡도, 이동시간)와 장소 정보를 기반으로
+        AI(LLM) 또는 규칙 기반으로 브리핑 총평 텍스트를 생성한다.
+
+        - **MVP**: 메인 서비스 내 RuleBasedBriefingGenerator가 처리. 이 엔드포인트 미호출.
+        - **Phase 2**: LLMBriefingGenerator가 이 엔드포인트를 비동기(Azure Service Bus)로 호출.
+        - **캐시 키**: `hash(place_id + status_level + risk_items + subscription_tier)` (TTL: 30분)
+        - **폴백**: LLM 장애 시 규칙 기반 템플릿 총평 반환 (`source: rule`)
+      operationId: generateBriefingSummary
+      x-user-story: UFR-BRIF-010
+      x-controller: BriefingAIController
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BriefingSummaryRequest'
+            examples:
+              safe_briefing:
+                $ref: '#/components/examples/BriefingSummaryRequestSafeExample'
+              caution_briefing:
+                $ref: '#/components/examples/BriefingSummaryRequestCautionExample'
+      responses:
+        '200':
+          description: 총평 생성 성공
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BriefingSummaryResponse'
+              examples:
+                llm_response:
+                  $ref: '#/components/examples/BriefingSummaryResponseLLMExample'
+                rule_fallback:
+                  $ref: '#/components/examples/BriefingSummaryResponseRuleExample'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+
+  /api/v1/alternative/calculate-weights:
+    post:
+      tags:
+        - Alternative
+      summary: 대안 카드 정렬 가중치 계산
+      description: |
+        사용자 프로필, 선택 이력, 장소 후보 목록을 기반으로
+        대안 카드 정렬에 사용할 가중치(w1, w2, w3)를 계산한다.
+
+        - **MVP**: 메인 서비스 내 FixedScoreWeightsProvider가 처리. 이 엔드포인트 미호출.
+        - **Phase 2**: MLScoreWeightsProvider가 이 엔드포인트를 동기 HTTP로 호출 (타임아웃 500ms).
+        - **캐시 키**: `weights:{user_id}:{category}` (TTL: 1시간)
+        - **폴백**: 500ms 타임아웃 또는 ML 장애 시 고정 가중치 반환 (`source: fixed`)
+
+        ## 가중치 정의
+        - `w1`: 거리 가중치 (distance_score)
+        - `w2`: 평점 가중치 (rating_score)
+        - `w3`: 혼잡도 가중치 (congestion_score)
+        - 합산 점수: `score = w1 * distance_score + w2 * rating_score + w3 * congestion_score`
+      operationId: calculateAlternativeWeights
+      x-user-story: UFR-ALTN-010
+      x-controller: AlternativeAIController
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WeightsCalculationRequest'
+            examples:
+              default:
+                $ref: '#/components/examples/WeightsCalculationRequestExample'
+      responses:
+        '200':
+          description: 가중치 계산 성공
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WeightsCalculationResponse'
+              examples:
+                ml_response:
+                  $ref: '#/components/examples/WeightsCalculationResponseMLExample'
+                fixed_fallback:
+                  $ref: '#/components/examples/WeightsCalculationResponseFixedExample'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+
+  /api/v1/health:
+    get:
+      tags:
+        - Health
+      summary: AI 서비스 헬스체크
+      description: |
+        AI 서비스의 상태 및 의존 컴포넌트(LLM API, ML 모델, Redis 캐시) 연결 상태를 반환한다.
+        메인 서비스의 Circuit Breaker가 이 엔드포인트를 주기적으로 폴링한다.
+      operationId: getHealthStatus
+      x-user-story: NFR-REL-010
+      x-controller: HealthController
+      responses:
+        '200':
+          description: 서비스 정상
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+              examples:
+                healthy:
+                  $ref: '#/components/examples/HealthResponseHealthyExample'
+                degraded:
+                  $ref: '#/components/examples/HealthResponseDegradedExample'
+        '503':
+          description: 서비스 불가 (Circuit Breaker OPEN 트리거)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+              examples:
+                unhealthy:
+                  $ref: '#/components/examples/HealthResponseUnhealthyExample'
+
+components:
+  schemas:
+
+    # ─────────────────────────────────────────────
+    # 브리핑 총평 생성 요청/응답
+    # ─────────────────────────────────────────────
+
+    BriefingSummaryRequest:
+      type: object
+      required:
+        - briefing_id
+        - place_info
+        - collected_data
+        - status_level
+        - subscription_tier
+      properties:
+        briefing_id:
+          type: string
+          format: uuid
+          description: 브리핑 ID (멱등성 키 — 동일 ID 재요청 시 캐시 응답 반환)
+          example: "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+        place_info:
+          $ref: '#/components/schemas/PlaceInfo'
+        collected_data:
+          $ref: '#/components/schemas/CollectedData'
+        status_level:
+          $ref: '#/components/schemas/StatusLevel'
+        risk_items:
+          type: array
+          description: 위험 항목 목록 (CAUTION/DANGER 상태일 때 포함)
+          items:
+            $ref: '#/components/schemas/RiskItem'
+          example:
+            - code: "CLOSED_TEMPORARILY"
+              label: "임시 휴업"
+            - code: "HEAVY_RAIN"
+              label: "폭우 예보"
+        subscription_tier:
+          $ref: '#/components/schemas/SubscriptionTier'
+        locale:
+          type: string
+          description: 응답 언어 (BCP 47)
+          default: "ko-KR"
+          example: "ko-KR"
+
+    BriefingSummaryResponse:
+      type: object
+      required:
+        - summary_text
+        - source
+        - latency_ms
+      properties:
+        summary_text:
+          type: string
+          description: 생성된 총평 텍스트
+          example: "임시 휴업, 폭우 예보가 감지되었습니다. 대안을 확인해보세요."
+        source:
+          type: string
+          description: |
+            총평 생성 출처.
+            - `llm`: Azure OpenAI API(gpt-4o-mini)로 생성
+            - `llm_cache`: 동일 맥락 캐시 HIT (LLM 재호출 없음)
+            - `rule`: 규칙 기반 템플릿 (폴백 또는 MVP)
+            - `graceful_degradation`: 모든 폴백 실패 시 기본 문구
+          enum:
+            - llm
+            - llm_cache
+            - rule
+            - graceful_degradation
+          example: "llm"
+        model_used:
+          type: string
+          description: 사용된 LLM 모델명 (source=llm 또는 llm_cache 일 때만 포함)
+          example: "gpt-4o-mini"
+          nullable: true
+        latency_ms:
+          type: integer
+          description: AI 서비스 내부 처리 시간 (ms)
+          example: 847
+        token_usage:
+          $ref: '#/components/schemas/TokenUsage'
+        cache_hit:
+          type: boolean
+          description: 캐시 HIT 여부
+          example: false
+
+    # ─────────────────────────────────────────────
+    # 대안 가중치 계산 요청/응답
+    # ─────────────────────────────────────────────
+
+    WeightsCalculationRequest:
+      type: object
+      required:
+        - user_id
+        - category
+        - place_candidates
+      properties:
+        user_id:
+          type: string
+          description: 사용자 ID (개인화 가중치 조회 키)
+          example: "user-uuid-550e8400"
+        category:
+          $ref: '#/components/schemas/PlaceCategory'
+        time_of_day:
+          type: string
+          format: time
+          description: 현지 시각 (HH:mm, IANA 시간대 기준)
+          example: "14:30"
+        user_profile:
+          $ref: '#/components/schemas/UserProfile'
+        selection_history:
+          type: array
+          description: 사용자 대안 선택 이력 (Phase 2 ML 학습 참조용)
+          items:
+            $ref: '#/components/schemas/SelectionHistoryItem'
+          maxItems: 50
+        place_candidates:
+          type: array
+          description: 가중치를 적용할 장소 후보 목록
+          items:
+            $ref: '#/components/schemas/PlaceCandidate'
+          minItems: 1
+          maxItems: 10
+
+    WeightsCalculationResponse:
+      type: object
+      required:
+        - weights
+        - source
+        - latency_ms
+      properties:
+        weights:
+          $ref: '#/components/schemas/ScoreWeights'
+        source:
+          type: string
+          description: |
+            가중치 생성 출처.
+            - `ml`: ML 모델 추론 결과 (개인화 가중치)
+            - `ml_cache`: 동일 사용자/카테고리 캐시 HIT
+            - `fixed`: 고정 가중치 (폴백 또는 MVP)
+          enum:
+            - ml
+            - ml_cache
+            - fixed
+          example: "ml"
+        model_used:
+          type: string
+          description: 사용된 ML 모델명 (source=ml 또는 ml_cache 일 때만 포함)
+          example: "weights-lgbm-v1.2"
+          nullable: true
+        latency_ms:
+          type: integer
+          description: AI 서비스 내부 처리 시간 (ms). 500ms 타임아웃 이내여야 함.
+          example: 73
+        token_usage:
+          $ref: '#/components/schemas/TokenUsage'
+          nullable: true
+          description: ML 모델은 토큰 개념 없음. LLM 기반 가중치 추론 시에만 포함.
+        cache_hit:
+          type: boolean
+          description: 캐시 HIT 여부
+          example: false
+
+    # ─────────────────────────────────────────────
+    # 공통 도메인 스키마
+    # ─────────────────────────────────────────────
+
+    PlaceInfo:
+      type: object
+      required:
+        - place_id
+        - name
+        - category
+      properties:
+        place_id:
+          type: string
+          description: Google Places API place_id
+          example: "ChIJN1t_tDeuEmsRUsoyG83frY4"
+        name:
+          type: string
+          description: 장소명
+          example: "도쿄 스카이트리"
+        category:
+          $ref: '#/components/schemas/PlaceCategory'
+        address:
+          type: string
+          description: 주소
+          example: "일본 도쿄도 스미다구 오시아게 1-1-2"
+
+    CollectedData:
+      type: object
+      description: 모니터링 서비스에서 수집한 최신 데이터 (캐시 Read-Through, 5분 이내)
+      required:
+        - business_status
+        - weather
+        - congestion
+        - travel_time_min
+        - collected_at
+      properties:
+        business_status:
+          type: string
+          description: 영업 상태
+          enum:
+            - OPEN
+            - CLOSED
+            - CLOSED_TEMPORARILY
+            - UNKNOWN
+          example: "CLOSED_TEMPORARILY"
+        weather:
+          $ref: '#/components/schemas/WeatherData'
+        congestion:
+          $ref: '#/components/schemas/CongestionData'
+        travel_time_min:
+          type: integer
+          description: 현재 위치에서 목적지까지 이동 시간 (분)
+          minimum: 0
+          example: 22
+        collected_at:
+          type: string
+          format: date-time
+          description: 데이터 수집 시각 (UTC)
+          example: "2026-02-23T05:30:00Z"
+
+    WeatherData:
+      type: object
+      properties:
+        condition:
+          type: string
+          description: 날씨 상태
+          enum:
+            - CLEAR
+            - CLOUDY
+            - LIGHT_RAIN
+            - HEAVY_RAIN
+            - SNOW
+            - STORM
+            - UNKNOWN
+          example: "HEAVY_RAIN"
+        temperature_celsius:
+          type: number
+          format: float
+          example: 12.5
+        precipitation_mm:
+          type: number
+          format: float
+          description: 시간당 강수량 (mm)
+          example: 18.3
+
+    CongestionData:
+      type: object
+      properties:
+        level:
+          type: string
+          description: 혼잡도 레벨
+          enum:
+            - LOW
+            - NORMAL
+            - HIGH
+            - VERY_HIGH
+            - UNKNOWN
+          example: "HIGH"
+        occupancy_rate:
+          type: number
+          format: float
+          description: 점유율 (0.0 ~ 1.0)
+          minimum: 0.0
+          maximum: 1.0
+          example: 0.82
+
+    StatusLevel:
+      type: string
+      description: |
+        종합 상태 레벨.
+        - `SAFE`: 모든 항목 정상 (초록 배지)
+        - `CAUTION`: 주의 필요 (노랑 배지)
+        - `DANGER`: 위험 (빨강 배지)
+      enum:
+        - SAFE
+        - CAUTION
+        - DANGER
+      example: "CAUTION"
+
+    RiskItem:
+      type: object
+      required:
+        - code
+        - label
+      properties:
+        code:
+          type: string
+          description: 위험 항목 코드
+          example: "CLOSED_TEMPORARILY"
+        label:
+          type: string
+          description: 사용자 표시용 한국어 레이블
+          example: "임시 휴업"
+
+    SubscriptionTier:
+      type: string
+      description: |
+        구독 티어.
+        - `FREE`: 무료 (LLM 총평 없음 — RuleBased 적용)
+        - `TRIP_PASS`: 일 3회 LLM 총평
+        - `PRO`: 무제한 LLM 총평
+      enum:
+        - FREE
+        - TRIP_PASS
+        - PRO
+      example: "PRO"
+
+    PlaceCategory:
+      type: string
+      description: 장소 카테고리
+      enum:
+        - RESTAURANT
+        - CAFE
+        - ATTRACTION
+        - SHOPPING
+        - ACCOMMODATION
+        - TRANSPORT
+        - OTHER
+      example: "ATTRACTION"
+
+    ScoreWeights:
+      type: object
+      description: 대안 카드 정렬 가중치. w1+w2+w3 합계는 1.0
+      required:
+        - w1
+        - w2
+        - w3
+      properties:
+        w1:
+          type: number
+          format: float
+          description: 거리 가중치 (distance_score)
+          minimum: 0.0
+          maximum: 1.0
+          example: 0.5
+        w2:
+          type: number
+          format: float
+          description: 평점 가중치 (rating_score)
+          minimum: 0.0
+          maximum: 1.0
+          example: 0.3
+        w3:
+          type: number
+          format: float
+          description: 혼잡도 가중치 (congestion_score)
+          minimum: 0.0
+          maximum: 1.0
+          example: 0.2
+      example:
+        w1: 0.5
+        w2: 0.3
+        w3: 0.2
+
+    UserProfile:
+      type: object
+      description: 사용자 선호 프로필 (ML 개인화 참조용)
+      properties:
+        preferred_categories:
+          type: array
+          items:
+            $ref: '#/components/schemas/PlaceCategory'
+          example:
+            - CAFE
+            - ATTRACTION
+        travel_style:
+          type: string
+          description: 여행 스타일
+          enum:
+            - EFFICIENCY_FIRST
+            - EXPERIENCE_FIRST
+            - BUDGET_FIRST
+            - UNKNOWN
+          example: "EFFICIENCY_FIRST"
+
+    SelectionHistoryItem:
+      type: object
+      description: 대안 카드 선택 이력 (ML 학습 레이블)
+      properties:
+        place_id:
+          type: string
+          description: 선택한 장소의 place_id
+          example: "ChIJabc123"
+        category:
+          $ref: '#/components/schemas/PlaceCategory'
+        selected_at:
+          type: string
+          format: date-time
+          example: "2026-02-20T09:15:00Z"
+        rank_at_selection:
+          type: integer
+          description: 선택 시점 카드 순위 (1~3)
+          minimum: 1
+          maximum: 3
+          example: 2
+
+    PlaceCandidate:
+      type: object
+      description: 가중치 적용 대상 장소 후보
+      required:
+        - place_id
+        - distance_m
+        - rating
+        - congestion_level
+      properties:
+        place_id:
+          type: string
+          example: "ChIJxyz789"
+        name:
+          type: string
+          example: "아사쿠사 커피 로스터스"
+        distance_m:
+          type: integer
+          description: 현재 위치에서의 도보 거리 (미터)
+          minimum: 0
+          example: 350
+        rating:
+          type: number
+          format: float
+          description: Google Places 평점 (0.0 ~ 5.0)
+          minimum: 0.0
+          maximum: 5.0
+          example: 4.3
+        congestion_level:
+          type: string
+          enum:
+            - LOW
+            - NORMAL
+            - HIGH
+            - VERY_HIGH
+            - UNKNOWN
+          example: "LOW"
+
+    TokenUsage:
+      type: object
+      description: LLM 토큰 사용량 (source=llm 일 때만 포함)
+      properties:
+        prompt_tokens:
+          type: integer
+          description: 입력 토큰 수
+          example: 187
+        completion_tokens:
+          type: integer
+          description: 출력 토큰 수
+          example: 42
+        total_tokens:
+          type: integer
+          description: 총 토큰 수
+          example: 229
+
+    HealthResponse:
+      type: object
+      required:
+        - status
+        - timestamp
+      properties:
+        status:
+          type: string
+          description: |
+            서비스 전체 상태.
+            - `healthy`: 모든 컴포넌트 정상
+            - `degraded`: 일부 비필수 컴포넌트 장애 (서비스 동작 가능)
+            - `unhealthy`: 필수 컴포넌트 장애 (서비스 불가)
+          enum:
+            - healthy
+            - degraded
+            - unhealthy
+          example: "healthy"
+        timestamp:
+          type: string
+          format: date-time
+          example: "2026-02-23T05:30:00Z"
+        version:
+          type: string
+          description: AI 서비스 버전
+          example: "1.0.0"
+        components:
+          type: object
+          description: 개별 컴포넌트 상태
+          properties:
+            llm_api:
+              $ref: '#/components/schemas/ComponentStatus'
+            ml_model:
+              $ref: '#/components/schemas/ComponentStatus'
+            redis_cache:
+              $ref: '#/components/schemas/ComponentStatus'
+
+    ComponentStatus:
+      type: object
+      properties:
+        status:
+          type: string
+          enum:
+            - up
+            - down
+            - unknown
+          example: "up"
+        latency_ms:
+          type: integer
+          description: 최근 ping 응답 시간 (ms)
+          example: 45
+        detail:
+          type: string
+          description: 상태 상세 메시지
+          example: "Azure OpenAI API 응답 정상"
+
+    ErrorResponse:
+      type: object
+      required:
+        - error_code
+        - message
+        - timestamp
+      properties:
+        error_code:
+          type: string
+          description: 에러 코드
+          example: "INVALID_STATUS_LEVEL"
+        message:
+          type: string
+          description: 에러 메시지
+          example: "status_level 값이 유효하지 않습니다."
+        timestamp:
+          type: string
+          format: date-time
+          example: "2026-02-23T05:30:00Z"
+        fallback_available:
+          type: boolean
+          description: 폴백 응답 가용 여부
+          example: true
+
+  responses:
+    UnprocessableEntity:
+      description: 요청 데이터 검증 실패
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error_code: "VALIDATION_ERROR"
+            message: "required 필드가 누락되었습니다: place_info.place_id"
+            timestamp: "2026-02-23T05:30:00Z"
+            fallback_available: false
+
+    ServiceUnavailable:
+      description: AI 서비스 불가 (LLM API 장애 + 폴백 실패)
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error_code: "SERVICE_UNAVAILABLE"
+            message: "AI 서비스 일시 장애. 메인 서비스 폴백 처리 필요."
+            timestamp: "2026-02-23T05:30:00Z"
+            fallback_available: true
+
+  examples:
+
+    # 브리핑 총평 요청 예시 — 안심 (SAFE)
+    BriefingSummaryRequestSafeExample:
+      summary: 안심 브리핑 요청 (SAFE 상태)
+      value:
+        briefing_id: "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+        place_info:
+          place_id: "ChIJN1t_tDeuEmsRUsoyG83frY4"
+          name: "도쿄 스카이트리"
+          category: "ATTRACTION"
+          address: "일본 도쿄도 스미다구 오시아게 1-1-2"
+        collected_data:
+          business_status: "OPEN"
+          weather:
+            condition: "CLEAR"
+            temperature_celsius: 18.0
+            precipitation_mm: 0.0
+          congestion:
+            level: "NORMAL"
+            occupancy_rate: 0.45
+          travel_time_min: 15
+          collected_at: "2026-02-23T05:10:00Z"
+        status_level: "SAFE"
+        risk_items: []
+        subscription_tier: "PRO"
+        locale: "ko-KR"
+
+    # 브리핑 총평 요청 예시 — 주의 (CAUTION)
+    BriefingSummaryRequestCautionExample:
+      summary: 주의 브리핑 요청 (CAUTION 상태 + 위험 항목)
+      value:
+        briefing_id: "b2c3d4e5-f6a7-8901-bcde-f12345678901"
+        place_info:
+          place_id: "ChIJN1t_tDeuEmsRUsoyG83frY4"
+          name: "도쿄 스카이트리"
+          category: "ATTRACTION"
+          address: "일본 도쿄도 스미다구 오시아게 1-1-2"
+        collected_data:
+          business_status: "CLOSED_TEMPORARILY"
+          weather:
+            condition: "HEAVY_RAIN"
+            temperature_celsius: 12.5
+            precipitation_mm: 18.3
+          congestion:
+            level: "HIGH"
+            occupancy_rate: 0.82
+          travel_time_min: 22
+          collected_at: "2026-02-23T05:10:00Z"
+        status_level: "CAUTION"
+        risk_items:
+          - code: "CLOSED_TEMPORARILY"
+            label: "임시 휴업"
+          - code: "HEAVY_RAIN"
+            label: "폭우 예보"
+        subscription_tier: "PRO"
+        locale: "ko-KR"
+
+    # 브리핑 총평 응답 — LLM 생성
+    BriefingSummaryResponseLLMExample:
+      summary: LLM 생성 총평 응답
+      value:
+        summary_text: "임시 휴업과 폭우 예보로 방문 난이도가 높습니다. 실내 대안 장소를 먼저 확인해보세요."
+        source: "llm"
+        model_used: "gpt-4o-mini"
+        latency_ms: 847
+        token_usage:
+          prompt_tokens: 187
+          completion_tokens: 42
+          total_tokens: 229
+        cache_hit: false
+
+    # 브리핑 총평 응답 — 규칙 기반 폴백
+    BriefingSummaryResponseRuleExample:
+      summary: 규칙 기반 폴백 총평 응답
+      value:
+        summary_text: "임시 휴업, 폭우 예보이(가) 감지되었습니다. 대안을 확인해보세요."
+        source: "rule"
+        model_used: null
+        latency_ms: 3
+        token_usage: null
+        cache_hit: false
+
+    # 가중치 계산 요청 예시
+    WeightsCalculationRequestExample:
+      summary: ML 가중치 계산 요청 (카페 카테고리)
+      value:
+        user_id: "user-uuid-550e8400"
+        category: "CAFE"
+        time_of_day: "14:30"
+        user_profile:
+          preferred_categories:
+            - CAFE
+            - ATTRACTION
+          travel_style: "EFFICIENCY_FIRST"
+        selection_history:
+          - place_id: "ChIJabc123"
+            category: "CAFE"
+            selected_at: "2026-02-20T09:15:00Z"
+            rank_at_selection: 1
+          - place_id: "ChIJdef456"
+            category: "CAFE"
+            selected_at: "2026-02-21T13:40:00Z"
+            rank_at_selection: 2
+        place_candidates:
+          - place_id: "ChIJxyz789"
+            name: "아사쿠사 커피 로스터스"
+            distance_m: 350
+            rating: 4.3
+            congestion_level: "LOW"
+          - place_id: "ChIJpqr012"
+            name: "우에노 스타벅스"
+            distance_m: 820
+            rating: 4.0
+            congestion_level: "NORMAL"
+          - place_id: "ChIJstu345"
+            name: "아키하바라 블루보틀"
+            distance_m: 1200
+            rating: 4.6
+            congestion_level: "HIGH"
+
+    # 가중치 계산 응답 — ML 모델
+    WeightsCalculationResponseMLExample:
+      summary: ML 모델 개인화 가중치 응답
+      value:
+        weights:
+          w1: 0.35
+          w2: 0.45
+          w3: 0.20
+        source: "ml"
+        model_used: "weights-lgbm-v1.2"
+        latency_ms: 73
+        token_usage: null
+        cache_hit: false
+
+    # 가중치 계산 응답 — 고정 가중치 폴백
+    WeightsCalculationResponseFixedExample:
+      summary: 고정 가중치 폴백 응답 (MVP 기본값)
+      value:
+        weights:
+          w1: 0.5
+          w2: 0.3
+          w3: 0.2
+        source: "fixed"
+        model_used: null
+        latency_ms: 1
+        token_usage: null
+        cache_hit: false
+
+    # 헬스체크 응답 — 정상
+    HealthResponseHealthyExample:
+      summary: 서비스 정상 상태
+      value:
+        status: "healthy"
+        timestamp: "2026-02-23T05:30:00Z"
+        version: "1.0.0"
+        components:
+          llm_api:
+            status: "up"
+            latency_ms: 45
+            detail: "Azure OpenAI API 응답 정상"
+          ml_model:
+            status: "up"
+            latency_ms: 12
+            detail: "weights-lgbm-v1.2 모델 로드 완료"
+          redis_cache:
+            status: "up"
+            latency_ms: 2
+            detail: "Redis 연결 정상"
+
+    # 헬스체크 응답 — 저하
+    HealthResponseDegradedExample:
+      summary: 서비스 저하 상태 (LLM API 장애, 폴백 동작 중)
+      value:
+        status: "degraded"
+        timestamp: "2026-02-23T05:30:00Z"
+        version: "1.0.0"
+        components:
+          llm_api:
+            status: "down"
+            latency_ms: null
+            detail: "Azure OpenAI API Circuit Breaker OPEN (3회/30초 초과)"
+          ml_model:
+            status: "up"
+            latency_ms: 12
+            detail: "weights-lgbm-v1.2 모델 로드 완료"
+          redis_cache:
+            status: "up"
+            latency_ms: 2
+            detail: "Redis 연결 정상"
+
+    # 헬스체크 응답 — 불가
+    HealthResponseUnhealthyExample:
+      summary: 서비스 불가 상태
+      value:
+        status: "unhealthy"
+        timestamp: "2026-02-23T05:30:00Z"
+        version: "1.0.0"
+        components:
+          llm_api:
+            status: "down"
+            latency_ms: null
+            detail: "Azure OpenAI API 장애"
+          ml_model:
+            status: "down"
+            latency_ms: null
+            detail: "ML 모델 로드 실패"
+          redis_cache:
+            status: "down"
+            latency_ms: null
+            detail: "Redis 연결 실패"

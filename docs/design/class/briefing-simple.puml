@@ -1,0 +1,68 @@
+@startuml
+!theme mono
+
+title BRIEFING 서비스 - 요약 클래스 다이어그램
+
+package "com.travelplanner.briefing" {
+    package "controller" {
+        class BriefController
+        class BriefingScheduler
+    }
+    package "service" {
+        interface BriefingService
+        class BriefingServiceImpl
+    }
+    package "generator" {
+        interface BriefingTextGenerator
+        class RuleBasedBriefingGenerator
+    }
+    package "repository" {
+        interface BriefingRepository
+    }
+    package "client" {
+        class MonitorServiceClient
+        class PayServiceClient
+        class FcmClient
+        class EventPublisher
+    }
+    package "domain" {
+        class Briefing
+        class BriefingContent
+        class BriefingContext
+        class BriefingText
+    }
+}
+
+note right of BriefController
+  API 매핑표 (BriefController)
+  ---
+  getBriefing: GET /briefings/{briefing_id} 브리핑 상세 조회
+  getBriefingList: GET /briefings 브리핑 목록 조회
+  ---
+  API 매핑표 (BriefingScheduler)
+  ---
+  generateBriefing: POST /briefings/generate 브리핑 생성 트리거
+end note
+
+BriefController --> BriefingService
+BriefingScheduler --> BriefingService
+BriefingServiceImpl ..|> BriefingService
+
+BriefingServiceImpl --> BriefingRepository
+BriefingServiceImpl --> BriefingTextGenerator
+BriefingServiceImpl --> MonitorServiceClient
+BriefingServiceImpl --> PayServiceClient
+BriefingServiceImpl --> FcmClient
+BriefingServiceImpl --> EventPublisher
+
+RuleBasedBriefingGenerator ..|> BriefingTextGenerator
+BriefingRepository ..> Briefing
+
+BriefingTextGenerator ..> BriefingContext
+BriefingTextGenerator ..> BriefingText
+
+Briefing o-- BriefingContent
+Briefing --> BriefingType
+Briefing --> StatusLevel
+
+@enduml

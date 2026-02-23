@@ -1,0 +1,81 @@
+-- =============================================================
+-- BRIEFING 서비스 스키마 스크립트
+-- DBMS: PostgreSQL
+-- 서비스: com.travelplanner.briefing
+-- =============================================================
+
+CREATE SCHEMA IF NOT EXISTS briefing;
+
+SET search_path = briefing;
+
+-- =============================================================
+-- TABLE: briefings
+-- =============================================================
+CREATE TABLE briefings (
+    id                  VARCHAR(36)     NOT NULL,
+    user_id             VARCHAR(36)     NOT NULL,
+    schedule_item_id    VARCHAR(36)     NOT NULL,
+    place_id            VARCHAR(200)    NOT NULL,
+    place_name          VARCHAR(200)    NOT NULL,
+    type                VARCHAR(10)     NOT NULL,
+    departure_time      TIMESTAMPTZ     NOT NULL,
+    idempotency_key     VARCHAR(200)    NOT NULL,
+    summary_text        TEXT            NOT NULL,
+    status_level        VARCHAR(10)     NOT NULL,
+    business_status     VARCHAR(50),
+    congestion          VARCHAR(50),
+    weather             VARCHAR(100),
+    walking_minutes     INTEGER,
+    transit_minutes     INTEGER,
+    distance_m          INTEGER,
+    risk_items          JSONB,
+    created_at          TIMESTAMPTZ     NOT NULL DEFAULT NOW(),
+
+    CONSTRAINT pk_briefings PRIMARY KEY (id),
+    CONSTRAINT uq_briefings_idempotency_key UNIQUE (idempotency_key),
+    CONSTRAINT chk_briefings_type CHECK (type IN ('SAFE', 'WARNING')),
+    CONSTRAINT chk_briefings_status_level CHECK (
+        status_level IN ('SAFE', 'CAUTION', 'DANGER')
+    )
+);
+
+CREATE INDEX idx_briefings_user_id_created_at ON briefings (user_id, created_at DESC);
+CREATE INDEX idx_briefings_user_id_departure_date ON briefings (user_id, DATE(departure_time));
+CREATE UNIQUE INDEX idx_briefings_idempotency_key ON briefings (idempotency_key);
+CREATE INDEX idx_briefings_schedule_item_id ON briefings (schedule_item_id);
+
+COMMENT ON TABLE briefings IS '출발 전 AI 브리핑';
+COMMENT ON COLUMN briefings.idempotency_key IS '{placeId}:{departureTime 시간 단위 반올림} — 중복 생성 방지';
+COMMENT ON COLUMN briefings.risk_items IS 'JSONB 배열: [{label: string, severity: string}]';
+COMMENT ON COLUMN briefings.place_name IS '생성 시점 스냅샷';
+COMMENT ON COLUMN briefings.user_id IS 'AUTH 서비스 참조 (DB FK 없음)';
+COMMENT ON COLUMN briefings.schedule_item_id IS 'SCHEDULE 서비스 참조 (DB FK 없음)';
+
+-- =============================================================
+-- TABLE: briefing_logs
+-- =============================================================
+CREATE TABLE briefing_logs (
+    id                      VARCHAR(36)     NOT NULL,
+    briefing_id             VARCHAR(36)     NOT NULL,
+    user_id                 VARCHAR(36)     NOT NULL,
+    status                  VARCHAR(20)     NOT NULL,
+    reason                  VARCHAR(200),
+    read_at                 TIMESTAMPTZ,
+    read_latency_seconds    INTEGER,
+    created_at              TIMESTAMPTZ     NOT NULL DEFAULT NOW(),
+
+    CONSTRAINT pk_briefing_logs PRIMARY KEY (id),
+    CONSTRAINT fk_briefing_logs_briefing_id FOREIGN KEY (briefing_id)
+        REFERENCES briefings (id) ON DELETE CASCADE,
+    CONSTRAINT chk_briefing_logs_status CHECK (
+        status IN ('CREATED', 'SKIPPED', 'FAILED')
+    )
+);
+
+CREATE INDEX idx_briefing_logs_user_id_created_at ON briefing_logs (user_id, created_at DESC);
+CREATE INDEX idx_briefing_logs_briefing_id ON briefing_logs (briefing_id);
+CREATE INDEX idx_briefing_logs_user_id_date ON briefing_logs (user_id, DATE(created_at));
+
+COMMENT ON TABLE briefing_logs IS '브리핑 생성/조회 이력';
+COMMENT ON COLUMN briefing_logs.status IS 'CREATED: 신규 생성 / SKIPPED: 멱등성 중복 / FAILED: 실패';
+COMMENT ON COLUMN briefing_logs.read_latency_seconds IS '브리핑 생성 후 사용자 조회까지 지연 시간';

@@ -1,0 +1,63 @@
+-- =============================================================
+-- PLACE 서비스 스키마 스크립트
+-- DBMS: PostgreSQL
+-- 서비스: com.travelplanner.place
+-- =============================================================
+
+CREATE SCHEMA IF NOT EXISTS place;
+
+SET search_path = place;
+
+-- =============================================================
+-- TABLE: places
+-- =============================================================
+CREATE TABLE places (
+    id          VARCHAR(200)    NOT NULL,
+    name        VARCHAR(200)    NOT NULL,
+    address     VARCHAR(500),
+    category    VARCHAR(50),
+    rating      NUMERIC(3,1),
+    lat         NUMERIC(10,7)   NOT NULL,
+    lng         NUMERIC(10,7)   NOT NULL,
+    timezone    VARCHAR(50),
+    photo_url   VARCHAR(500),
+    city        VARCHAR(100),
+    updated_at  TIMESTAMPTZ     NOT NULL DEFAULT NOW(),
+
+    CONSTRAINT pk_places PRIMARY KEY (id),
+    CONSTRAINT chk_places_rating CHECK (rating IS NULL OR rating BETWEEN 0.0 AND 5.0)
+);
+
+CREATE INDEX idx_places_city ON places (city);
+CREATE INDEX idx_places_category ON places (category);
+CREATE INDEX idx_places_city_category ON places (city, category);
+CREATE INDEX idx_places_coordinates ON places (lat, lng);
+CREATE INDEX idx_places_updated_at ON places (updated_at);
+
+COMMENT ON TABLE places IS 'Google Places API 수집 장소 정보 (영속 캐시)';
+COMMENT ON COLUMN places.id IS 'Google Place ID (외부 시스템 키)';
+COMMENT ON COLUMN places.updated_at IS '캐시 신선도 관리 기준. 24시간 초과 시 API 재조회';
+
+-- =============================================================
+-- TABLE: place_business_hours
+-- =============================================================
+CREATE TABLE place_business_hours (
+    id          SERIAL          NOT NULL,
+    place_id    VARCHAR(200)    NOT NULL,
+    day_of_week VARCHAR(10)     NOT NULL,
+    open_time   VARCHAR(5),
+    close_time  VARCHAR(5),
+
+    CONSTRAINT pk_place_business_hours PRIMARY KEY (id),
+    CONSTRAINT fk_place_business_hours_place_id FOREIGN KEY (place_id)
+        REFERENCES places (id) ON DELETE CASCADE,
+    CONSTRAINT chk_place_business_hours_day CHECK (
+        day_of_week IN ('MONDAY','TUESDAY','WEDNESDAY','THURSDAY','FRIDAY','SATURDAY','SUNDAY')
+    )
+);
+
+CREATE INDEX idx_place_business_hours_place_id ON place_business_hours (place_id);
+
+COMMENT ON TABLE place_business_hours IS '장소 영업시간 (요일별)';
+COMMENT ON COLUMN place_business_hours.open_time IS 'HH:mm 형식';
+COMMENT ON COLUMN place_business_hours.close_time IS 'HH:mm 형식. NULL이면 24시간';

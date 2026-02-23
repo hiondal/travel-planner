@@ -1,0 +1,51 @@
+@startuml
+!theme mono
+
+title PAYMENT 서비스 - 요약 클래스 다이어그램
+
+package "com.travelplanner.payment" {
+    package "controller" {
+        class PayController
+    }
+    package "service" {
+        interface SubscriptionService
+        class SubscriptionServiceImpl
+    }
+    package "repository" {
+        interface SubscriptionRepository
+    }
+    package "client" {
+        class IapVerificationClient
+        class AuthServiceClient
+    }
+    package "domain" {
+        class Subscription
+        class PaymentRecord
+        class SubscriptionPlan
+        class VerificationResult
+    }
+}
+
+note right of PayController
+  API 매핑표
+  ---
+  getSubscriptionPlans: GET /subscriptions/plans 구독 플랜 목록 조회
+  purchaseSubscription: POST /subscriptions/purchase 구독 구매(인앱 결제 영수증 검증)
+  getSubscriptionStatus: GET /subscriptions/status 구독 상태 조회
+end note
+
+PayController --> SubscriptionService
+SubscriptionServiceImpl ..|> SubscriptionService
+
+SubscriptionServiceImpl --> SubscriptionRepository
+SubscriptionServiceImpl --> IapVerificationClient
+SubscriptionServiceImpl --> AuthServiceClient
+
+SubscriptionRepository ..> Subscription
+SubscriptionRepository ..> PaymentRecord
+IapVerificationClient ..> VerificationResult
+
+Subscription --> SubscriptionTier
+Subscription --> SubscriptionStatusEnum
+
+@enduml

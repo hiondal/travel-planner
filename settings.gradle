@@ -1,0 +1,10 @@
+rootProject.name = 'travel-planner'
+
+include 'common'
+include 'auth'
+include 'schedule'
+include 'place'
+include 'monitor'
+include 'briefing'
+include 'alternative'
+include 'payment'

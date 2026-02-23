@@ -1,0 +1,46 @@
+@startuml
+!theme mono
+
+title PLACE 서비스 - 요약 클래스 다이어그램
+
+package "com.travelplanner.place" {
+    package "controller" {
+        class PlceController
+    }
+    package "service" {
+        interface PlaceService
+        class PlaceServiceImpl
+    }
+    package "repository" {
+        interface PlaceRepository
+    }
+    package "client" {
+        class GooglePlacesClient
+    }
+    package "domain" {
+        class Place
+        class BusinessHour
+        class Coordinates
+    }
+}
+
+note right of PlceController
+  API 매핑표
+  ---
+  searchPlaces: GET /places/search 키워드 기반 장소 검색
+  getPlaceDetail: GET /places/{place_id} 장소 상세 정보 조회
+  searchNearbyPlaces: GET /places/nearby 반경 기반 주변 장소 검색
+end note
+
+PlceController --> PlaceService
+PlaceServiceImpl ..|> PlaceService
+PlaceServiceImpl --> PlaceRepository
+PlaceServiceImpl --> GooglePlacesClient
+
+PlaceRepository ..> Place
+GooglePlacesClient ..> Place
+
+Place "1" o-- "0..*" BusinessHour
+Place ..> Coordinates
+
+@enduml

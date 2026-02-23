@@ -1,0 +1,63 @@
+<component name="ProjectRunConfigurationManager">
+  <configuration default="false" name="briefing" type="GradleRunConfiguration" factoryName="Gradle">
+    <ExternalSystemSettings>
+      <option name="env">
+        <map>
+          <!-- 서버 설정 -->
+          <entry key="SERVER_PORT" value="8085" />
+          <entry key="SPRING_PROFILES_ACTIVE" value="dev" />
+
+          <!-- 데이터베이스 -->
+          <entry key="DB_HOST" value="localhost" />
+          <entry key="DB_PORT" value="5432" />
+          <entry key="DB_USER" value="travel" />
+          <entry key="DB_PASSWORD" value="P@ssw0rd$" />
+
+          <!-- JPA -->
+          <entry key="DDL_AUTO" value="update" />
+          <entry key="SHOW_SQL" value="true" />
+
+          <!-- Redis -->
+          <entry key="REDIS_HOST" value="localhost" />
+          <entry key="REDIS_PORT" value="6379" />
+          <entry key="REDIS_DATABASE" value="5" />
+
+          <!-- JWT -->
+          <entry key="JWT_SECRET" value="travel-planner-jwt-secret-key-for-development-must-be-256-bits-long" />
+          <entry key="JWT_ACCESS_TOKEN_VALIDITY" value="1800" />
+          <entry key="JWT_REFRESH_TOKEN_VALIDITY" value="86400" />
+
+          <!-- 로깅 -->
+          <entry key="LOG_LEVEL_APP" value="DEBUG" />
+          <entry key="LOG_LEVEL_WEB" value="INFO" />
+          <entry key="LOG_LEVEL_SQL" value="INFO" />
+
+          <!-- CORS -->
+          <entry key="CORS_ALLOWED_ORIGINS" value="http://localhost:3000" />
+
+          <!-- FCM (Firebase Cloud Messaging) -->
+          <entry key="FCM_CREDENTIALS_PATH" value="" />
+          <entry key="FCM_PROJECT_ID" value="" />
+        </map>
+      </option>
+      <option name="executionName" />
+      <option name="externalProjectPath" value="$PROJECT_DIR$" />
+      <option name="externalSystemIdString" value="GRADLE" />
+      <option name="scriptParameters" value="" />
+      <option name="taskDescriptions">
+        <list />
+      </option>
+      <option name="taskNames">
+        <list>
+          <option value="briefing:bootRun" />
+        </list>
+      </option>
+      <option name="vmOptions" />
+    </ExternalSystemSettings>
+    <ExternalSystemDebugServerProcess>true</ExternalSystemDebugServerProcess>
+    <ExternalSystemReattachDebugProcess>true</ExternalSystemReattachDebugProcess>
+    <DebugAllEnabled>false</DebugAllEnabled>
+    <RunAsTest>false</RunAsTest>
+    <method v="2" />
+  </configuration>
+</component>

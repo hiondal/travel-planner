@@ -1,218 +1,67 @@
 @startuml
 !theme mono
 
-title PLCE 서비스: 반경 기반 주변 장소 검색 (UFR-PLCE-030)
+title PLCE 서비스 - 주변 장소 검색 (반경 기반)
 
-participant "PlaceController" as ctrl
+participant "PlceController" as ctrl
 participant "PlaceService" as svc
-participant "PlaceCacheManager" as cacheMgr
 participant "PlaceRepository" as repo
-database "Redis Cache" as cache
-participant "ExternalApiClient" as apiClient
+database "PostgreSQL(E)" as db
+database "Redis Cache(E)" as cache
 participant "Google Places API(E)" as gplaces
 
-== 주변 장소 검색 요청 ==
-ctrl -> svc: 검색 요청\n(lat, lng, category, radius=1km)
+-> ctrl : GET /api/v1/places/nearby\n?lat={위도}&lng={경도}&category={카테고리}&radius={반경}
+activate ctrl
+
+ctrl -> ctrl : 요청 검증 (좌표 유효성, 카테고리, 반경 1/2/3km)
+
+ctrl -> svc : searchNearbyPlaces(lat, lng, category, radius)
 activate svc
 
-== 1차: 반경 1km 검색 ==
-svc -> apiClient: nearbySearch 호출\n(location, radius=1km,\ntype=category)
-activate apiClient
+svc -> cache : 캐시 조회\n(place:nearby:{lat}:{lng}:{category}:{radius})
+activate cache
 
-apiClient -> gplaces: Google Places API\nnearbysearch
-activate gplaces
-
-alt API 성공
-    gplaces --> apiClient: 200 OK\n(place_id, name, rating,\nopening_hours, geometry,\ncurrent_popularity)
-    deactivate gplaces
-
-    apiClient -> apiClient: 결과 필터링\n- 동일 카테고리만 선택\n- 영업 중 필터링\n(opening_now=true)
-
-    apiClient --> svc: 필터링된 결과 반환\n(거리순 정렬)
-    deactivate apiClient
-
-    svc -> svc: 결과 개수 확인
-    alt 결과 >= 3개
-        svc -> cacheMgr: 캐시 저장\n(key=nearby:{lat}:{lng}:{category}:{radius})
-        activate cacheMgr
-
-        cacheMgr -> cache: SET nearby_places\n{place_id, name, rating,\ndistance, opening_hours}\n(TTL=5분)
-        activate cache
-        cache --> cacheMgr: 저장 완료
-        deactivate cache
-        deactivate cacheMgr
-
-        svc --> ctrl: 200 OK\n(대안 장소 목록)
-        deactivate svc
-
-    else 결과 < 3개
-        == 2차: 반경 2km 확장 ==
-        svc -> apiClient: nearbySearch 재호출\n(location, radius=2km,\ntype=category)
-        activate apiClient
-
-        apiClient -> gplaces: Google Places API\nnearbysearch
-        activate gplaces
-
-        alt API 성공
-            gplaces --> apiClient: 200 OK\n(확장된 결과)
-            deactivate gplaces
-
-            apiClient -> apiClient: 결과 필터링\n- 동일 카테고리\n- 영업 중 필터링
-
-            apiClient --> svc: 필터링된 결과 반환
-            deactivate apiClient
-
-            svc -> svc: 결과 개수 재확인
-            alt 누적 결과 >= 3개
-                svc -> cacheMgr: 캐시 저장\n(key=nearby:{lat}:{lng}:{category}:2km)
-                activate cacheMgr
-
-                cacheMgr -> cache: SET nearby_places\n{반경 정보 표시}\n(TTL=5분)
-                activate cache
-                cache --> cacheMgr: 저장 완료
-                deactivate cache
-                deactivate cacheMgr
-
-                svc --> ctrl: 200 OK\n(반경 2km 대안 장소)
-                deactivate svc
-
-            else 누적 결과 < 3개
-                == 3차: 반경 3km 최대 확장 ==
-                svc -> apiClient: nearbySearch 최종 호출\n(location, radius=3km,\ntype=category)
-                activate apiClient
-
-                apiClient -> gplaces: Google Places API\nnearbysearch
-                activate gplaces
-
-                alt API 성공
-                    gplaces --> apiClient: 200 OK\n(최종 결과)
-                    deactivate gplaces
-
-                    apiClient -> apiClient: 결과 필터링\n- 동일 카테고리\n- 영업 중 필터링
-
-                    apiClient --> svc: 필터링된 결과 반환\n(최대 3km)
-                    deactivate apiClient
-
-                    svc -> cacheMgr: 캐시 저장\n(key=nearby:{lat}:{lng}:{category}:3km)
-                    activate cacheMgr
-
-                    cacheMgr -> cache: SET nearby_places\n{반경 3km 정보 표시}\n(TTL=5분)
-                    activate cache
-                    cache --> cacheMgr: 저장 완료
-                    deactivate cache
-                    deactivate cacheMgr
-
-                    svc --> ctrl: 200 OK\n(가용한 대안 장소 목록,\n3개 미만일 수 있음)
-                    deactivate svc
-
-                else API 실패 (Circuit Breaker)
-                    gplaces --> apiClient: 503 Service Unavailable
-                    deactivate gplaces
-
-                    apiClient -> apiClient: 재시도 실패\n(3회 이상)
-
-                    == Circuit Breaker OPEN: 캐시 폴백 ==
-                    apiClient --> svc: 실패 반환
-                    deactivate apiClient
-
-                    svc -> cacheMgr: 캐시 폴백 조회\n(이전 검색 결과)
-                    activate cacheMgr
-
-                    cacheMgr -> cache: GET nearby_places\n(만료된 캐시)
-                    activate cache
-                    alt 폴백 캐시 있음
-                        cache --> cacheMgr: 캐시 데이터\n(is_cached=true)
-                        cacheMgr --> svc: 폴백 결과
-                        deactivate cache
-                        deactivate cacheMgr
-
-                        svc --> ctrl: 200 OK\n(폴백 데이터,\n캐시 표시)
-                        deactivate svc
-
-                    else 폴백 캐시 없음
-                        cache --> cacheMgr: MISS
-                        deactivate cache
-                        deactivate cacheMgr
-
-                        svc --> ctrl: 503 Service Unavailable\n(데이터 일시적 불가)
-                        deactivate svc
-                    end
-                end
-            end
-
-        else API 실패 (Circuit Breaker)
-            gplaces --> apiClient: 503 Service Unavailable
-            deactivate gplaces
-
-            apiClient --> svc: 실패 반환
-            deactivate apiClient
-
-            svc -> cacheMgr: 캐시 폴백 조회
-            activate cacheMgr
-
-            cacheMgr -> cache: GET nearby_places\n(반경 1km 검색 캐시)
-            activate cache
-            cache --> cacheMgr: 캐시 데이터 반환\n(is_cached=true)
-            cacheMgr --> svc: 폴백 결과
-            deactivate cache
-            deactivate cacheMgr
-
-            svc --> ctrl: 200 OK\n(1km 폴백 데이터)
-            deactivate svc
-        end
-    end
-
-else API 일시적 실패 (Circle Breaker)
-    gplaces --> apiClient: 503 Service Unavailable
-    deactivate gplaces
-
-    apiClient -> apiClient: 재시도 실패\nCircuit Breaker OPEN
-
-    == 캐시 폴백 ==
-    apiClient --> svc: 실패 반환
-    deactivate apiClient
-
-    svc -> cacheMgr: 캐시 폴백 조회
-    activate cacheMgr
-
-    cacheMgr -> cache: GET nearby_places\n(이전 검색 결과)
-    activate cache
-    cache --> cacheMgr: 캐시 데이터\n(is_cached=true)
-    cacheMgr --> svc: 폴백 결과
+alt 캐시 HIT
+    cache --> svc : 주변 장소 목록 반환
     deactivate cache
-    deactivate cacheMgr
+    svc --> ctrl : 장소 목록 (거리, 평점, 좌표 포함)
 
-    svc --> ctrl: 200 OK\n(폴백 데이터)
-    deactivate svc
+else 캐시 MISS
+    cache --> svc : 캐시 없음
+    deactivate cache
+
+    svc -> gplaces : Google Places Nearby Search API 호출\n(Circuit Breaker + Retry)\n{location, radius, type=category, open_now=true}
+    activate gplaces
+
+    alt API 정상 응답
+        gplaces --> svc : 주변 장소 목록 반환\n(영업 중, 동일 카테고리 필터)
+        deactivate gplaces
+
+        svc -> svc : 거리 계산 (원점 기준 도보 이동거리)
+        svc -> svc : 결과 정렬 (거리 기준)
+
+        svc -> repo : 장소 데이터 저장/갱신
+        activate repo
+        repo -> db : places 테이블 Upsert
+        db --> repo : 저장 완료
+        deactivate repo
+
+        svc -> cache : 검색 결과 캐시 저장 (TTL 5분)
+        activate cache
+        cache --> svc : 저장 완료
+        deactivate cache
+
+        svc --> ctrl : 장소 목록 (거리, 평점, 좌표 포함)
+
+    else API 실패
+        gplaces --> svc : API 오류
+        deactivate gplaces
+        svc --> ctrl : 503 Service Unavailable
+    end
 end
 
-note right of svc
-반경 단계 확장:
-1. 1km: 기본 검색
-2. 2km: 결과 < 3개 시
-3. 3km: 최대 반경
-각 단계마다 필터링 유지:
-- 동일 카테고리
-- 영업 중인 장소
-end note
-
-note right of apiClient
-필터링 기준:
-- type=category (검색 카테고리)
-- opening_now=true
-  (영업시간 내 장소만)
-- 거리순 정렬
-end note
-
-note right of cacheMgr
-캐시 키 구조:
-nearby:{lat}:{lng}:{category}:{radius}
-
-캐시 폴백:
-- 각 반경별로 별도 저장
-- 반경 확장 시 하위 반경의
-  캐시 먼저 폴백 사용
-- TTL=5분 (모두 동일)
-end note
+deactivate svc
+ctrl --> : 200 OK\n{places: [{id, name, distance_m, rating, coords, category}]}
+deactivate ctrl
 
 @enduml

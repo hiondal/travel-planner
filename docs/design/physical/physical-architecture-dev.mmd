@@ -1,0 +1,50 @@
+graph TB
+    %% Development Environment Physical Architecture
+    %% Core Flow: Users → API Gateway → Services → Database
+
+    Users[Mobile/Web Users] --> APIGW[Azure API Management\nDeveloper Tier]
+
+    subgraph AKS[Azure Kubernetes Service - Development]
+        APIGW --> AuthSvc[AUTH Service Pod\nNode.js]
+        APIGW --> SchdSvc[SCHD Service Pod\nNode.js]
+        APIGW --> PlceSvc[PLCE Service Pod\nNode.js]
+        APIGW --> MntrSvc[MNTR Service Pod\nNode.js]
+        APIGW --> BrifSvc[BRIF Service Pod\nNode.js]
+        APIGW --> AltnSvc[ALTN Service Pod\nNode.js]
+        APIGW --> PaySvc[PAY Service Pod\nNode.js]
+
+        AuthSvc --> PostgreSQL[(PostgreSQL Pod\n16GB Storage)]
+        SchdSvc --> PostgreSQL
+        PlceSvc --> PostgreSQL
+        MntrSvc --> PostgreSQL
+        BrifSvc --> PostgreSQL
+        AltnSvc --> PostgreSQL
+        PaySvc --> PostgreSQL
+
+        PlceSvc --> Redis[(Redis Pod\nMemory Cache)]
+        MntrSvc --> Redis
+
+        SchdSvc --> ServiceBus[Azure Service Bus\nBasic Tier]
+        MntrSvc --> ServiceBus
+        BrifSvc --> ServiceBus
+        AltnSvc --> ServiceBus
+    end
+
+    subgraph NodePool[Node Pool]
+        Node[2x Standard B2s\n2 vCPU / 4GB RAM]
+    end
+
+    subgraph ExternalAPIs[External APIs]
+        GooglePlaces[Google Places API]
+        OpenWeather[OpenWeatherMap API]
+        GoogleDirections[Google Directions API]
+        FCM[Firebase FCM]
+        PaymentGW[Payment Gateway\nToss Payments]
+    end
+
+    PlceSvc --> GooglePlaces
+    MntrSvc --> GooglePlaces
+    MntrSvc --> OpenWeather
+    MntrSvc --> GoogleDirections
+    BrifSvc --> FCM
+    PaySvc --> PaymentGW

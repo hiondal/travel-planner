@@ -1,0 +1,61 @@
+@startuml
+!theme mono
+
+title ALTERNATIVE 서비스 - 요약 클래스 다이어그램
+
+package "com.travelplanner.alternative" {
+    package "controller" {
+        class AltnController
+    }
+    package "service" {
+        interface AlternativeService
+        class AlternativeServiceImpl
+    }
+    package "scoring" {
+        interface ScoreWeightsProvider
+        class FixedScoreWeightsProvider
+        class ScoreCalculator
+    }
+    package "repository" {
+        interface AlternativeRepository
+    }
+    package "client" {
+        class PlaceServiceClient
+        class MonitorServiceClient
+        class ScheduleServiceClient
+    }
+    package "domain" {
+        class Alternative
+        class ScoreWeights
+        class WeightsContext
+        class PlaceCandidate
+        class ScoredCandidate
+    }
+}
+
+note right of AltnController
+  API 매핑표
+  ---
+  searchAlternatives: POST /alternatives/search 대안 장소 검색(대안 카드 3장 생성)
+  selectAlternative: POST /alternatives/{alt_id}/select 대안 카드 선택 및 일정 반영
+end note
+
+AltnController --> AlternativeService
+AlternativeServiceImpl ..|> AlternativeService
+
+AlternativeServiceImpl --> AlternativeRepository
+AlternativeServiceImpl --> PlaceServiceClient
+AlternativeServiceImpl --> MonitorServiceClient
+AlternativeServiceImpl --> ScheduleServiceClient
+AlternativeServiceImpl --> ScoreWeightsProvider
+AlternativeServiceImpl --> ScoreCalculator
+
+FixedScoreWeightsProvider ..|> ScoreWeightsProvider
+ScoreWeightsProvider ..> WeightsContext
+ScoreWeightsProvider ..> ScoreWeights
+ScoreCalculator ..> ScoredCandidate
+ScoredCandidate o-- PlaceCandidate
+
+AlternativeRepository ..> Alternative
+
+@enduml

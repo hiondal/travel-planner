@@ -1,0 +1,65 @@
+-- =============================================================
+-- SCHEDULE 서비스 스키마 스크립트
+-- DBMS: PostgreSQL
+-- 서비스: com.travelplanner.schedule
+-- =============================================================
+
+CREATE SCHEMA IF NOT EXISTS schedule;
+
+SET search_path = schedule;
+
+-- =============================================================
+-- TABLE: trips
+-- =============================================================
+CREATE TABLE trips (
+    id          VARCHAR(36)     NOT NULL,
+    user_id     VARCHAR(36)     NOT NULL,
+    name        VARCHAR(200)    NOT NULL,
+    start_date  DATE            NOT NULL,
+    end_date    DATE            NOT NULL,
+    city        VARCHAR(100)    NOT NULL,
+    status      VARCHAR(20)     NOT NULL DEFAULT 'ACTIVE',
+    created_at  TIMESTAMPTZ     NOT NULL DEFAULT NOW(),
+    updated_at  TIMESTAMPTZ     NOT NULL DEFAULT NOW(),
+
+    CONSTRAINT pk_trips PRIMARY KEY (id),
+    CONSTRAINT chk_trips_dates CHECK (end_date >= start_date),
+    CONSTRAINT chk_trips_status CHECK (status IN ('ACTIVE', 'COMPLETED', 'CANCELLED'))
+);
+
+CREATE INDEX idx_trips_user_id ON trips (user_id);
+CREATE INDEX idx_trips_user_id_status ON trips (user_id, status);
+CREATE INDEX idx_trips_start_date_end_date ON trips (start_date, end_date);
+
+COMMENT ON TABLE trips IS '여행 계획';
+COMMENT ON COLUMN trips.user_id IS 'AUTH 서비스 users.id 참조 (DB FK 없음 — 데이터 독립성 원칙)';
+
+-- =============================================================
+-- TABLE: schedule_items
+-- =============================================================
+CREATE TABLE schedule_items (
+    id                      VARCHAR(36)     NOT NULL,
+    trip_id                 VARCHAR(36)     NOT NULL,
+    place_id                VARCHAR(200)    NOT NULL,
+    place_name              VARCHAR(200)    NOT NULL,
+    visit_datetime          TIMESTAMPTZ     NOT NULL,
+    timezone                VARCHAR(50)     NOT NULL,
+    sort_order              INTEGER         NOT NULL DEFAULT 0,
+    outside_business_hours  BOOLEAN         NOT NULL DEFAULT FALSE,
+    status                  VARCHAR(20)     NOT NULL DEFAULT 'ACTIVE',
+    created_at              TIMESTAMPTZ     NOT NULL DEFAULT NOW(),
+
+    CONSTRAINT pk_schedule_items PRIMARY KEY (id),
+    CONSTRAINT fk_schedule_items_trip_id FOREIGN KEY (trip_id)
+        REFERENCES trips (id) ON DELETE CASCADE
+);
+
+CREATE INDEX idx_schedule_items_trip_id ON schedule_items (trip_id);
+CREATE INDEX idx_schedule_items_trip_id_visit_datetime ON schedule_items (trip_id, visit_datetime);
+CREATE INDEX idx_schedule_items_trip_id_sort_order ON schedule_items (trip_id, sort_order);
+CREATE INDEX idx_schedule_items_place_id ON schedule_items (place_id);
+
+COMMENT ON TABLE schedule_items IS '여행 일정 항목';
+COMMENT ON COLUMN schedule_items.place_id IS 'PLACE 서비스 places.id 참조 (DB FK 없음)';
+COMMENT ON COLUMN schedule_items.place_name IS '생성 시점 장소명 스냅샷 — place 서비스 변경에 독립';
+COMMENT ON COLUMN schedule_items.outside_business_hours IS '영업시간 외 방문 여부 (경고 표시용)';

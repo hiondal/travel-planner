@@ -1,123 +1,139 @@
 graph TB
-    %% Client Layer
-    subgraph Client["Client Layer"]
-        Mobile["모바일 앱<br/>(React Native)"]
+    %% travel-planner 논리 아키텍처 - Context Map
+    %% 작성자: 아키 (소프트웨어 아키텍트) | 2026-02-23
+
+    %% ── Client Layer ──────────────────────────────────────────
+    subgraph CL["Client Layer"]
+        APP["모바일 클라이언트<br/>(여행자 앱)"]
     end
 
-    %% Gateway Layer
-    subgraph Gateway["API Gateway Layer"]
-        GW["API Gateway<br/>• JWT 검증<br/>• 라우팅<br/>• 인바운드 Rate Limiting<br/>• CORS / 로깅"]
+    %% ── Gateway Layer ─────────────────────────────────────────
+    subgraph GWL["Gateway Layer"]
+        GW["API Gateway<br/>Azure APIM<br/>─────────────────<br/>Gateway Routing<br/>Gateway Offloading<br/>JWT 검증 · 로깅<br/>Rate Limiting"]
     end
 
-    %% Service Layer
-    subgraph Services["Service Layer (7개 마이크로서비스)"]
-        AUTH["AUTH<br/>━━━━━━<br/>• 소셜 로그인<br/>• JWT 발급/갱신<br/>• 구독 티어<br/><br/>패턴: Federated Identity"]
-
-        SCHD["SCHD<br/>━━━━━━<br/>• 여행/일정/장소 CRUD<br/>• 모니터링 대상 등록<br/>• 상태 배지 조회<br/><br/>패턴: Cache-Aside<br/>Publisher-Subscriber"]
-
-        PLCE["PLCE<br/>━━━━━━<br/>• 장소 검색<br/>• 장소 캐싱<br/>• 이동시간 계산<br/><br/>패턴: Cache-Aside<br/>Circuit Breaker<br/>Retry / Rate Limiting"]
-
-        MNTR["MNTR<br/>━━━━━━<br/>• 15분 주기 수집<br/>• 상태 배지 판정<br/>• 상태 변경 알림<br/><br/>패턴: Scheduler Agent<br/>Circuit Breaker<br/>Cache-Aside / Retry"]
-
-        BRIF["BRIF<br/>━━━━━━<br/>• 출발전 브리핑 생성<br/>• 멱등성 보장<br/>• Push 발송<br/><br/>패턴: Scheduler Agent<br/>Cache-Aside"]
-
-        ALTN["ALTN<br/>━━━━━━<br/>• 대안 검색<br/>• 스코어링<br/>• 카드 생성<br/><br/>패턴: Cache-Aside<br/>Circuit Breaker<br/>Choreography"]
-
-        PAY["PAY<br/>━━━━━━<br/>• 인앱 결제<br/>• 구독 관리<br/><br/>패턴: Federated Identity"]
+    %% ── Service Layer ─────────────────────────────────────────
+    subgraph SVL["Service Layer  (MVP: 모놀리스 배포)"]
+        AUTH["AUTH<br/>─────────────<br/>Federated Identity<br/>Google/Apple OAuth<br/>JWT 발급"]
+        SCHD["SCHD<br/>─────────────<br/>여행 일정 CRUD<br/>장소 추가/교체<br/>Publisher(이벤트 발행)"]
+        PLCE["PLCE<br/>─────────────<br/>장소 검색<br/>Cache-Aside<br/>Circuit Breaker · Retry"]
+        MNTR["MNTR<br/>─────────────<br/>15분 주기 수집<br/>4단계 상태 판정<br/>Cache-Aside<br/>Circuit Breaker · Retry<br/>Publisher · Subscriber<br/>Ext. Config Store"]
+        BRIF["BRIF<br/>─────────────<br/>브리핑 자동 생성<br/>FCM Push 발송<br/>Circuit Breaker · Retry<br/>Subscriber<br/>BriefingTextGenerator"]
+        ALTN["ALTN<br/>─────────────<br/>대안 카드 3장 생성<br/>Cache-Aside<br/>Circuit Breaker<br/>일정 교체 중개"]
+        PAY["PAY<br/>─────────────<br/>구독 결제<br/>Circuit Breaker · Retry"]
     end
 
-    %% Event Bus & Scheduler
-    subgraph EventInfra["Event & Scheduler Infrastructure"]
-        EB["Event Bus<br/>(Spring ApplicationEvent<br/>+ @TransactionalEventListener<br/>+ outbox_events)<br/><br/>패턴: Publisher-Subscriber"]
-
-        SCH["Scheduler + Supervisor<br/>(Spring @Scheduled<br/>+ job_execution_log)<br/><br/>패턴: Scheduler Agent Supervisor"]
+    %% ── Event Bus ─────────────────────────────────────────────
+    subgraph EBL["Event Bus Layer"]
+        BUS["Event Bus<br/>─────────────<br/>MVP: 인메모리<br/>Phase 2: Azure Service Bus"]
     end
 
-    %% Data Layer
-    subgraph DataLayer["Data & Cache Layer"]
-        DB["PostgreSQL<br/>• user, trip, schedule<br/>• place, monitoring_target<br/>• status_badge, briefing<br/>• job_execution_log<br/>• outbox_events"]
-
-        CACHE["Redis Cache<br/>(TTL: 5~30분)<br/>• Place (5분)<br/>• StatusBadge (5분)<br/>• Briefing (30분)<br/>• AlternativeCard (10분)"]
+    %% ── Data Layer ────────────────────────────────────────────
+    subgraph DL["Data Layer"]
+        DB[("PostgreSQL<br/>서비스별 논리 스키마<br/>단일 인스턴스 MVP")]
+        CACHE[("Redis Cache<br/>장소 상태 · 배지<br/>대안 카드 · 세션")]
+        CONFIG["Azure App Config<br/>MNTR 임계값<br/>수집 주기 · 타임아웃"]
     end
 
-    %% External APIs
-    subgraph ExternalAPIs["External APIs"]
-        GOOGLE_OAUTH["Google/Apple<br/>OAuth"]
-        GOOGLE_PLACES["Google Places API<br/>(혼잡도, 영업시간)"]
-        WEATHER["OpenWeatherMap API<br/>(날씨 정보)"]
-        DIRECTIONS["Google Directions API<br/>(교통, 이동시간)"]
-        FCM["Firebase Cloud<br/>Messaging<br/>(Push 알림)"]
-        IAP["Apple IAP /<br/>Google Play<br/>Billing"]
+    %% ── AI Layer (Phase 2 도입 예정) ──────────────────────────
+    subgraph AIL["AI Layer  (Phase 2 도입 예정)"]
+        AI["AI Pipeline<br/>─────────────<br/>LLM 총평 생성<br/>Azure OpenAI<br/>BriefingTextGenerator<br/>LLMGenerator"]
     end
 
-    %% Connections - Client to Gateway
-    Mobile -->|"[AUTH]login [SCHD]trip [PLCE]search etc"| GW
+    %% ── External APIs ─────────────────────────────────────────
+    subgraph EXT["External APIs"]
+        OAUTH["Google/Apple<br/>OAuth"]
+        GPLACES["Google<br/>Places API"]
+        WEATHER["OpenWeatherMap<br/>API"]
+        GDIREC["Google<br/>Directions API"]
+        FCM["FCM<br/>Push 알림"]
+        PAYMENT["결제<br/>게이트웨이"]
+    end
 
-    %% Connections - Gateway to Services
-    GW -->|"[AUTH]검증"| AUTH
-    GW -->|"[SCHD]일정"| SCHD
-    GW -->|"[PLCE]장소"| PLCE
-    GW -->|"[MNTR]상태"| MNTR
-    GW -->|"[BRIF]브리핑"| BRIF
-    GW -->|"[ALTN]대안"| ALTN
-    GW -->|"[PAY]결제"| PAY
+    %% ── 연결: Client → Gateway (단일 연결선) ──────────────────
+    APP -->|"HTTPS"| GW
 
-    %% Connections - Services to External APIs (동기)
-    AUTH -->|"OAuth 인증"| GOOGLE_OAUTH
-    PLCE -->|"장소 검색"| GOOGLE_PLACES
-    PLCE -->|"이동시간"| DIRECTIONS
-    MNTR -->|"혼잡도"| GOOGLE_PLACES
-    MNTR -->|"날씨"| WEATHER
-    MNTR -->|"교통"| DIRECTIONS
-    BRIF -->|"Push"| FCM
-    PAY -->|"결제"| IAP
+    %% ── 연결: Gateway → Services (동기) ──────────────────────
+    GW -->|"인증/토큰"| AUTH
+    GW -->|"일정 관리"| SCHD
+    GW -->|"장소 검색"| PLCE
+    GW -->|"배지 조회"| MNTR
+    GW -->|"브리핑 조회"| BRIF
+    GW -->|"대안 카드"| ALTN
+    GW -->|"결제"| PAY
 
-    %% Connections - Services to Event Bus (비동기)
-    SCHD -->|"MonitoringTargetRegistered / Changed / PlaceReplaced"| EB
-    MNTR -->|"StatusBadgeUpdated / StatusDeteriorated"| EB
-    ALTN -->|"AlternativeAdopted"| EB
+    %% ── 연결: 서비스 간 동기 통신 ────────────────────────────
+    SCHD -->|"장소 검색 요청"| PLCE
+    ALTN -->|"주변 장소 검색"| PLCE
+    ALTN -->|"일정 교체 중개"| SCHD
+    BRIF -->|"캐시 상태 조회<br/>(재호출 금지)"| MNTR
 
-    %% Connections - Event Bus subscriptions
-    EB -->|"구독: MonitoringTarget Registered/Changed"| MNTR
-    EB -->|"구독: StatusBadgeUpdated (브리핑 트리거)"| BRIF
-    EB -->|"구독: StatusDeteriorated (대안 검색)"| ALTN
-    EB -->|"구독: StatusBadgeUpdated (캐시 갱신)"| SCHD
-    EB -->|"구독: AlternativeAdopted (일정 교체)"| SCHD
-    EB -->|"구독: AlternativeAdopted (모니터링 변경)"| MNTR
+    %% ── 연결: 비동기 이벤트 (점선) ───────────────────────────
+    SCHD -.->|"ScheduleItemAdded<br/>ScheduleItemReplaced<br/>ScheduleItemRemoved"| BUS
+    MNTR -.->|"PlaceStatusChanged"| BUS
+    BUS -.->|"ScheduleItem 이벤트 구독"| MNTR
+    BUS -.->|"PlaceStatusChanged 구독"| BRIF
 
-    %% Connections - Scheduler to Services
-    SCH -->|"15분 주기 데이터 수집"| MNTR
-    SCH -->|"출발 15~30분전 브리핑 트리거"| BRIF
+    %% ── 연결: Cache-Aside (점선) ──────────────────────────────
+    PLCE -.->|"Cache-Aside (5분 TTL)"| CACHE
+    MNTR -.->|"Cache-Aside (10분 TTL)<br/>배지 무효화"| CACHE
+    ALTN -.->|"Cache-Aside (5분 TTL)"| CACHE
+    AUTH -.->|"세션 캐시 (30분)"| CACHE
 
-    %% Connections - Services to Data Layer
-    AUTH --> DB
-    SCHD --> DB
-    PLCE --> DB
-    MNTR --> DB
-    BRIF --> DB
-    ALTN --> DB
-    PAY --> DB
+    %% ── 연결: DB (점선) ───────────────────────────────────────
+    AUTH -.->|"users · consent"| DB
+    SCHD -.->|"trips · schedule_items"| DB
+    PLCE -.->|"places"| DB
+    MNTR -.->|"status_history"| DB
+    BRIF -.->|"briefings"| DB
+    ALTN -.->|"selection_logs"| DB
+    PAY -.->|"subscriptions"| DB
 
-    PLCE --> CACHE
-    MNTR --> CACHE
-    BRIF --> CACHE
-    SCHD --> CACHE
-    ALTN --> CACHE
+    %% ── 연결: External Config ─────────────────────────────────
+    MNTR -->|"임계값 동적 로드"| CONFIG
 
-    %% Connections - Scheduler to Data Layer
-    SCH --> DB
+    %% ── 연결: External APIs ───────────────────────────────────
+    AUTH -->|"OAuth 위임"| OAUTH
+    PLCE -->|"CB+Retry"| GPLACES
+    MNTR -->|"CB+Retry (병렬)"| GPLACES
+    MNTR -->|"CB+Retry (병렬)"| WEATHER
+    MNTR -->|"CB+Retry (병렬)"| GDIREC
+    BRIF -->|"CB+Retry<br/>Fallback: 인앱 알림"| FCM
+    PAY -->|"CB+Retry"| PAYMENT
 
-    %% Style definitions
-    classDef clientStyle fill:#BFDBFE,stroke:#3B82F6,stroke-width:2px,color:#1E40AF
-    classDef gatewayStyle fill:#FED7AA,stroke:#F97316,stroke-width:2px,color:#92400E
-    classDef serviceStyle fill:#D1FAE5,stroke:#10B981,stroke-width:2px,color:#065F46
-    classDef infraStyle fill:#F3E8FF,stroke:#A855F7,stroke-width:2px,color:#581C87
-    classDef dataStyle fill:#E0E7FF,stroke:#6366F1,stroke-width:2px,color:#312E81
-    classDef externalStyle fill:#FEE2E2,stroke:#EF4444,stroke-width:2px,color:#7F1D1D
+    %% ── 연결: AI Pipeline Phase 2 (점선) ──────────────────────
+    BRIF -.->|"Phase 2: LLMGenerator 교체"| AI
+    AI -.->|"Phase 2: Azure OpenAI 호출"| AIOPENAI["Azure OpenAI<br/>(Phase 2)"]
 
-    class Mobile clientStyle
+    %% ── 스타일 정의 ───────────────────────────────────────────
+    classDef clientStyle fill:#BFDBFE,stroke:#3B82F6,stroke-width:2px
+    classDef gatewayStyle fill:#1D4ED8,stroke:#1E3A8A,stroke-width:2px,color:#fff
+    classDef authStyle fill:#4ECDC4,stroke:#0F766E,stroke-width:2px
+    classDef schdStyle fill:#F59E0B,stroke:#B45309,stroke-width:2px
+    classDef plceStyle fill:#8B5CF6,stroke:#6D28D9,stroke-width:2px,color:#fff
+    classDef mntrStyle fill:#EF4444,stroke:#B91C1C,stroke-width:2px,color:#fff
+    classDef brifStyle fill:#10B981,stroke:#047857,stroke-width:2px,color:#fff
+    classDef altnStyle fill:#F97316,stroke:#C2410C,stroke-width:2px,color:#fff
+    classDef payStyle fill:#6366F1,stroke:#4338CA,stroke-width:2px,color:#fff
+    classDef busStyle fill:#EC4899,stroke:#BE185D,stroke-width:2px,color:#fff
+    classDef dbStyle fill:#FEF3C7,stroke:#D97706,stroke-width:2px
+    classDef cacheStyle fill:#FDE68A,stroke:#F59E0B,stroke-width:2px
+    classDef configStyle fill:#E0E7FF,stroke:#6366F1,stroke-width:2px
+    classDef aiStyle fill:#D1FAE5,stroke:#10B981,stroke-width:2px,stroke-dasharray:6 3
+    classDef externalStyle fill:#F3F4F6,stroke:#9CA3AF,stroke-width:2px
+
+    class APP clientStyle
     class GW gatewayStyle
-    class AUTH,SCHD,PLCE,MNTR,BRIF,ALTN,PAY serviceStyle
-    class EB,SCH infraStyle
-    class DB,CACHE dataStyle
-    class GOOGLE_OAUTH,GOOGLE_PLACES,WEATHER,DIRECTIONS,FCM,IAP externalStyle
+    class AUTH authStyle
+    class SCHD schdStyle
+    class PLCE plceStyle
+    class MNTR mntrStyle
+    class BRIF brifStyle
+    class ALTN altnStyle
+    class PAY payStyle
+    class BUS busStyle
+    class DB dbStyle
+    class CACHE cacheStyle
+    class CONFIG configStyle
+    class AI,AIOPENAI aiStyle
+    class OAUTH,GPLACES,WEATHER,GDIREC,FCM,PAYMENT externalStyle

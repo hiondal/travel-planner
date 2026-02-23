@@ -1,0 +1,144 @@
+graph TB
+    %% Production Network Architecture - Azure
+    %% travel-planner: 실시간 여행 일정 최적화 가이드 앱
+
+    %% ────────────────────────────────────────
+    %% 외부 영역
+    %% ────────────────────────────────────────
+    Users["실사용자\n1만~10만 명"]
+
+    subgraph External["외부 영역"]
+        CDN["Azure Front Door + CDN\nGlobal PoP Cache"]
+        PublicIP["Public IP\n(Static)"]
+    end
+
+    %% ────────────────────────────────────────
+    %% Azure Cloud - VNet 10.0.0.0/16
+    %% ────────────────────────────────────────
+    subgraph AzureCloud["Azure Cloud (운영환경) — VNet 10.0.0.0/16"]
+
+        %% Gateway Subnet
+        subgraph GatewaySubnet["Gateway Subnet  10.0.4.0/24"]
+            WAF["Application Gateway + WAF\nOWASP CRS 3.2"]
+            RateLimit["Rate Limiter\n100 req/min/IP"]
+        end
+
+        %% Application Subnet
+        subgraph AppSubnet["Application Subnet  10.0.1.0/24"]
+            subgraph AKS["AKS Premium Cluster — Multi-Zone"]
+                subgraph SystemPool["System Node Pool  (Zone 1 · 2 · 3)"]
+                    SysNode["kube-system / monitoring\nCoreDNS · metrics-server"]
+                end
+                subgraph AppPool["Application Node Pool  (Zone 1 · 2 · 3)"]
+                    AuthSvc["AUTH Service\nHA replicas + HPA"]
+                    SchdSvc["SCHD Service\nHA replicas + HPA"]
+                    PlceSvc["PLCE Service\nHA replicas + HPA"]
+                    MntrSvc["MNTR Service\nHA replicas + HPA"]
+                    BrifSvc["BRIF Service\nHA replicas + HPA"]
+                    AltnSvc["ALTN Service\nHA replicas + HPA"]
+                    PaySvc["PAY Service\nHA replicas + HPA"]
+                end
+                ILB["Internal Load Balancer\nServices (ClusterIP)"]
+            end
+        end
+
+        %% Database Subnet
+        subgraph DBSubnet["Database Subnet  10.0.2.0/24"]
+            PGPrimary[("PostgreSQL Flexible Server\nPrimary — Zone 1")]
+            PGReplica[("PostgreSQL Flexible Server\nRead Replica — Zone 2")]
+            PGBackup["Automated Backup\n(Geo-redundant)"]
+            PGEndpoint["Private Endpoint\nPostgreSQL"]
+        end
+
+        %% Cache Subnet
+        subgraph CacheSubnet["Cache Subnet  10.0.3.0/24"]
+            RedisPrimary[("Azure Cache for Redis Premium\nPrimary — Zone 1")]
+            RedisSecondary[("Azure Cache for Redis Premium\nSecondary — Zone 2")]
+            RedisCluster["Redis Cluster\n(Sharding)"]
+            RedisEndpoint["Private Endpoint\nRedis"]
+        end
+
+        %% Service Bus
+        subgraph ServiceBusPremium["Azure Service Bus Premium"]
+            SBQ1["monitor-status-change\n(Partitioned Queue)"]
+            SBQ2["briefing-generation\n(Partitioned Queue)"]
+            SBQ3["alternative-search\n(Partitioned Queue)"]
+            SBEndpoint["Private Endpoint\nService Bus"]
+        end
+
+    end
+
+    %% ────────────────────────────────────────
+    %% 외부 API
+    %% ────────────────────────────────────────
+    subgraph ExternalAPIs["외부 API"]
+        GooglePlaces["Google Places API"]
+        OpenWeather["OpenWeatherMap API"]
+        GoogleDir["Google Directions API"]
+        FCM["Firebase FCM"]
+        TossPay["Toss Payments"]
+    end
+
+    %% ────────────────────────────────────────
+    %% 네트워크 흐름: 인바운드
+    %% ────────────────────────────────────────
+    Users -->|"HTTPS"| CDN
+    CDN -->|"Route to origin"| PublicIP
+    PublicIP -->|"HTTP/S"| WAF
+    WAF -->|"Filtered traffic"| RateLimit
+    RateLimit -->|"Private IP"| ILB
+
+    %% ILB → 서비스 라우팅 (NodePort별)
+    ILB -->|":8001"| AuthSvc
+    ILB -->|":8002"| SchdSvc
+    ILB -->|":8003"| PlceSvc
+    ILB -->|":8004"| MntrSvc
+    ILB -->|":8005"| BrifSvc
+    ILB -->|":8006"| AltnSvc
+    ILB -->|":8007"| PaySvc
+
+    %% ────────────────────────────────────────
+    %% 서비스 → DB/Cache/ServiceBus (Private Link)
+    %% ────────────────────────────────────────
+    AuthSvc -->|"Private Link"| PGEndpoint
+    SchdSvc -->|"Private Link"| PGEndpoint
+    PlceSvc -->|"Private Link"| PGEndpoint
+    MntrSvc -->|"Private Link"| PGEndpoint
+    BrifSvc -->|"Private Link"| PGEndpoint
+    AltnSvc -->|"Private Link"| PGEndpoint
+    PaySvc  -->|"Private Link"| PGEndpoint
+
+    PGEndpoint --> PGPrimary
+    PGEndpoint --> PGReplica
+
+    PlceSvc -->|"Private Link"| RedisEndpoint
+    MntrSvc -->|"Private Link"| RedisEndpoint
+    AltnSvc -->|"Private Link"| RedisEndpoint
+    RedisEndpoint --> RedisPrimary
+    RedisEndpoint --> RedisCluster
+
+    MntrSvc  -->|"Private Link"| SBEndpoint
+    SchdSvc  -->|"Private Link"| SBEndpoint
+    BrifSvc  -->|"Private Link"| SBEndpoint
+    AltnSvc  -->|"Private Link"| SBEndpoint
+    SBEndpoint --> SBQ1
+    SBEndpoint --> SBQ2
+    SBEndpoint --> SBQ3
+
+    %% ────────────────────────────────────────
+    %% HA 복제
+    %% ────────────────────────────────────────
+    PGPrimary <-->|"Streaming Replication"| PGReplica
+    PGPrimary -->|"Backup"| PGBackup
+    RedisPrimary <-->|"Replication"| RedisSecondary
+    RedisPrimary --- RedisCluster
+
+    %% ────────────────────────────────────────
+    %% 외부 API 연결
+    %% ────────────────────────────────────────
+    PlceSvc -->|"HTTPS"| GooglePlaces
+    MntrSvc -->|"HTTPS"| GooglePlaces
+    MntrSvc -->|"HTTPS"| OpenWeather
+    MntrSvc -->|"HTTPS"| GoogleDir
+    BrifSvc -->|"HTTPS"| FCM
+    PaySvc  -->|"HTTPS"| TossPay

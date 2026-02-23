@@ -1,132 +1,82 @@
 @startuml
 !theme mono
 
+title 여행 일정 등록 (SCHD, PLCE)
+
 actor "여행자" as user
-participant "프론트엔드\n(React Native)" as fe
+participant "모바일 클라이언트" as fe
 participant "API Gateway" as gw
 participant "SCHD 서비스" as schd
 participant "PLCE 서비스" as plce
+participant "이벤트 버스" as bus
 participant "MNTR 서비스" as mntr
-database "Redis Cache" as cache
-queue "Event Bus" as bus
-participant "Google Places API" as gplaces
 
-user -> fe: 여행 생성 버튼 탭
-activate fe
+== 여행 일정 생성 ==
+user -> fe : 여행명, 기간, 도시 입력 후 생성 버튼 탭
+fe -> gw : POST /api/v1/trips\n{name, start_date, end_date, city}
+activate gw
+gw -> schd : 여행 일정 생성 요청
+activate schd
 
-alt 첫 여행 등록 (권한 동의 필수)
-    fe -> user: 위치정보 수집 동의 화면 표시\n(수집 항목, 이용 목적, 보유 기간 명시)
-    activate user
-    user -> fe: 위치정보 동의 (또는 거부)
-    deactivate user
-
-    fe -> user: Push 알림 권한 요청\n(브리핑, 상태 변경 알림 유형 표시)
-    activate user
-    user -> fe: 권한 동의 (또는 거부)
-    deactivate user
-
-    fe -> gw: POST /trips\n(trip_name, start_date, end_date, city,\npermission_consent={location, push, timestamp})
-    activate gw
-
-else 이후 여행 등록 (권한 이미 있음)
-    user -> fe: 여행명, 기간, 도시 입력 후 생성 버튼 탭
-    activate fe
-    fe -> gw: POST /trips\n(trip_name, start_date, end_date, city)
-    activate gw
-
+alt 첫 번째 여행 일정 생성 (권한 동의)
+    schd --> gw : 위치정보 동의 요청 필요 응답
+    gw --> fe : 동의 화면 표시 요청
+    user -> fe : 위치정보 수집 동의
+    fe -> gw : POST /api/v1/users/consent\n{location: true, push: true, timestamp}
+    gw -> schd : 동의 이력 저장
 end
 
-gw -> schd: 여행 생성 요청
-activate schd
-schd -> schd: 여행 데이터 저장\n(trip_id 발급)
-schd --> gw: 200 OK (trip_id)
+schd --> gw : 201 Created\n{trip_id, empty_schedule}
 deactivate schd
-gw --> fe: 여행 ID 반환
+gw --> fe : 일정 생성 완료
 deactivate gw
+fe --> user : 빈 일정표 화면 이동
 
-fe --> user: 빈 일정표 화면으로 이동
-deactivate fe
-
-user -> fe: 장소 추가 버튼 탭
-activate fe
-fe --> user: 장소 검색 화면 표시
-deactivate fe
-
-user -> fe: 검색창에 "이치란 라멘 시부야" 입력
-activate fe
-fe -> gw: GET /places/search\n(query="이치란 라멘 시부야",\nlat, lng, city)
+== 장소 검색 ==
+user -> fe : 장소 추가 버튼 탭 → 검색어 입력
+fe -> gw : GET /api/v1/places/search?keyword={검색어}&city={도시}
 activate gw
-gw -> plce: 장소 검색 요청
+gw -> schd : 장소 검색 중개 요청
+activate schd
+schd -> plce : 키워드 기반 장소 검색
 activate plce
-
-plce -> cache: 캐시 확인\n(key=search:query:lat:lng)
-activate cache
-cache --> plce: MISS
-deactivate cache
-
-plce -> gplaces: Google Places API\n(textSearch 또는 nearbySearch)
-activate gplaces
-gplaces --> plce: 장소 목록\n(name, address, rating, place_id, opening_hours)
-deactivate gplaces
-
-plce -> cache: 캐시 저장\n(TTL=5분)
-activate cache
-cache --> plce: OK
-deactivate cache
-
-plce --> gw: 검색 결과 (최대 10개)
+plce --> schd : 장소 목록 반환 (최대 10개)
 deactivate plce
-gw --> fe: 장소 목록\n(장소명, 주소, 평점)
+schd --> gw : 장소 검색 결과
+deactivate schd
+gw --> fe : 장소 목록 응답
 deactivate gw
+fe --> user : 장소 목록 표시 (이름, 주소, 평점)
 
-fe --> user: 검색 결과 표시
-deactivate fe
-
-user -> fe: "이치란 라멘 시부야" 선택
-activate fe
-fe --> user: 방문 일시 입력 화면 표시\n(현지시간 선택)
-deactivate fe
-
-user -> fe: 방문 일시 "2026-03-16 12:00 (JST)" 입력
-activate fe
-
-fe -> fe: 영업시간 검증\n(Open: 11:00, Close: 22:00)
-activate fe
-fe -> fe: 영업시간 내 확인 ✓
-deactivate fe
-
-fe -> gw: POST /trips/{tripId}/schedules\n(place_id, scheduled_time=2026-03-16T12:00+09:00,\ncity, timezone="Asia/Tokyo")
+== 일정에 장소 추가 ==
+user -> fe : 장소 선택 후 방문 일시 지정
+fe -> gw : POST /api/v1/trips/{trip_id}/schedule-items\n{place_id, visit_datetime(IANA timezone)}
 activate gw
-gw -> schd: 일정 생성 요청
+gw -> schd : 일정에 장소 추가 요청
 activate schd
 
-schd -> schd: 일정 데이터 저장\n(schedule_id, place_id, scheduled_time 저장)
-schd -> schd: 이동시간 계산 확인\n(직전 장소 -> 현재 장소)
+alt 영업시간 내 방문 시간
+    schd ->> bus : ScheduleItemAdded 이벤트 발행 (비동기)
+    bus -->  mntr : 모니터링 대상 등록
+    schd --> gw : 201 Created\n{schedule_item_id}
+    gw --> fe : 장소 추가 완료
+    fe --> user : 일정표에 장소 표시 (시간순 정렬)
 
-schd ->> bus: MonitoringTargetRegistered 이벤트 발행\n(place_id, city, trip_id, schedule_id)
-activate bus
+else 영업시간 외 방문 시간
+    schd --> gw : 200 OK with warning\n{warning: "영업시간 외 (11:00~22:00)"}
+    gw --> fe : 경고 포함 응답
+    fe --> user : 경고 메시지 표시 및 추가 여부 확인
+    user -> fe : 경고 무시하고 추가 확인
+    fe -> gw : POST /api/v1/trips/{trip_id}/schedule-items\n{force: true}
+    gw -> schd : 강제 추가 요청
+    schd ->> bus : ScheduleItemAdded 이벤트 발행 (비동기)
+    bus --> mntr : 모니터링 대상 등록 (영업시간 외 마킹)
+    schd --> gw : 201 Created
+    gw --> fe : 장소 추가 완료
+    fe --> user : 일정표에 장소 표시
+end
 
-schd --> gw: 200 OK (schedule_id)
 deactivate schd
-gw --> fe: 일정 생성 완료
 deactivate gw
-
-fe -> fe: 로컬 캐시 갱신
-fe --> user: 일정표에 장소 추가\n(시간순 정렬 표시)
-deactivate fe
-
-bus -> mntr: MonitoringTargetRegistered 이벤트 수신
-activate mntr
-mntr -> mntr: 모니터링 대상 등록\n(place_id, city, trip_id 저장)
-mntr -> mntr: 다음 15분 주기 스케줄러 대기
-deactivate mntr
-deactivate bus
-
-note over user, gplaces
-  이후 MNTR 스케줄러가 매 15분마다
-  Google Places, OpenWeatherMap, Google Directions API
-  3개 API 병렬 호출 실행
-  -> 상태 배지 판정 -> StatusBadgeUpdated 이벤트 발행
-end note
 
 @enduml

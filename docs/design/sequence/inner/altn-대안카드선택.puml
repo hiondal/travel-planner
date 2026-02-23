@@ -1,153 +1,50 @@
-@startuml altn-대안카드선택
+@startuml
 !theme mono
 
-title ALTN 서비스 내부 - 대안 카드 선택 및 일정 반영\n(UFR-ALTN-030, 040)
+title ALTN 서비스 - 대안 카드 선택 및 일정 반영
 
-participant "AlternativeController" as ctrl
+participant "AltnController" as ctrl
 participant "AlternativeService" as svc
 participant "AlternativeRepository" as repo
-database "DB" as db
-database "Redis Cache" as cache
-queue "Event Bus" as bus
+participant "SchdService(E)" as schd
+database "PostgreSQL(E)" as db
+database "Redis Cache(E)" as cache
 
-== 대안 카드 선택 요청 ==
-ctrl -> svc: adoptAlternative\n(card_id, schedule_id, user_id)
+-> ctrl : POST /api/v1/alternatives/{alt_id}/select\n{original_place_id, schedule_item_id, trip_id}
+activate ctrl
+
+ctrl -> svc : selectAlternative(alt_id, original_place_id, schedule_item_id)
 activate svc
 
-== 대안 카드 정보 조회 ==
-svc -> repo: findAlternativeCardById(card_id)
+svc -> repo : 선택된 대안 카드 정보 조회
 activate repo
-
-repo -> db: SELECT * FROM alternative_card\nWHERE card_id=?
-activate db
-db -> repo: {card_id, schedule_id, place_id,\ndistance, rating, congestion,\nreason, radius_used, created_at}
-deactivate db
-
-repo -> svc: 대안 카드 정보 반환
+repo -> db : alternative_cards 조회 (alt_id)
+db --> repo : 대안 장소 정보
 deactivate repo
 
-== 채택 기록 저장 ==
-svc -> repo: recordAdoption\n(card_id, schedule_id,\noriginal_place_id,\nalternative_place_id,\nuser_id, adopted_at)
-activate repo
+== SCHD 서비스 동기 호출로 일정 교체 ==
+svc -> schd : 일정 교체 요청\n(schedule_item_id, new_place_id)
+activate schd
+schd --> svc : 일정 교체 완료\n{변경 요약: 원래→대안, 이동시간 변화}
+deactivate schd
 
-repo -> db: INSERT INTO alternative_adoption_log\n(card_id, schedule_id,\noriginal_place_id,\nalternative_place_id,\nuser_id, adopted_at,\ncard_index, elapsed_time_sec)\nVALUES(...)
-activate db
-db -> repo: 저장 완료
-deactivate db
-
-repo -> svc: 기록 저장 완료
-deactivate repo
-
-== AlternativeAdopted 이벤트 발행 ==
-svc -> bus: publish AlternativeAdopted\n{userId, scheduleId,\noriginal_placeId,\nalternative_placeId,\nadopted_at}
-activate bus
-bus -> svc: 이벤트 발행 완료
-deactivate bus
-
-== 캐시 갱신 ==
-svc -> cache: DELETE alternatives:{schedule_id}\n(대안 카드 캐시 무효화)
+== 캐시 무효화 ==
+svc -> cache : 기존 장소 대안 카드 캐시 무효화\n(altn:{original_place_id}:*)
 activate cache
-cache -> svc: OK
+cache --> svc : 무효화 완료
 deactivate cache
 
-== 응답 반환 ==
-svc -> ctrl: {status: "success",\nadopted_place_id,\nmessage: "대안이 선택되었습니다"}
-deactivate svc
-deactivate ctrl
-
-== 시나리오 2: 대안 미선택 (닫기/뒤로가기) ==
-ctrl -> svc: dismissAlternatives\n(schedule_id, user_id,\ndismiss_reason)
-activate svc
-
-== 미채택 기록 저장 ==
-svc -> repo: recordDismissal\n(schedule_id, user_id,\ncard_count, dismiss_reason,\ndismissed_at)
+== 선택 이력 저장 (ML 학습 데이터) ==
+svc -> repo : 대안 카드 선택 이력 저장
 activate repo
-
-repo -> db: INSERT INTO alternative_dismissal_log\n(schedule_id, user_id,\ncard_count, dismiss_reason,\ndismissed_at)\nVALUES(...)
-activate db
-db -> repo: 저장 완료
-deactivate db
-
-repo -> svc: 기록 저장 완료
+repo -> db : selection_logs 삽입\n(alt_card_id, selected_rank(1/2/3),\nelapsed_seconds, adopted=true)
+db --> repo : 저장 완료
 deactivate repo
 
-== 분석 데이터 수집 ==
-svc -> svc: 분석용 메타데이터 준비\n- 제시된 카드 수\n- 미선택 사유\n- 선택 시간 (elapsed_time)\n- 사용자 구독 티어
-
-== 캐시 갱신 ==
-svc -> cache: DELETE alternatives:{schedule_id}\n(미선택 캐시 유지 제거)
-activate cache
-cache -> svc: OK
-deactivate cache
-
-== 응답 반환 ==
-svc -> ctrl: {status: "dismissed",\nmessage: "기존 일정이 유지되었습니다"}
+svc --> ctrl : {변경 요약}
 deactivate svc
+
+ctrl --> : 200 OK\n{original_place, new_place, travel_time_diff}
 deactivate ctrl
-
-note right of svc
-**대안 카드 선택 로직**
-
-채택 시:
-1. 카드 정보 조회
-2. 채택 기록 저장
-3. AlternativeAdopted 이벤트 발행
-   (SCHD 구독 -> 일정 교체)
-4. 캐시 무효화
-
-미선택 시:
-1. 미채택 기록 저장
-2. 분석 데이터 수집
-   (추천 품질 개선용)
-3. 캐시 무효화
-4. 일정은 변경 없음
-
-**분석용 메타데이터**
-- card_index: 선택한 카드 순서
-- elapsed_time_sec: 검색~채택 시간
-- dismiss_reason: 미선택 사유
-- card_count: 제시된 카드 수
-end note
-
-note right of repo
-**Repository 처리**
-
-alternative_adoption_log:
-- card_id
-- schedule_id
-- original_place_id
-- alternative_place_id
-- user_id
-- adopted_at
-- card_index (1, 2, 3)
-- elapsed_time_sec
-
-alternative_dismissal_log:
-- schedule_id
-- user_id
-- card_count
-- dismiss_reason
-  ("닫기", "뒤로", "스크롤아웃" 등)
-- dismissed_at
-
-인덱스:
-- schedule_id
-- user_id
-- adopted_at
-end note
-
-note right of bus
-**이벤트 발행 상세**
-
-AlternativeAdopted:
-- 구독자: SCHD 서비스
-  -> 일정 교체 처리
-  -> 이동시간 재계산
-  -> MonitoringTargetChanged 발행
-- 구독자: MNTR 서비스
-  -> 모니터링 대상 변경
-  -> 기존 장소 모니터링 해제
-  -> 새 장소 모니터링 등록
-end note
 
 @enduml

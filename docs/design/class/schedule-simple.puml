@@ -1,0 +1,61 @@
+@startuml
+!theme mono
+
+title SCHEDULE 서비스 - 요약 클래스 다이어그램
+
+package "com.travelplanner.schedule" {
+    package "controller" {
+        class SchdController
+    }
+    package "service" {
+        interface TripService
+        class TripServiceImpl
+        interface ScheduleItemService
+        class ScheduleItemServiceImpl
+    }
+    package "repository" {
+        interface TripRepository
+        interface ScheduleItemRepository
+        interface ConsentRepository
+    }
+    package "client" {
+        class PlaceServiceClient
+        class EventPublisher
+    }
+    package "domain" {
+        class Trip
+        class ScheduleItem
+    }
+}
+
+note right of SchdController
+  API 매핑표
+  ---
+  createTrip: POST /trips 여행 일정 생성
+  getTrip: GET /trips/{trip_id} 여행 일정 조회
+  getSchedule: GET /trips/{trip_id}/schedule 일정표 조회(배지 포함)
+  addScheduleItem: POST /trips/{trip_id}/schedule-items 일정에 장소 추가
+  deleteScheduleItem: DELETE /trips/{trip_id}/schedule-items/{item_id} 일정 장소 삭제
+  replaceScheduleItem: PUT /trips/{trip_id}/schedule-items/{item_id}/replace 일정 장소 교체
+end note
+
+SchdController --> TripService
+SchdController --> ScheduleItemService
+TripServiceImpl ..|> TripService
+ScheduleItemServiceImpl ..|> ScheduleItemService
+
+TripServiceImpl --> TripRepository
+TripServiceImpl --> ScheduleItemRepository
+TripServiceImpl --> ConsentRepository
+
+ScheduleItemServiceImpl --> ScheduleItemRepository
+ScheduleItemServiceImpl --> TripRepository
+ScheduleItemServiceImpl --> PlaceServiceClient
+ScheduleItemServiceImpl --> EventPublisher
+
+TripRepository ..> Trip
+ScheduleItemRepository ..> ScheduleItem
+Trip "1" o-- "0..*" ScheduleItem
+Trip --> TripStatus
+
+@enduml

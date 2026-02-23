@@ -1,0 +1,73 @@
+-- =============================================================
+-- PAYMENT 서비스 스키마 스크립트
+-- DBMS: PostgreSQL
+-- 서비스: com.travelplanner.payment
+-- =============================================================
+
+CREATE SCHEMA IF NOT EXISTS payment;
+
+SET search_path = payment;
+
+-- =============================================================
+-- TABLE: subscriptions
+-- =============================================================
+CREATE TABLE subscriptions (
+    id              VARCHAR(36)     NOT NULL,
+    user_id         VARCHAR(36)     NOT NULL,
+    plan_id         VARCHAR(50)     NOT NULL,
+    tier            VARCHAR(20)     NOT NULL,
+    status          VARCHAR(20)     NOT NULL,
+    provider        VARCHAR(20)     NOT NULL,
+    transaction_id  VARCHAR(200),
+    started_at      TIMESTAMPTZ     NOT NULL,
+    expires_at      TIMESTAMPTZ,
+    created_at      TIMESTAMPTZ     NOT NULL DEFAULT NOW(),
+    updated_at      TIMESTAMPTZ     NOT NULL DEFAULT NOW(),
+
+    CONSTRAINT pk_subscriptions PRIMARY KEY (id),
+    CONSTRAINT uq_subscriptions_user_id UNIQUE (user_id),
+    CONSTRAINT chk_subscriptions_tier CHECK (tier IN ('FREE', 'TRIP_PASS', 'PRO')),
+    CONSTRAINT chk_subscriptions_status CHECK (
+        status IN ('ACTIVE', 'CANCELLED', 'CANCELLING')
+    ),
+    CONSTRAINT chk_subscriptions_provider CHECK (provider IN ('APPLE', 'GOOGLE'))
+);
+
+CREATE UNIQUE INDEX idx_subscriptions_user_id ON subscriptions (user_id);
+CREATE INDEX idx_subscriptions_status ON subscriptions (status);
+CREATE INDEX idx_subscriptions_expires_at ON subscriptions (expires_at);
+
+COMMENT ON TABLE subscriptions IS '사용자 구독 현황 (user_id UNIQUE — 사용자당 1개 활성 구독)';
+COMMENT ON COLUMN subscriptions.user_id IS 'AUTH 서비스 users.id 참조 (DB FK 없음)';
+COMMENT ON COLUMN subscriptions.plan_id IS 'SubscriptionPlan 코드/설정 파일 참조 (DB 테이블 없음)';
+COMMENT ON COLUMN subscriptions.expires_at IS 'NULL이면 무기한. 만료 배치 처리 기준';
+
+-- =============================================================
+-- TABLE: payment_records (insert-only)
+-- =============================================================
+CREATE TABLE payment_records (
+    id              VARCHAR(36)     NOT NULL,
+    subscription_id VARCHAR(36)     NOT NULL,
+    user_id         VARCHAR(36)     NOT NULL,
+    transaction_id  VARCHAR(200)    NOT NULL,
+    amount          INTEGER         NOT NULL,
+    currency        VARCHAR(10)     NOT NULL,
+    provider        VARCHAR(20)     NOT NULL,
+    created_at      TIMESTAMPTZ     NOT NULL DEFAULT NOW(),
+
+    CONSTRAINT pk_payment_records PRIMARY KEY (id),
+    CONSTRAINT uq_payment_records_transaction_id UNIQUE (transaction_id),
+    CONSTRAINT fk_payment_records_subscription_id FOREIGN KEY (subscription_id)
+        REFERENCES subscriptions (id) ON DELETE RESTRICT,
+    CONSTRAINT chk_payment_records_amount CHECK (amount > 0),
+    CONSTRAINT chk_payment_records_provider CHECK (provider IN ('APPLE', 'GOOGLE'))
+);
+
+CREATE INDEX idx_payment_records_user_id ON payment_records (user_id);
+CREATE INDEX idx_payment_records_subscription_id ON payment_records (subscription_id);
+CREATE UNIQUE INDEX idx_payment_records_transaction_id ON payment_records (transaction_id);
+CREATE INDEX idx_payment_records_created_at ON payment_records (created_at);
+
+COMMENT ON TABLE payment_records IS '결제 트랜잭션 이력 (insert-only, 불변 레코드)';
+COMMENT ON COLUMN payment_records.transaction_id IS 'IAP 트랜잭션 ID — UNIQUE로 중복 결제 방지';
+COMMENT ON COLUMN payment_records.amount IS '최소 통화 단위 (예: 센트, 원)';

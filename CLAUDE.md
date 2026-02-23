@@ -88,3 +88,7 @@ QA 엔지니어
 ## URL링크 참조
 - URL링크는 WebFetch가 아닌 'curl {URL} > .temp/{filename}'명령으로 저장하여 참조함
 - 동일한 파일이 있으면 덮어 씀
+
+## ORG/ROOT
+- ORG: unicorn
+- ROOT: travel-planner

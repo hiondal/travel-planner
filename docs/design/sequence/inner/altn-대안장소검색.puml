@@ -1,190 +1,93 @@
-@startuml altn-대안장소검색
+@startuml
 !theme mono
 
-title ALTN 서비스 내부 - 대안 장소 검색 파이프라인\n(UFR-ALTN-010, 020, 050)
+title ALTN 서비스 - 대안 장소 검색
 
-participant "AlternativeController" as ctrl
+participant "AltnController" as ctrl
 participant "AlternativeService" as svc
-participant "ScoringService" as scoring
 participant "AlternativeRepository" as repo
-database "DB" as db
-database "Redis Cache" as cache
-participant "AUTH 서비스(E)" as auth
-participant "PLCE 서비스(E)" as plce
-participant "MNTR 서비스(E)" as mntr
+participant "PlceService(E)" as plce
+participant "MntrService(E)" as mntr
+database "PostgreSQL(E)" as db
+database "Redis Cache(E)" as cache
 
-== 대안 검색 요청 ==
-ctrl -> svc: searchAlternatives\n(lat, lng, schedule_id, user_id)
-activate svc
+-> ctrl : POST /api/v1/alternatives/search\n{place_id, category, lat, lng}
+activate ctrl
 
-== 구독 티어 확인 ==
-svc -> auth: GET /auth/subscription\n{user_id}
-activate auth
-auth -> svc: {tier}
-deactivate auth
-
+ctrl -> ctrl : JWT 클레임에서 구독 티어 확인
 alt Free 티어
-    svc -> ctrl: {status: "PAYWALL"}\nTrip Pass/Pro 업그레이드 필요
-    deactivate svc
-    deactivate ctrl
-else Trip Pass 또는 Pro
-    deactivate auth
+    ctrl --> : 402 Payment Required\n{paywall: true}
+else 유료 티어
 
-    == 주변 장소 검색 (반경 1km) ==
-    svc -> plce: GET /places/search\n?lat={lat}&lng={lng}\n&radius=1000\n&category={original_category}\n&opening_now=true
-    activate plce
+    ctrl -> svc : searchAlternatives(place_id, category, location)
+    activate svc
 
-    plce -> cache: GET places:1km:{lat}:{lng}:{category}
+    == 대안 카드 캐시 확인 ==
+    svc -> cache : 캐시 조회 (altn:{place_id}:{category}:{radius})
     activate cache
-
-    alt 캐시 히트
-        cache -> plce: [장소 후보 리스트]
+    alt 캐시 HIT (TTL 5분)
+        cache --> svc : 대안 카드 목록 반환
         deactivate cache
-        plce -> svc: [후보 장소 1~N]
-    else 캐시 미스
+    else 캐시 MISS
+        cache --> svc : 캐시 없음
         deactivate cache
-        plce -> plce: Google Places API 호출\n(외부 API 호출은 생략)
-        plce -> cache: SET places:1km:{lat}:{lng}:{category}\nTTL=5분
-        activate cache
-        cache -> plce: OK
-        deactivate cache
-        plce -> svc: [후보 장소 1~N]
-    end
 
-    deactivate plce
-
-    == 후보 장소 상태 확인 (MNTR 캐시) ==
-    svc -> mntr: POST /monitoring/status/batch\n?placeIds={place_id1},{place_id2},...
-    activate mntr
-
-    mntr -> cache: GET status:{place_id1},\nstatus:{place_id2},...
-    activate cache
-    cache -> mntr: {place_id1: "green",\nplace_id2: "yellow",...}
-    deactivate cache
-
-    mntr -> svc: 각 장소별 상태 배지
-    deactivate mntr
-
-    == 스코어링 계산 ==
-    svc -> scoring: scoreAlternatives\n(candidates, current_status,\ndistance, rating, crowdedness)
-    activate scoring
-
-    scoring -> scoring: 각 장소별 스코어 계산\n스코어 = w1*distance_score(0.5)\n        + w2*rating_score(0.3)\n        + w3*crowdedness_score(0.2)\n상태 필터링 적용:\n- 초록: 최우선\n- 노랑: "주의필요" 레이블\n- 회색: "정보미확인" 레이블\n- 빨강: 제외
-
-    scoring -> svc: 정렬된 후보 (상위부터)
-    deactivate scoring
-
-    == 카드 수 제한 (구독 티어별) ==
-    svc -> svc: 구독 티어별 제한\nTrip Pass: 상위 3개\nPro: 상위 5개
-
-    svc -> svc: 반경 내 결과 >= 3개인가?
-
-    alt 반경 1km에서 3개 이상
-        svc -> svc: Top N개 선정 완료
-    else 반경 1km에서 3개 미만
-
-        == 반경 2km로 확장 ==
-        svc -> plce: GET /places/search\n?lat={lat}&lng={lng}\n&radius=2000\n&category={original_category}\n&opening_now=true
+        == 주변 장소 검색 (단계적 반경 확장) ==
+        svc -> plce : 반경 1km 주변 장소 검색 (동일 카테고리, 영업 중)
         activate plce
-
-        plce -> cache: GET places:2km:{lat}:{lng}:{category}
-        activate cache
-
-        alt 캐시 히트
-            cache -> plce: [추가 후보]
-            deactivate cache
-        else 캐시 미스
-            deactivate cache
-            plce -> plce: Google Places API 호출\n(1km~2km 추가 검색)
-            plce -> cache: SET places:2km:{lat}:{lng}:{category}\nTTL=5분
-            activate cache
-            cache -> plce: OK
-            deactivate cache
-        end
-
-        plce -> svc: [1km~2km 추가 후보]
+        plce --> svc : 장소 목록 반환
         deactivate plce
 
-        svc -> mntr: POST /monitoring/status/batch\n?placeIds={new_candidates}
+        alt 결과 3장 미만 (P22)
+            svc -> plce : 반경 2km 추가 검색 (1km~2km 구간)
+            activate plce
+            plce --> svc : 추가 장소 목록 (누적)
+            deactivate plce
+
+            alt 여전히 3장 미만
+                svc -> plce : 반경 3km 추가 검색 (2km~3km 구간)
+                activate plce
+                plce --> svc : 추가 장소 목록 (누적)
+                deactivate plce
+            end
+        end
+
+        == 배지 상태 필터링 ==
+        svc -> mntr : 후보 장소 배지 상태 일괄 조회
         activate mntr
-        mntr -> svc: 추가 후보 상태 배지
+        mntr --> svc : 장소별 배지 상태
         deactivate mntr
 
-        svc -> scoring: scoreAlternatives\n(누적 후보)
-        activate scoring
-        scoring -> svc: 정렬된 누적 결과
-        deactivate scoring
+        svc -> svc : 빨강 상태 장소 제외
+        note right of svc
+            초록: 최우선
+            노랑: "주의 필요" 레이블
+            회색: "정보 미확인" 레이블 (최후보)
+            빨강: 제외
+        end note
 
-        svc -> svc: 누적 결과에서\nTop N개 선정\n(최대 반경 3km)
+        == 합산 점수 정렬 및 상위 3장 선택 ==
+        svc -> svc : score = 0.5*distance + 0.3*rating + 0.2*congestion\n상위 3장 선택
+
+        == 대안 카드 캐시 저장 ==
+        svc -> cache : 대안 카드 캐시 저장 (TTL 5분)
+        activate cache
+        cache --> svc : 저장 완료
+        deactivate cache
     end
 
-    == 대안 카드 DB 저장 ==
-    svc -> repo: saveAlternativeCards\n(schedule_id, user_id,\nalternatives: [{id, name,\ndistance, rating, congestion,\nreason, radius_used}])
+    svc -> repo : 대안 카드 노출 이벤트 저장 (분석 데이터)
     activate repo
-
-    repo -> db: INSERT INTO alternative_card\n(schedule_id, place_id,\ndistance, rating, congestion,\nreason, radius_used,\ncreated_at)\nVALUES(...)
-    activate db
-    db -> repo: {card_ids}
-    deactivate db
-
-    repo -> svc: 저장 완료
+    repo -> db : alternative_cards 삽입\n(cards 스냅샷: 거리, 평점, 혼잡도)
+    db --> repo : 저장 완료
     deactivate repo
 
-    == 캐시 저장 ==
-    svc -> cache: SET alternatives:{schedule_id}\n{alternatives: [...]}\nTTL=10분
-    activate cache
-    cache -> svc: OK
-    deactivate cache
-
-    == 응답 반환 ==
-    svc -> ctrl: {alternatives: [{id, name,\ndistance, rating, congestion,\nreason, radius_used}]}\n응답시간: 정상 3초,\n최대 5초
+    svc --> ctrl : {cards: [{place_id, name, distance_m, rating, congestion, reason, status_label}]}
     deactivate svc
-    deactivate ctrl
+
+    ctrl --> : 200 OK\n{대안 카드 최대 3장}
 end
 
-note right of svc
-**대안 검색 파이프라인**
-1. 구독 티어 확인
-   - Free: Paywall 반환
-2. PLCE 호출: 반경 1km 장소 검색
-3. MNTR 호출: 후보 상태 확인
-4. ScoringService: 스코어링 계산
-5. 결과 < 3개 시 반경 확장 (2km, 3km)
-6. DB 저장 (alternative_card)
-7. 캐시 저장 (TTL 10분)
-
-**성능 목표**
-- 정상: 3초 이내
-- 최대: 5초 (타임아웃)
-- 병렬 처리: PLCE + MNTR
-end note
-
-note right of scoring
-**스코어링 알고리즘**
-score = w1*distance_score(0.5)\n      + w2*rating_score(0.3)\n      + w3*crowdedness_score(0.2)
-
-distance_score:
-  0~1km: 1.0 (1km 이내)
-  1~2km: 0.8
-  2~3km: 0.6
-
-rating_score:
-  4.5~5.0: 1.0
-  4.0~4.5: 0.8
-  3.5~4.0: 0.6
-
-crowdedness_score:
-  낮음: 1.0
-  보통: 0.7
-  높음: 0.4
-end note
-
-note right of repo
-**Repository 처리**
-- 테이블: alternative_card
-- 컬럼: schedule_id, place_id,\n distance, rating,\n crowdedness, reason,\n radius_used, created_at
-- PK: (schedule_id, place_id)
-- 인덱스: schedule_id
-end note
+deactivate ctrl
 
 @enduml

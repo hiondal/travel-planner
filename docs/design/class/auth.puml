@@ -1,0 +1,232 @@
+@startuml
+!theme mono
+
+title AUTH 서비스 - 클래스 다이어그램
+
+package "com.travelplanner.auth" {
+
+    ' ===== Controller Layer =====
+    package "controller" {
+        class AuthController {
+            - authService: AuthService
+            + socialLogin(request: SocialLoginRequest): ResponseEntity<SocialLoginResponse>
+            + refreshToken(request: TokenRefreshRequest): ResponseEntity<TokenRefreshResponse>
+            + logout(request: LogoutRequest, principal: UserPrincipal): ResponseEntity<Void>
+            + invalidateAndReissueToken(request: TokenInvalidateRequest, principal: UserPrincipal): ResponseEntity<TokenInvalidateResponse>
+            + saveConsent(request: ConsentRequest, principal: UserPrincipal): ResponseEntity<ConsentResponse>
+        }
+    }
+
+    ' ===== Service Layer =====
+    package "service" {
+        interface AuthService {
+            + socialLogin(provider: String, oauthCode: String): SocialLoginResult
+            + refreshToken(refreshToken: String): TokenRefreshResult
+            + logout(refreshToken: String, userId: String): void
+            + invalidateAndReissueToken(userId: String, newTier: String): TokenInvalidateResult
+            + saveConsent(userId: String, location: boolean, push: boolean, timestamp: LocalDateTime): Consent
+        }
+
+        class AuthServiceImpl {
+            - userRepository: UserRepository
+            - consentRepository: ConsentRepository
+            - oAuthClient: OAuthClient
+            - jwtProvider: JwtProvider
+            + socialLogin(provider: String, oauthCode: String): SocialLoginResult
+            + refreshToken(refreshToken: String): TokenRefreshResult
+            + logout(refreshToken: String, userId: String): void
+            + invalidateAndReissueToken(userId: String, newTier: String): TokenInvalidateResult
+            + saveConsent(userId: String, location: boolean, push: boolean, timestamp: LocalDateTime): Consent
+            - findOrCreateUser(profile: OAuthProfile): User
+            - createNewUser(profile: OAuthProfile): User
+            - buildUserPrincipal(user: User): UserPrincipal
+        }
+
+        AuthServiceImpl ..|> AuthService
+    }
+
+    ' ===== Repository Layer =====
+    package "repository" {
+        interface UserRepository {
+            + findByProviderAndProviderId(provider: String, providerId: String): Optional<User>
+            + findById(userId: String): Optional<User>
+            + save(user: User): User
+            + existsByProviderId(providerId: String): boolean
+        }
+
+        interface ConsentRepository {
+            + save(consent: Consent): Consent
+            + findLatestByUserId(userId: String): Optional<Consent>
+            + existsByUserId(userId: String): boolean
+        }
+
+        interface AuthSessionRepository {
+            + save(session: AuthSession): AuthSession
+            + findByRefreshToken(refreshToken: String): Optional<AuthSession>
+            + deleteByRefreshToken(refreshToken: String): void
+            + deleteByUserId(userId: String): void
+        }
+    }
+
+    ' ===== External Client =====
+    package "client" {
+        class OAuthClient {
+            - googleClientId: String
+            - appleClientId: String
+            + verifyGoogle(oauthCode: String): OAuthProfile
+            + verifyApple(oauthCode: String): OAuthProfile
+            + verify(provider: String, oauthCode: String): OAuthProfile
+        }
+
+        class OAuthProfile {
+            - providerId: String
+            - email: String
+            - name: String
+            - avatarUrl: String
+            - provider: String
+            + OAuthProfile(providerId: String, email: String, name: String, avatarUrl: String, provider: String)
+        }
+    }
+
+    ' ===== Domain Model =====
+    package "domain" {
+        class User {
+            - id: String
+            - provider: String
+            - providerId: String
+            - email: String
+            - nickname: String
+            - avatarUrl: String
+            - tier: SubscriptionTier
+            - createdAt: LocalDateTime
+            - updatedAt: LocalDateTime
+            + User()
+            + updateTier(newTier: SubscriptionTier): void
+            + updateProfile(nickname: String, avatarUrl: String): void
+            + toUserPrincipal(): UserPrincipal
+        }
+
+        class Consent {
+            - id: String
+            - userId: String
+            - location: boolean
+            - push: boolean
+            - consentedAt: LocalDateTime
+            - createdAt: LocalDateTime
+            + Consent(userId: String, location: boolean, push: boolean, consentedAt: LocalDateTime)
+            + isLocationGranted(): boolean
+            + isPushGranted(): boolean
+        }
+
+        class AuthSession {
+            - id: String
+            - userId: String
+            - refreshToken: String
+            - expiresAt: LocalDateTime
+            - createdAt: LocalDateTime
+            + AuthSession(userId: String, refreshToken: String, expiresAt: LocalDateTime)
+            + isExpired(): boolean
+        }
+    }
+
+    ' ===== DTO =====
+    package "dto" {
+        package "request" {
+            class SocialLoginRequest {
+                - provider: String
+                - oauthCode: String
+                + validate(): void
+            }
+            class TokenRefreshRequest {
+                - refreshToken: String
+                + validate(): void
+            }
+            class LogoutRequest {
+                - refreshToken: String
+                + validate(): void
+            }
+            class TokenInvalidateRequest {
+                - userId: String
+                - newTier: String
+                + validate(): void
+            }
+            class ConsentRequest {
+                - location: boolean
+                - push: boolean
+                - timestamp: LocalDateTime
+                + validate(): void
+            }
+        }
+
+        package "response" {
+            class SocialLoginResponse {
+                - accessToken: String
+                - refreshToken: String
+                - userProfile: UserProfileDto
+                + {static} of(token: JwtToken, user: User): SocialLoginResponse
+            }
+            class TokenRefreshResponse {
+                - accessToken: String
+                - expiresIn: int
+                + {static} of(accessToken: String): TokenRefreshResponse
+            }
+            class TokenInvalidateResponse {
+                - accessToken: String
+                - tier: String
+                + {static} of(accessToken: String, tier: String): TokenInvalidateResponse
+            }
+            class ConsentResponse {
+                - consentId: String
+                - location: boolean
+                - push: boolean
+                - consentedAt: LocalDateTime
+                + {static} from(consent: Consent): ConsentResponse
+            }
+            class UserProfileDto {
+                - userId: String
+                - nickname: String
+                - avatarUrl: String
+                - tier: String
+                - isNewUser: boolean
+                + {static} from(user: User, isNew: boolean): UserProfileDto
+            }
+        }
+
+        package "internal" {
+            class SocialLoginResult {
+                - jwtToken: JwtToken
+                - user: User
+                - isNewUser: boolean
+            }
+            class TokenRefreshResult {
+                - accessToken: String
+                - expiresIn: int
+            }
+            class TokenInvalidateResult {
+                - accessToken: String
+                - tier: String
+            }
+        }
+    }
+}
+
+' ===== 관계 =====
+AuthController --> AuthService
+AuthServiceImpl --> UserRepository
+AuthServiceImpl --> ConsentRepository
+AuthServiceImpl --> AuthSessionRepository
+AuthServiceImpl --> OAuthClient
+AuthServiceImpl --> JwtProvider
+
+UserRepository ..> User
+ConsentRepository ..> Consent
+AuthSessionRepository ..> AuthSession
+
+OAuthClient ..> OAuthProfile
+
+SocialLoginResponse ..> UserProfileDto
+SocialLoginResult ..> JwtToken
+
+User --> SubscriptionTier
+
+@enduml

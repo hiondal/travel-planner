@@ -1,0 +1,391 @@
+openapi: 3.0.0
+info:
+  title: AUTH Service API
+  description: 소셜 로그인 및 JWT 토큰 관리 서비스 API
+  version: 1.0.0
+  contact:
+    name: travel-planner Team
+
+servers:
+  - url: https://virtserver.swaggerhub.com/travel-planner/auth-service/1.0.0
+    description: SwaggerHub Mock Server
+  - url: https://api.travel-planner.com/v1
+    description: Production Server
+  - url: https://dev-api.travel-planner.com/v1
+    description: Development Server
+
+tags:
+  - name: Auth
+    description: 소셜 로그인 및 토큰 관리
+  - name: Consent
+    description: 사용자 동의 관리
+
+paths:
+  /auth/social-login:
+    post:
+      tags:
+        - Auth
+      summary: 소셜 로그인 (Google/Apple OAuth)
+      description: Google 또는 Apple OAuth 인증 코드를 검증하고 JWT Access Token + Refresh Token을 발급한다. 최초 로그인 시 사용자 프로필이 자동 생성된다.
+      operationId: socialLogin
+      x-user-story: UFR-AUTH-010
+      x-controller: AuthController
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SocialLoginRequest'
+            examples:
+              google:
+                summary: Google 로그인
+                value:
+                  provider: google
+                  oauth_code: "4/0AX4XfWh..."
+              apple:
+                summary: Apple 로그인
+                value:
+                  provider: apple
+                  oauth_code: "c8f3d2a1..."
+      responses:
+        '200':
+          description: 로그인 성공
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SocialLoginResponse'
+              example:
+                access_token: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+                refresh_token: "dGhpcyBpcyBhIHJlZnJlc2ggdG9rZW4..."
+                user_profile:
+                  user_id: "usr_01HX..."
+                  nickname: "도쿄여행자"
+                  avatar_url: "https://lh3.googleusercontent.com/..."
+                  tier: "FREE"
+                  is_new_user: false
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+
+  /auth/token/refresh:
+    post:
+      tags:
+        - Auth
+      summary: Access Token 갱신
+      description: Refresh Token으로 새로운 Access Token을 발급한다.
+      operationId: refreshToken
+      x-user-story: UFR-AUTH-010
+      x-controller: AuthController
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TokenRefreshRequest'
+            example:
+              refresh_token: "dGhpcyBpcyBhIHJlZnJlc2ggdG9rZW4..."
+      responses:
+        '200':
+          description: 토큰 갱신 성공
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokenRefreshResponse'
+              example:
+                access_token: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+                expires_in: 1800
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /auth/logout:
+    post:
+      tags:
+        - Auth
+      summary: 로그아웃
+      description: Refresh Token을 무효화하고 세션을 종료한다.
+      operationId: logout
+      x-user-story: UFR-AUTH-010
+      x-controller: AuthController
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LogoutRequest'
+            example:
+              refresh_token: "dGhpcyBpcyBhIHJlZnJlc2ggdG9rZW4..."
+      responses:
+        '204':
+          description: 로그아웃 성공
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /auth/token/invalidate:
+    post:
+      tags:
+        - Auth
+      summary: 토큰 즉시 무효화 (구독 티어 변경 시)
+      description: 구독 티어 변경 후 기존 Access Token을 즉시 무효화하고 새 토큰을 발급한다. PAY 서비스에서 내부 호출.
+      operationId: invalidateAndReissueToken
+      x-user-story: UFR-PAY-010
+      x-controller: AuthController
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TokenInvalidateRequest'
+            example:
+              user_id: "usr_01HX..."
+              new_tier: "TRIP_PASS"
+      responses:
+        '200':
+          description: 토큰 재발급 성공
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokenInvalidateResponse'
+              example:
+                access_token: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+                tier: "TRIP_PASS"
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /users/consent:
+    post:
+      tags:
+        - Consent
+      summary: 사용자 동의 이력 저장
+      description: 위치정보 수집 및 Push 알림 권한 동의 결과를 서버에 저장한다. 동의 처리는 클라이언트에서 수행하고 결과만 전송한다.
+      operationId: saveConsent
+      x-user-story: UFR-SCHD-010
+      x-controller: AuthController
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ConsentRequest'
+            example:
+              location: true
+              push: true
+              timestamp: "2026-03-15T09:00:00Z"
+      responses:
+        '201':
+          description: 동의 저장 성공
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConsentResponse'
+              example:
+                consent_id: "cns_01HX..."
+                location: true
+                push: true
+                consented_at: "2026-03-15T09:00:00Z"
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+components:
+  schemas:
+    SocialLoginRequest:
+      type: object
+      required:
+        - provider
+        - oauth_code
+      properties:
+        provider:
+          type: string
+          enum: [google, apple]
+          description: OAuth 제공자
+          example: google
+        oauth_code:
+          type: string
+          description: OAuth 인증 코드
+          example: "4/0AX4XfWh..."
+
+    SocialLoginResponse:
+      type: object
+      properties:
+        access_token:
+          type: string
+          description: JWT Access Token (만료 30분)
+          example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+        refresh_token:
+          type: string
+          description: Refresh Token
+          example: "dGhpcyBpcyBhIHJlZnJlc2ggdG9rZW4..."
+        user_profile:
+          $ref: '#/components/schemas/UserProfile'
+
+    UserProfile:
+      type: object
+      properties:
+        user_id:
+          type: string
+          example: "usr_01HX..."
+        nickname:
+          type: string
+          example: "도쿄여행자"
+        avatar_url:
+          type: string
+          format: uri
+          example: "https://lh3.googleusercontent.com/..."
+        tier:
+          type: string
+          enum: [FREE, TRIP_PASS, PRO]
+          example: FREE
+        is_new_user:
+          type: boolean
+          description: 최초 로그인 여부
+          example: false
+
+    TokenRefreshRequest:
+      type: object
+      required:
+        - refresh_token
+      properties:
+        refresh_token:
+          type: string
+          example: "dGhpcyBpcyBhIHJlZnJlc2ggdG9rZW4..."
+
+    TokenRefreshResponse:
+      type: object
+      properties:
+        access_token:
+          type: string
+          example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+        expires_in:
+          type: integer
+          description: 만료까지 남은 초
+          example: 1800
+
+    LogoutRequest:
+      type: object
+      required:
+        - refresh_token
+      properties:
+        refresh_token:
+          type: string
+          example: "dGhpcyBpcyBhIHJlZnJlc2ggdG9rZW4..."
+
+    TokenInvalidateRequest:
+      type: object
+      required:
+        - user_id
+        - new_tier
+      properties:
+        user_id:
+          type: string
+          example: "usr_01HX..."
+        new_tier:
+          type: string
+          enum: [FREE, TRIP_PASS, PRO]
+          example: "TRIP_PASS"
+
+    TokenInvalidateResponse:
+      type: object
+      properties:
+        access_token:
+          type: string
+          example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+        tier:
+          type: string
+          enum: [FREE, TRIP_PASS, PRO]
+          example: "TRIP_PASS"
+
+    ConsentRequest:
+      type: object
+      required:
+        - location
+        - push
+        - timestamp
+      properties:
+        location:
+          type: boolean
+          description: 위치정보 수집 동의 여부
+          example: true
+        push:
+          type: boolean
+          description: Push 알림 권한 동의 여부
+          example: true
+        timestamp:
+          type: string
+          format: date-time
+          description: 동의 일시 (ISO 8601)
+          example: "2026-03-15T09:00:00Z"
+
+    ConsentResponse:
+      type: object
+      properties:
+        consent_id:
+          type: string
+          example: "cns_01HX..."
+        location:
+          type: boolean
+          example: true
+        push:
+          type: boolean
+          example: true
+        consented_at:
+          type: string
+          format: date-time
+          example: "2026-03-15T09:00:00Z"
+
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+          example: "INVALID_TOKEN"
+        message:
+          type: string
+          example: "유효하지 않은 토큰입니다."
+        timestamp:
+          type: string
+          format: date-time
+          example: "2026-03-15T09:00:00Z"
+
+  responses:
+    BadRequest:
+      description: 잘못된 요청
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error: "BAD_REQUEST"
+            message: "필수 파라미터가 누락되었습니다."
+    Unauthorized:
+      description: 인증 실패
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error: "UNAUTHORIZED"
+            message: "로그인에 실패했습니다. 다시 시도해주세요."
+    ServiceUnavailable:
+      description: 서비스 불가
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error: "SERVICE_UNAVAILABLE"
+            message: "인터넷 연결을 확인해주세요."
+
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: JWT Access Token (Authorization 헤더)

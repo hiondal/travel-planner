@@ -1,567 +1,408 @@
 # 논리 아키텍처 설계서
 
-> 작성자: 아키 (소프트웨어 아키텍트)
+> 작성자: 홍길동/아키 (소프트웨어 아키텍트)
 > 작성일: 2026-02-23
-> 근거: architecture.md 선정 9개 MVP 패턴 + userstory.md 9개 Epic + 7개 마이크로서비스
-> 관련 문서: `docs/design/architecture.md` (패턴 선정), `docs/design/logical-architecture.mmd` (Mermaid 다이어그램)
+> 프로젝트: travel-planner — 여행 중 실시간 일정 최적화 가이드 앱
+> 참조: architecture.md (패턴 선정), userstory.md (UFR), 핵심솔루션.md (S04/S05/S06)
 
 ---
 
-## 1. 개요
+## 개요
 
-### 1.1 설계 원칙
+### 설계 원칙
 
-1. **서비스 경계 명확화**: 이벤트 스토밍에서 도출한 7개 Bounded Context를 서비스로 구현. MVP에서는 모놀리스 내 패키지 분리, Phase 2에서 마이크로서비스 분리 가능하도록 설계.
+1. **Context Map 중심**: 서비스 내부 구조는 생략하고 서비스 간 관계·통신 방식·데이터 흐름에 집중한다.
+2. **패턴 충실 적용**: 선정된 10개 클라우드 디자인 패턴(Federated Identity, Gateway Routing/Offloading, Cache-Aside, Circuit Breaker, Retry, Publisher-Subscriber, Rate Limiting, External Configuration Store, Health Endpoint Monitoring)을 설계에 직접 반영한다.
+3. **MVP 범위 준수 (YAGNI)**: MVP에서 꼭 필요한 관계만 설계한다. Phase 2+ 요소는 인터페이스 추상화로만 준비하고 물리적 컴포넌트를 추가하지 않는다.
+4. **AI 인터페이스 추상화**: MVP에서 AI API를 사용하지 않되, 총평 생성 로직을 `BriefingTextGenerator` 인터페이스로 추상화하여 Phase 3 LLM 전환 비용을 최소화한다.
+5. **이벤트 버스 교체 가능성 확보**: 인메모리 이벤트 버스(MVP) → Azure Service Bus(Phase 2) 전환 시 서비스 코드 변경 없이 교체 가능하도록 이벤트 인터페이스를 추상화한다.
+6. **부분 장애 허용 설계**: 외부 API 4종(Google Places, OpenWeatherMap, Google Directions, FCM) 중 일부가 장애 상태여도 핵심 기능(일정 조회, 배지 표시, 브리핑 생성)이 동작한다.
 
-2. **외부 API 안정성**: Cache-Aside + Circuit Breaker + Retry 삼총사로 Google Places/OpenWeatherMap/Google Directions 3개 API 장애에 대응. 부분 실패 허용(Graceful Degradation).
+### 핵심 컴포넌트 정의
 
-3. **이벤트 기반 비동기 통신**: Publisher-Subscriber + Choreography 조합으로 "일정 등록 → 모니터링 시작 → 상태 변경 → 알림 → 브리핑 → 대안" 흐름을 느슨하게 결합.
-
-4. **스케줄링 신뢰성**: 15분 주기 데이터 수집과 출발 전 브리핑 트리거를 `job_execution_log` 테이블 기반 Supervisor로 보장.
-
-5. **인증/인가 일원화**: API Gateway에서 JWT 검증 + Federated Identity로 소셜 로그인 위임. 구독 티어 기반 접근 제어는 토큰 클레임 기반.
-
-6. **비용 최적화**: 인바운드 Rate Limiting(API Gateway) + 아웃바운드 Rate Limiting(resilience4j)으로 외부 API 호출 비용 제어.
-
-### 1.2 핵심 컴포넌트 정의
-
-| 컴포넌트 | 역할 | 관련 패턴 |
-|----------|------|---------|
-| **API Gateway** | 단일 진입점, JWT 검증, 라우팅, 인바운드 Rate Limiting, CORS | API Gateway, Rate Limiting |
-| **서비스 모듈 (7개)** | AUTH, SCHD, PLCE, MNTR, BRIF, ALTN, PAY | 각 서비스별 패턴 적용 |
-| **이벤트 버스** | 서비스 간 비동기 통신 인프라 (MVP: Spring ApplicationEvent + @TransactionalEventListener) | Publisher-Subscriber, Choreography |
-| **캐시 계층** | Redis 기반 장소 데이터, 배지 데이터 캐싱 (Cache-Aside, 5분 TTL) | Cache-Aside |
-| **스케줄러 (Supervisor)** | job_execution_log 테이블 기반 작업 실행, 실패 감지, 재시도 (3회 제한) | Scheduler Agent Supervisor |
-| **외부 API 클라이언트** | Circuit Breaker + Retry + 아웃바운드 Rate Limiting 적용 | Circuit Breaker, Retry, Rate Limiting |
-| **데이터베이스** | 논리 모델 기반 영속성 (PostgreSQL) | - |
+| 컴포넌트 | 역할 코드 | 책임 |
+|---------|:--------:|------|
+| **모바일 클라이언트** | CLIENT | 여행자 앱. HTTPS로 API Gateway 단일 진입점 호출 |
+| **API Gateway** | GW | Azure APIM 기반. Gateway Routing(서비스 라우팅), Gateway Offloading(JWT 검증·로깅·Rate Limiting 중앙화) |
+| **AUTH 서비스** | AUTH | Federated Identity. Google/Apple OAuth 위임 인증, JWT Access/Refresh Token 발급 |
+| **SCHD 서비스** | SCHD | 여행 일정 CRUD, 장소 추가/교체, 이동시간 재계산, 모니터링 등록/해제 이벤트 발행 |
+| **PLCE 서비스** | PLCE | 키워드·반경 기반 장소 검색, Google Places API 연동, 장소 데이터 Cache-Aside |
+| **MNTR 서비스** | MNTR | 15분 주기 외부 데이터 수집(Circuit Breaker+Retry), 4단계 상태 판정(External Config), 상태 변경 이벤트 발행 |
+| **BRIF 서비스** | BRIF | 출발 15~30분 전 브리핑 자동 생성, FCM Push 발송, 총평 인터페이스 추상화(Phase 3 AI 대비) |
+| **ALTN 서비스** | ALTN | 맥락 기반 대안 카드 3장 생성, 규칙 기반 정렬, 일정 교체 중개, Free 티어 Paywall |
+| **PAY 서비스** | PAY | 구독 결제(Trip Pass, Pro), 결제 상태 관리, 환불 처리 |
+| **이벤트 버스** | BUS | MVP: 인메모리 이벤트 버스. Phase 2: Azure Service Bus 교체 예정 |
+| **Redis 캐시** | CACHE | 장소 데이터(PLCE), 수집 상태 Fallback(MNTR), 대안 카드(ALTN), 세션 정보(AUTH) |
+| **PostgreSQL DB** | DB | 서비스별 논리 분리 스키마. 모놀리스 내 단일 인스턴스(MVP) |
+| **Azure App Config** | CONFIG | MNTR 상태 판정 임계값, 수집 주기, 타임아웃 설정 외부화 |
+| **AI Pipeline** | AI | Phase 2 도입 예정. LLM 기반 총평 생성. MVP에서는 BriefingTextGenerator 인터페이스로만 존재 |
 
 ---
 
-## 2. 서비스 아키텍처
+## 서비스 아키텍처
 
-### 2.1 서비스별 책임 및 경계
+### 서비스별 책임
 
-#### AUTH (Authentication & Authorization)
-**책임**: 사용자 인증, 토큰 발급/갱신, 구독 티어 관리
+#### API Gateway (Azure APIM)
+
+**책임**: 단일 진입점. 모든 클라이언트 요청의 관문.
 
 **핵심 기능**:
-- 소셜 로그인 (Google/Apple OAuth 2.0) - UFR-AUTH-010
-- JWT Access Token(30분) + Refresh Token 발급 및 갱신
-- 온보딩 상태 관리 (첫 로그인 시 닉네임/프로필 이미지 설정)
-- 구독 티어 정보 조회 (Free/Trip Pass/Pro)
+- **Gateway Routing**: 요청 경로 기반 7개 서비스로 라우팅
+- **Gateway Offloading**: JWT 검증, 구독 티어 확인, 요청 로깅, Rate Limiting을 게이트웨이 집중 처리 — 각 서비스의 인증 코드 제거
+- **Rate Limiting**: 구독 티어별 API 호출 제한. Free 티어 브리핑 1일 1회(P19) 게이트웨이 레벨 선제 차단
+- **Health Check 집계**: 하위 서비스 /health 응답 집계
 
-**통신 방식**: 동기 (인증은 즉시 응답 필수)
-**적용 패턴**: Federated Identity
+#### AUTH 서비스
 
-**API 경계**:
-- `POST /auth/login`: 소셜 로그인
-- `POST /auth/refresh`: 토큰 갱신
-- `GET /auth/profile`: 사용자 정보 조회
-- `GET /auth/subscription`: 구독 정보 조회
-
----
-
-#### SCHD (Schedule & Itinerary Management)
-**책임**: 여행 일정, 장소, 이동시간 관리
+**책임**: 사용자 인증 전담. Federated Identity 패턴으로 인증을 외부 OAuth 제공자에 위임.
 
 **핵심 기능**:
-- 여행/일정/장소 CRUD (UFR-SCHD-005~070)
-- 장소 추가 시 모니터링 대상 등록 (이벤트 발행)
-- 장소 교체 시 모니터링 대상 변경 (이벤트 발행)
-- 이동시간 재계산 (Google Directions API via PLCE 서비스)
-- 일정 상태 조회 (상태 배지 캐시 조회)
+- Google OAuth 2.0 / Apple Sign In 위임 인증 — UFR-AUTH-010
+- JWT Access Token(30분) + Refresh Token 발급
+- 구독 티어 정보를 JWT 클레임에 포함
+- 위치정보 수집 동의 이력 저장 (GDPR/위치정보법)
 
-**통신 방식**: 동기(일정 CRUD) + 비동기(모니터링 대상 변경)
-**적용 패턴**: Cache-Aside, Publisher-Subscriber, Choreography
+**데이터 저장**: PostgreSQL (users, auth_sessions, consent_records 스키마)
 
-**API 경계**:
-- `POST /trips`: 여행 생성
-- `GET /trips/{tripId}`: 여행 조회
-- `POST /trips/{tripId}/schedules`: 일정 생성
-- `PUT /trips/{tripId}/schedules/{scheduleId}`: 일정 수정
-- `POST /schedules/{scheduleId}/places`: 장소 추가
-- `PUT /schedules/{scheduleId}/places/{placeId}`: 장소 교체
-- `GET /schedules/{scheduleId}/places`: 장소 목록 조회
+#### SCHD 서비스
 
-**이벤트**:
-- `MonitoringTargetRegistered` (구독: MNTR)
-- `MonitoringTargetChanged` (구독: MNTR)
-- `PlaceReplacedInSchedule` (구독: ALTN)
-
----
-
-#### PLCE (Place & Location Service)
-**책임**: 장소 검색, 상세 정보, 캐싱 관리
+**책임**: 여행 일정의 원천 데이터 관리. 일정 변경 이벤트의 유일한 발행자.
 
 **핵심 기능**:
-- Google Places API 연동 (장소 검색, 상세 정보) - UFR-PLCE-010~030
-- 장소 데이터 캐싱 (Cache-Aside, 5분 TTL)
-- Google Directions API 연동 (이동시간 계산)
-- 캐시 폴백 (API 실패 시 과거 데이터 사용)
+- 여행 일정 CRUD — UFR-SCHD-010
+- 장소 검색 중개(PLCE 호출) — UFR-SCHD-020
+- 장소 추가/교체 시 방문 시간 현지 시간(IANA) 저장, 이동시간 재계산 — UFR-SCHD-030, UFR-SCHD-040
+- 모니터링 등록/해제 이벤트 발행(`ScheduleItemAdded`, `ScheduleItemReplaced`, `ScheduleItemRemoved`) — P14
 
-**통신 방식**: 동기 (사용자 검색 응답 필수), 외부 API 의존
-**적용 패턴**: Cache-Aside, Circuit Breaker, Retry, Rate Limiting (아웃바운드)
+**이벤트 발행**: `ScheduleItemAdded` → BUS → MNTR 구독
+**동기 호출**: PLCE (장소 검색), ALTN (대안 선택 시 일정 교체 수신)
 
-**API 경계**:
-- `GET /places/search?query={query}&lat={lat}&lng={lng}`: 장소 검색
-- `GET /places/{placeId}`: 장소 상세 정보
-- `POST /directions/calculate`: 이동시간 계산
+#### PLCE 서비스
 
-**외부 API 연동**:
-- Google Places API (검색, 상세 정보)
-- Google Directions API (이동시간)
-- Circuit Breaker 상태: 3회 실패 시 60초 open, 캐시 폴백
-
----
-
-#### MNTR (Real-time Monitoring Service)
-**책임**: 외부 데이터 수집, 상태 판정, 상태 변경 알림
+**책임**: 장소 데이터의 단일 소유자. 외부 Google Places API 의존성 격리.
 
 **핵심 기능**:
-- 15분 주기 데이터 수집 (날씨, 혼잡도, 영업시간) - UFR-MNTR-010~050
-- 3개 외부 API 병렬 호출 (Google Places, OpenWeatherMap, Google Directions)
-- 상태 배지 판정 (안심/주의/위험/불가능)
-- 상태 변경 시 이벤트 발행 (BRIF, ALTN 구독)
-- 모니터링 대상 변경 감지 (SCHD 이벤트 구독)
+- 키워드 기반 장소 검색 — UFR-PLCE-010, UFR-SCHD-020
+- 반경 기반 주변 장소 검색 — UFR-PLCE-020 (ALTN 서비스 활용)
+- Google Places API 연동 — Circuit Breaker + Retry 적용
+- 장소 데이터 Cache-Aside: 캐시 HIT 시 DB/외부 API 미호출
 
-**통신 방식**: 비동기 (스케줄러 기반), 외부 API 의존
-**적용 패턴**: Scheduler Agent Supervisor, Publisher-Subscriber, Circuit Breaker, Retry, Cache-Aside, Rate Limiting
+**통신**: 동기(SCHD, ALTN의 장소 검색 요청 수신), 외부 API Circuit Breaker+Retry
 
-**스케줄링**:
-- 15분 주기 데이터 수집 (Spring @Scheduled)
-- job_execution_log 테이블 기반 Supervisor (5분 주기)
-- 실패 시 3회 재시도, 타임아웃 3분
+#### MNTR 서비스
 
-**API 경계**:
-- `POST /monitoring/collect`: 데이터 수집 (스케줄러 호출)
-- `POST /monitoring/badge/update`: 상태 배지 업데이트
-- `GET /monitoring/status/{placeId}`: 상태 조회
-
-**이벤트**:
-- 구독: `MonitoringTargetRegistered`, `MonitoringTargetChanged` (SCHD)
-- 발행: `StatusBadgeUpdated` (BRIF, ALTN 구독), `StatusDeteriorated` (Push 알림 트리거)
-
-**외부 API 연동**:
-- Google Places API (혼잡도, 영업시간)
-- OpenWeatherMap API (날씨)
-- Google Directions API (교통)
-- Rate Limiting: 일일 한도 관리 (Google Places 1,000회/일)
-
----
-
-#### BRIF (Briefing Service)
-**책임**: 출발 전 브리핑 생성, 상태 기반 브리핑 생성, Push 발송
+**책임**: 실시간 상태 파이프라인 관리. 가장 복잡한 외부 의존성을 가진 서비스.
 
 **핵심 기능**:
-- 출발 15~30분 전 브리핑 생성 - UFR-BRIF-010~060
-- 상태 기반 브리핑 (안심/주의)
-- 멱등성 보장 (동일 장소+출발시간 중복 생성 방지)
-- 구독 티어 기반 브리핑 제공 (Free: 기본, Trip Pass: 상세, Pro: AI 컨시어지)
-- Firebase Cloud Messaging (FCM) Push 발송
+- 이벤트 구독(`ScheduleItemAdded`, `ScheduleItemReplaced`) → 모니터링 대상 등록/해제 — P14
+- 스케줄러 주도 15분 주기 외부 데이터 수집 (병렬 3종 API) — UFR-MNTR-010
+  - Google Places API (영업 상태) — Circuit Breaker: 5회/1분 실패 시 OPEN
+  - OpenWeatherMap API (날씨) — Circuit Breaker: 3회/1분 실패 시 OPEN
+  - Google Directions API (이동시간) — Circuit Breaker: 3회/1분 실패 시 OPEN
+- 4단계 상태 판정: 초록/노랑/빨강/회색 — UFR-MNTR-020
+  - 임계값은 Azure App Configuration에서 동적 로드 (External Configuration Store)
+  - 3회 연속 캐시 미스 시 회색 전환
+- 상태 변경 감지 → 이벤트 발행(`PlaceStatusChanged`) → BRIF 구독 — P2
+- 배지 조회 API: 캐시 우선 읽기 (Cache-Aside) — C5 읽기/쓰기 불균형 대응
 
-**통신 방식**: 비동기 (스케줄러 기반 또는 이벤트 구독)
-**적용 패턴**: Scheduler Agent Supervisor, Publisher-Subscriber, Cache-Aside
+**이벤트 구독**: `ScheduleItemAdded` (BUS)
+**이벤트 발행**: `PlaceStatusChanged` (BUS)
+**외부 API Fallback 전략**:
+- Google Places 장애: 마지막 캐시값 + 회색 배지
+- OpenWeatherMap 장애: 마지막 캐시값 사용
+- Google Directions 장애: 직선거리 기반 추정값
 
-**멱등성 설계**:
-- 멱등성 키: `(user_id, place_id, DATE(scheduled_departure_time))`
-- 데이터베이스 유니크 제약으로 중복 생성 방지
+#### BRIF 서비스
 
-**스케줄링**:
-- 출발 15~30분 전 브리핑 생성 (Spring @Scheduled)
-- job_execution_log 테이블 기반 Supervisor
-
-**API 경계**:
-- `POST /briefing/generate`: 브리핑 생성 (스케줄러 호출)
-- `GET /briefing/{tripId}/{scheduleId}`: 브리핑 조회
-- `POST /briefing/send-push`: Push 발송 (내부)
-
-**이벤트**:
-- 구독: `StatusBadgeUpdated` (MNTR) - 주의 브리핑 트리거
-- 발행: `BriefingGenerated` (추후 사용 가능)
-
----
-
-#### ALTN (Alternative Suggestion Service)
-**책임**: 대안 장소 검색, 스코어링, 카드 생성
+**책임**: 출발 전 브리핑 생성과 Push 알림 발송. 총평 생성 로직의 Phase 3 AI 전환 준비.
 
 **핵심 기능**:
-- 주의/위험 상태 시 대안 장소 검색 - UFR-ALTN-010~050
-- 반경 확장 폴백 (1km -> 2km -> 5km)
-- 상태 기반 스코어링 (현재 상태, 평점, 거리, 혼잡도)
-- 대안 카드 생성 및 캐싱
-- 구독 티어 기반 대안 개수 제한 (Free: 1개, Trip Pass: 3개, Pro: 5개)
+- 이벤트 구독(`PlaceStatusChanged`) + 스케줄러 트리거 → 브리핑 생성 조건 판단 — UFR-BRIF-010
+- 출발 15~30분 전 브리핑 자동 생성: MNTR 캐시 데이터 조회(온디맨드 외부 API 재호출 금지) — UFR-BRIF-010
+- 안심/주의 브리핑 분기 — UFR-BRIF-020
+- FCM Push 발송 — Circuit Breaker(10회/1분 실패 시 OPEN) + 인앱 알림 Fallback
+- 브리핑 멱등성 보장: 장소ID + 출발시간 해시 기반 중복 방지 — P21
+- 구독 티어 분기: Free 1일 1회 (API Gateway Rate Limiting에서 선제 차단, 서비스 레이어 이중 방어) — P19
 
-**통신 방식**: 동기 (사용자 선택 응답 필수) + 비동기 (이벤트 구독)
-**적용 패턴**: Cache-Aside, Circuit Breaker, Choreography
+**총평 생성 인터페이스 추상화** (Phase 3 AI 전환 대비):
+```
+BriefingTextGenerator (interface)
+  ├─ RuleBasedGenerator  → MVP: 템플릿 기반 규칙 엔진 (현재 구현체)
+  └─ LLMGenerator        → Phase 3: Azure OpenAI 연동 (미래 구현체)
+```
 
-**파이프라인 성능**:
-- 전체 파이프라인: 정상 3초, 최대 5초 (NFR-PERF-020)
-- 장소 검색 (1초) -> 상태 확인 (1초) -> 스코어링 (1초) -> 카드 생성 (0.5초)
+**이벤트 구독**: `PlaceStatusChanged` (BUS)
+**외부 통신**: FCM — Circuit Breaker + Retry
 
-**API 경계**:
-- `POST /alternatives/search?lat={lat}&lng={lng}&radius={radius}`: 대안 검색
-- `GET /alternatives/{scheduleId}`: 대안 카드 목록 조회
-- `POST /alternatives/{cardId}/adopt`: 대안 선택 (일정 교체)
+#### ALTN 서비스
 
-**이벤트**:
-- 구독: `StatusDeteriorated` (MNTR) - 주의/위험 상태
-- 발행: `AlternativeAdopted` (SCHD 구독 - 일정 교체)
-
----
-
-#### PAY (Payment & Subscription Service)
-**책임**: 인앱 결제, 구독 관리, 구독 상태 동기화
+**책임**: 맥락 맞춤 대안 카드 생성 및 일정 교체 중개.
 
 **핵심 기능**:
-- Apple In-App Purchase (IAP) 연동 - UFR-PAY-010
-- Google Play Billing 연동
-- 구독 상태 관리 (활성, 일시중지, 취소)
-- 구독 토큰 갱신 및 검증
+- 맥락 기반 대안 장소 검색: PLCE 호출 (동일 카테고리, 반경 1~3km, 영업 중) — UFR-ALTN-010
+- 대안 카드 3장 생성: 거리>평점>혼잡도 합산 점수 규칙 정렬 — UFR-ALTN-020
+- 대안 카드 Cache-Aside: 동일 맥락(장소+상태 조합) 결과 캐싱
+- 일정 교체 중개: SCHD 동기 API 호출 → 모니터링 대상 변경 이벤트 연쇄 발행 — UFR-ALTN-030
+- Free 티어 Paywall: 대안 카드 탭 시 구독 유도 — P22
 
-**통신 방식**: 동기 (결제 즉시 반영)
-**적용 패턴**: Federated Identity
+**통신**: 동기(PLCE 장소 검색, SCHD 일정 교체)
+**분산 트랜잭션(C6)**: MVP는 모놀리스 단일 DB 트랜잭션으로 처리. Phase 2(서비스 분리 후) Saga 패턴 도입.
 
-**API 경계**:
-- `POST /subscriptions/purchase`: 구독 구매
-- `POST /subscriptions/restore`: 구독 복구 (iOS)
-- `GET /subscriptions/status`: 구독 상태 조회
-- `POST /subscriptions/cancel`: 구독 취소
+#### PAY 서비스
 
-**외부 연동**:
-- Apple In-App Purchase Server API
-- Google Play Billing Library
+**책임**: 구독 결제 및 상태 관리.
 
----
-
-### 2.2 서비스 간 통신 전략
-
-#### 동기 통신 (Synchronous)
-**사용 시점**: 사용자 응답이 필요한 경우, 즉시 결과 필요
-
-**서비스 조합**:
-1. API Gateway -> 모든 서비스 (라우팅)
-2. AUTH -> 외부 OAuth (소셜 로그인)
-3. SCHD -> PLCE (이동시간 계산)
-4. ALTN -> PLCE (대안 검색)
-5. ALTN -> MNTR (상태 확인)
-
-**응답시간**: 사용자 대면 API p95 < 2초 (NFR-PERF-010)
-
-#### 비동기 통신 (Asynchronous via Event Bus)
-**사용 시점**: 후처리 작업, 다중 구독자, 시간 여유
-
-**이벤트 흐름**:
-
-```
-[일정 등록/변경]
-SCHD --[MonitoringTargetRegistered/MonitoringTargetChanged]--> Event Bus
-                                                                |
-                                                          MNTR (구독)
-                                                                |
-[15분 주기 데이터 수집 완료]
-MNTR --[StatusBadgeUpdated/StatusDeteriorated]--> Event Bus
-                                                    |
-                                          +---> BRIF (구독, 주의 브리핑)
-                                          |
-                                          +---> ALTN (구독, 대안 검색)
-                                          |
-                                          +--> SCHD (캐시 갱신)
-
-[대안 선택]
-ALTN --[AlternativeAdopted]--> Event Bus
-                                 |
-                            SCHD (구독, 일정 교체)
-                                 |
-                            MNTR (구독, 모니터링 변경)
-```
-
-**이벤트 버스 구현**:
-- MVP: Spring ApplicationEvent + @TransactionalEventListener(phase = AFTER_COMMIT)
-- 이벤트 유실 복구: outbox_events 테이블 기반 보상 조회
-- Phase 2: AWS SQS/SNS 전환
+**핵심 기능**:
+- 구독 플랜 결제(Trip Pass, Pro) — UFR-PAY-010
+- 결제 게이트웨이 연동: Circuit Breaker + Retry
+- 구독 상태 변경 시 AUTH 서비스 JWT 클레임 갱신 트리거
 
 ---
 
-### 2.3 주요 사용자 플로우
+### 서비스 간 통신 전략
 
-#### 플로우 1: 여행 일정 등록 및 모니터링 시작 (UFR-SCHD-005 + UFR-MNTR-010)
-```
-1. 사용자가 여행 생성 (API Gateway -> SCHD)
-2. 일정 생성 및 장소 추가 (SCHD)
-3. 장소 추가 완료 시 MonitoringTargetRegistered 이벤트 발행
-4. MNTR이 이벤트 구독, 모니터링 대상 등록
-5. 다음 15분 주기 스케줄러 실행 시 데이터 수집 시작
-   - job_execution_log에 작업 등록 (PENDING)
-   - Google Places, OpenWeatherMap, Google Directions 병렬 호출
-   - Circuit Breaker + Retry + Rate Limiting 적용
-   - 수집 완료 후 배지 판정, 상태 배지 업데이트
-6. StatusBadgeUpdated 이벤트 발행
-7. SCHD, BRIF, ALTN이 이벤트 구독하여 각각 처리
-   - SCHD: 캐시 갱신
-   - BRIF: 조건 확인 후 브리핑 생성 (출발 15~30분 전 && 주의)
-   - ALTN: 캐시 갱신
-```
+#### 동기 통신 (REST/HTTPS)
 
-**응답시간**: 일정 생성 < 1초, 모니터링 시작 (비동기) < 5분
+| 호출 방향 | 통신 방식 | 적용 패턴 | 설명 |
+|---------|---------|---------|------|
+| CLIENT → GW | HTTPS | Rate Limiting | 단일 진입점. 모든 요청의 관문 |
+| GW → 각 서비스 | HTTP (내부망) | Gateway Routing | 경로 기반 라우팅 |
+| SCHD → PLCE | HTTP | - | 장소 검색 요청 (UFR-SCHD-020) |
+| ALTN → PLCE | HTTP | Cache-Aside | 주변 장소 검색 (대안 카드 생성) |
+| ALTN → SCHD | HTTP | - | 일정 교체 중개 (UFR-ALTN-030) |
+| BRIF → MNTR | HTTP | Cache-Aside | 캐시된 상태 데이터 조회 (실시간 재호출 금지) |
+| MNTR → CONFIG | HTTP | External Configuration Store | 임계값 동적 로드 |
+| PAY → 결제GW | HTTPS | Circuit Breaker + Retry | 결제 게이트웨이 외부 호출 |
+| PLCE → Google Places | HTTPS | Circuit Breaker + Retry | 장소 검색/상세 조회 |
+| MNTR → Google Places | HTTPS | Circuit Breaker + Retry | 영업 상태 수집 |
+| MNTR → OpenWeatherMap | HTTPS | Circuit Breaker + Retry | 날씨 데이터 수집 |
+| MNTR → Google Directions | HTTPS | Circuit Breaker + Retry | 이동시간 수집 |
+| BRIF → FCM | HTTPS | Circuit Breaker + Retry | Push 알림 발송 |
+| AUTH → Google/Apple OAuth | HTTPS | Federated Identity | OAuth 위임 인증 |
 
----
+#### 비동기 통신 (이벤트 버스)
 
-#### 플로우 2: 출발 전 브리핑 생성 및 Push 발송 (UFR-BRIF-010 + UFR-BRIF-050)
-```
-1. 스케줄러가 출발 15~30분 전 브리핑 생성 트리거
-2. job_execution_log에 작업 등록 (PENDING)
-3. BRIF 서비스가 브리핑 생성
-   - 멱등성 키 확인 (user_id, place_id, DATE(scheduled_departure_time))
-   - 구독 티어 확인 (AUTH 토큰 클레임)
-   - 현재 상태 조회 (MNTR 캐시 via Cache-Aside)
-   - 브리핑 템플릿 선택 (안심/주의)
-4. 브리핑 생성 완료, FCM Push 발송
-5. job_execution_log에 작업 상태 UPDATE (COMPLETED)
-```
+| 이벤트 | 발행자 | 구독자 | 설명 |
+|-------|-------|-------|------|
+| `ScheduleItemAdded` | SCHD | MNTR | 일정 장소 추가 → 모니터링 등록 |
+| `ScheduleItemReplaced` | SCHD | MNTR | 일정 장소 교체 → 모니터링 대상 변경 |
+| `ScheduleItemRemoved` | SCHD | MNTR | 일정 장소 삭제 → 모니터링 해제 |
+| `PlaceStatusChanged` | MNTR | BRIF | 상태 변경 감지 → 브리핑 트리거 |
 
-**응답시간**: 브리핑 생성 < 2초, Push 발송 < 10초 (NFR-PERF-030)
+**MVP 이벤트 버스**: 인메모리 (모놀리스 내부)
+**Phase 2 전환**: Azure Service Bus (동시 모니터링 장소 1,000개 초과 또는 서비스 분리 시)
+**충돌 대응 (Publisher-Subscriber vs 강한 일관성)**: 일정 교체(C6)는 동기 API 호출(ALTN→SCHD)로 처리. 모니터링 대상 변경만 비동기 이벤트로 발행.
 
----
+#### 캐시 우선 읽기 (Cache-Aside)
 
-#### 플로우 3: 대안 카드 검색 및 선택 (UFR-ALTN-010 + UFR-ALTN-030)
-```
-1. 사용자가 주의/위험 상태 시 대안 검색 요청 (API Gateway -> ALTN)
-2. ALTN이 대안 검색 파이프라인 실행 (p95 < 3초, 최대 5초)
-   - PLCE 서비스에 대안 장소 검색 요청 (반경 1km)
-   - MNTR 서비스에 대안 장소 상태 조회 (캐시)
-   - 스코어링 계산 (상태, 평점, 거리, 혼잡도)
-   - 구독 티어 기반 개수 제한 (Free: 1개, Trip Pass: 3개, Pro: 5개)
-   - 대안 카드 생성
-3. 사용자가 대안 선택 (AlternativeAdopted 이벤트 발행)
-4. SCHD가 이벤트 구독, 일정 교체 처리
-   - 기존 장소 제거, 새 장소 추가
-   - MonitoringTargetChanged 이벤트 발행
-5. MNTR이 이벤트 구독, 모니터링 대상 변경
-   - 기존 수집 데이터 유지 또는 초기화
-   - 다음 주기부터 새 장소 모니터링
-```
+| 캐시 대상 | 서비스 | TTL | Fallback |
+|---------|-------|:---:|---------|
+| 장소 데이터 (영업 상태, 상세) | PLCE | 5분 | Google Places API 실시간 호출 |
+| 모니터링 수집 상태 | MNTR | 10분 | 회색 배지 전환 (3회 캐시 미스) |
+| 날씨 데이터 | MNTR | 10분 | 마지막 캐시값 |
+| 이동시간 | MNTR | 30분 | 직선거리 추정값 |
+| 대안 카드 결과 | ALTN | 5분 | PLCE 재검색 |
+| 세션 정보 | AUTH | 30분 | DB 조회 |
+| 배지 상태 (읽기 전용) | MNTR | 10분 | DB 직접 조회 |
 
-**응답시간**: 대안 검색 < 5초, 일정 교체 < 1초
+**캐시 무효화**: `PlaceStatusChanged` 이벤트 수신 시 해당 장소 캐시 즉시 무효화.
+**배지 상태 캐시 TTL**: 수집 주기(15분)보다 짧은 10분으로 설정하여 Cache-Aside와 실시간 배지 요구 충돌 방지.
 
 ---
 
-## 3. 데이터 흐름 및 캐싱 전략
+## AI 서비스 아키텍처
 
-### 3.1 캐싱 전략 (Cache-Aside)
+### MVP 단계 — 인터페이스 추상화만 포함
 
-**캐시 대상 데이터**:
+MVP에서는 AI API를 사용하지 않는다. 그러나 총평 생성 로직은 외부 호출 가능한 인터페이스로 추상화하여 Phase 3 LLM 전환 비용을 최소화한다.
 
-| 데이터 | TTL | 사용처 | 갱신 방식 |
-|--------|-----|-------|---------|
-| 장소 상세 (Place) | 5분 | PLCE 서비스, BRIF, ALTN | 만료 또는 명시적 갱신 |
-| 상태 배지 (StatusBadge) | 5분 | SCHD UI, BRIF, ALTN | MNTR 업데이트 시 갱신 |
-| 브리핑 (Briefing) | 30분 | 사용자 조회 | 생성 시 저장 |
-| 대안 카드 (AlternativeCard) | 10분 | 사용자 조회 | 생성 시 저장 |
-| 구독 정보 (Subscription) | 1시간 | API Gateway (토큰 검증) | PAY 업데이트 시 갱신 |
+**책임**: 브리핑 총평 텍스트 생성 (현재: 규칙 기반 템플릿)
 
-**Cache-Aside 패턴 구현**:
-```
-1. 데이터 요청
-2. 캐시 히트 -> 캐시 데이터 반환
-3. 캐시 미스 또는 만료
-   - DB 또는 외부 API 조회
-   - 결과를 캐시에 저장 (TTL 설정)
-   - 데이터 반환
-4. 외부 API 실패 (Circuit Breaker open)
-   - 캐시가 있으면 캐시 데이터 반환 (Graceful Degradation)
-   - 캐시가 없으면 에러 반환
-```
+**핵심 기능**:
+- 총평 생성 인터페이스 추상화 (`BriefingTextGenerator`) — UFR-BRIF-010
+- MVP 구현체: `RuleBasedGenerator` (템플릿 기반 규칙 엔진)
+  - "현재까지 모든 항목 정상입니다." 패턴
+  - 안심/주의 분기 로직
 
-**외부 API 폴백 시나리오**:
-- Circuit Breaker open 상태일 때: 캐시 데이터 사용 (최대 30분 전 데이터)
-- 캐시 데이터도 없을 때: 사용자에게 "데이터를 일시적으로 사용할 수 없습니다" 메시지
+**AI 기술 요소** (Phase 3 도입 예정):
+- LLM API: Azure OpenAI (GPT-4o-mini)
+- AI 프레임워크: 직접 구현 (Phase 2), LangChain 검토 (Phase 3)
+- RAG: 미적용 (Phase 3 검토 — 사용자 선호 프로파일 기반 개인화)
+- Function Calling: Phase 3 AI 자동 재조정 엔진에서 도입
+
+**통신 방식**: BRIF 서비스 내부 호출 (MVP). Phase 3에서 별도 AI Pipeline 서비스로 분리.
+
+**폴백 전략**:
+- Phase 3 LLM 장애 시: `RuleBasedGenerator`로 자동 Fallback
+- Circuit Breaker(3회/30초 실패 시 OPEN) 적용 예정
+
+**다이어그램 표현**: 논리 아키텍처 다이어그램에 "Phase 2 도입 예정"으로 점선 표현.
+
+### AI 학습 데이터 파이프라인 준비 (MVP 단계 수집)
+
+Phase 2 ML 모델의 원재료를 MVP 단계부터 수집한다.
+
+| 수집 데이터 | 서비스 | 저장 방식 | 목적 |
+|----------|-------|---------|------|
+| 상태 판정 이력 | MNTR | append-only 이력 테이블 (6개월 이상 보존) | 상태 판정 AI 학습 |
+| 대안 카드 선택 이력 | ALTN | 노출 3건 중 선택 1건 레이블링 | 대안 추천 ML |
+| 브리핑 열람 여부 | BRIF | 이벤트 로그 | 브리핑 품질 측정 |
+| Push 알림 수신-탭 간격 | BRIF | 이벤트 로그 | 알림 타이밍 최적화 |
 
 ---
 
-### 3.2 데이터 흐름 (외부 API 의존)
+## 주요 사용자 플로우
 
-**수집 데이터 흐름** (MNTR 서비스):
+### Flow 1: S05 상태 배지 조회 (UFR-MNTR-010, UFR-SCHD-030)
+
 ```
-Google Places API
-    |-- 장소 혼잡도
-    |-- 영업 상태
-    |-- 평점
-         |
-         v
-    MNTR 서비스 --[Circuit Breaker + Retry + Rate Limiting]--> Cache (Redis)
-         ^                                                          |
-         |                                                          v
-         +-- OpenWeatherMap API                                BRIF, ALTN (캐시 조회)
-         |-- 날씨 정보
-         |
-         +-- Google Directions API
-         |-- 교통 정보
-         |-- 이동시간
+여행자 → GW → MNTR → Redis 캐시
+                          ↓ HIT: 캐시 반환 (10분 TTL)
+                          ↓ MISS: DB 직접 조회
+                            ↓ 캐시 저장 후 반환
 ```
 
-**데이터 갱신 타이밍**:
-- **주기적 갱신**: 15분 주기 (스케줄러)
-- **이벤트 기반 갱신**: 장소 변경 시 (MonitoringTargetChanged)
-- **수요 기반 갱신**: 사용자 요청 시 캐시 미스 -> API 호출
+읽기 트래픽이 쓰기 대비 압도적으로 높음(C5). 배지 조회는 매 앱 오픈 시 발생하므로 캐시 우선 전략 필수.
 
----
+### Flow 2: S04 출발 전 브리핑 생성 (UFR-BRIF-010, UFR-BRIF-020)
 
-## 4. 확장성 및 성능 고려사항
-
-### 4.1 확장성 설계
-
-**모듈 분리 가능성**:
-- MVP: 모놀리스 내 패키지 분리
-- Phase 2: 마이크로서비스 분리 시 각 서비스별 독립 배포 가능
-- 서비스 경계: Event Bus 기반 느슨한 결합
-
-**도시 확장 지원**:
-- 초기: 5개 도시 (서울, 도쿄, 방콕, 싱가포르, 홍콩)
-- Phase 2: 15개+ 도시
-- 확장 시 필요 작업:
-  - 각 도시별 외부 API 설정 (Google Places, OpenWeatherMap)
-  - 상태 판정 임계값 설정 (날씨, 혼잡도, 영업시간 기준)
-  - 데이터 수집 대상 증설 (job_execution_log 기반)
-
-### 4.2 성능 목표 및 달성 방안
-
-| 목표 | NFR ID | 기준 | 달성 방안 |
-|------|--------|------|---------|
-| 사용자 대면 API p95 | NFR-PERF-010 | 2초 이내 | API Gateway 캐싱, Circuit Breaker 빠른 실패 |
-| 대안 검색 파이프라인 | NFR-PERF-020 | 정상 3초, 최대 5초 | 병렬 호출, 2초 타임아웃, 비동기 Request-Reply (Phase 2) |
-| 브리핑 생성~Push | NFR-PERF-030 | 10초 이내 | 캐시 재사용, 스케줄러 기반 사전 생성 |
-
-**성능 최적화 기법**:
-- **캐시 우선**: 장소 데이터는 항상 캐시에서 조회 (5분 TTL)
-- **병렬 처리**: 외부 API 병렬 호출 (Places + Weather + Directions)
-- **비동기 처리**: 후처리 작업 (이벤트 발행, Push 발송)
-- **조기 실패**: Circuit Breaker open 상태에서 즉시 폴백
-
----
-
-## 5. 보안 고려사항
-
-### 5.1 인증 및 인가
-
-**인증** (Authentication):
-- Federated Identity: Google/Apple OAuth 2.0 위임
-- JWT Access Token (30분) + Refresh Token (7일)
-- API Gateway에서 JWT 검증 (Offloading)
-
-**인가** (Authorization):
-- 구독 티어 기반 기능 제어 (Free/Trip Pass/Pro)
-- 토큰 클레임에 `tier` 정보 포함
-- API Gateway 및 서비스 레벨에서 검증
-
-**보안 흐름**:
 ```
-1. 클라이언트: 소셜 로그인 (Google/Apple)
-2. AUTH 서비스: Federated Identity로 토큰 발급
-3. API Gateway: JWT 검증 (공개키 기반)
-4. 서비스: 토큰 클레임에서 user_id, tier 추출
-5. 리소스 접근 제어: tier 기반 분기
+Scheduler(15분 전) → BRIF
+    ↓ MNTR 캐시 데이터 조회 (실시간 재호출 금지)
+    ↓ 안심/주의 분기 판단
+    ↓ BriefingTextGenerator.generate() → RuleBasedGenerator (MVP)
+    ↓ 멱등성 키 확인 (장소ID + 출발시간 해시)
+    ↓ FCM Circuit Breaker 상태 확인
+        ↓ CLOSED: FCM Push 발송
+        ↓ OPEN: 인앱 알림 Fallback
 ```
 
-### 5.2 위치정보 보호
+BRIF 서비스는 MNTR 캐시 데이터만 사용한다. 온디맨드 외부 API 재호출 금지.
 
-**GDPR 준수**:
-- 여행 종료 후 30일 보유, 이후 삭제
-- 사용자 동의 기반 위치정보 수집
-- 데이터 최소화 원칙 (필요한 정보만 수집)
+### Flow 3: S06 대안 카드 검색 및 일정 교체 (UFR-ALTN-010, UFR-ALTN-020, UFR-ALTN-030)
 
-**데이터 보호**:
-- 위치정보는 암호화 저장 (AES-256)
-- 전송 시 HTTPS 사용 (TLS 1.2+)
+```
+여행자 탭 → GW → ALTN
+    ↓ Free 티어 Paywall 확인
+    ↓ 대안 카드 캐시 확인 (5분 TTL)
+        ↓ HIT: 캐시 반환
+        ↓ MISS: PLCE 주변 장소 검색 (동일 카테고리, 반경 1~3km, 영업 중)
+              ↓ 거리>평점>혼잡도 합산 점수 정렬 → 3장 선택
+              ↓ 캐시 저장 (5분 TTL)
+    ↓ 여행자 카드 선택 → ALTN → SCHD (동기 호출, 단일 DB 트랜잭션)
+              ↓ 일정 교체 완료 → ScheduleItemReplaced 이벤트 → BUS → MNTR 모니터링 대상 변경
+```
 
----
+C6(분산 트랜잭션): MVP 모놀리스에서는 ALTN→SCHD 동기 호출 + 단일 DB 트랜잭션으로 처리. Phase 2 서비스 분리 후 Saga 도입.
 
-## 6. 논리아키텍처 다이어그램
+### Flow 4: 모니터링 데이터 수집 파이프라인 (UFR-MNTR-010)
 
-Mermaid 다이어그램은 `docs/design/logical-architecture.mmd` 파일을 참고하세요.
-
-다이어그램 구조:
-- **Client Layer**: 모바일 앱 (React Native)
-- **Gateway Layer**: API Gateway (JWT 검증, 라우팅, 인바운드 Rate Limiting)
-- **Service Layer**: 7개 서비스 모듈 (AUTH, SCHD, PLCE, MNTR, BRIF, ALTN, PAY)
-- **Data Layer**: Redis Cache, Event Bus (Spring ApplicationEvent)
-- **Scheduler Layer**: 스케줄러 및 Supervisor (job_execution_log)
-- **External APIs**: Google OAuth, Google Places, OpenWeatherMap, Google Directions, FCM, Apple IAP, Google Play Billing
-
----
-
-## 7. 구현 가이드
-
-### 7.1 MVP 구현 기간: 6~9주
-
-**Phase 1: 기반 구조 (1~2주)**
-- API Gateway 구현 (Spring Cloud Gateway)
-- AUTH 서비스 (OAuth 2.0 + JWT)
-- 데이터베이스 스키마 (user, trip, schedule, place, monitoring_target, status_badge, briefing, job_execution_log, outbox_events)
-
-**Phase 2: 핵심 서비스 (2~4주)**
-- SCHD 서비스 (일정 CRUD, 이벤트 발행)
-- PLCE 서비스 (Google Places API, 캐싱, Circuit Breaker)
-- MNTR 서비스 (스케줄러, 데이터 수집, 상태 판정)
-
-**Phase 3: 고객 기능 (3~6주)**
-- BRIF 서비스 (브리핑 생성, Push 발송)
-- ALTN 서비스 (대안 검색, 스코어링)
-- PAY 서비스 (인앱 결제, 구독 관리)
-
-**Phase 4: 통합 및 최적화 (1~2주)**
-- 통합 테스트, 성능 최적화
-- 외부 API 장애 대응 테스트 (Circuit Breaker, 캐시 폴백)
-- UAT 및 버그 수정
-
-### 7.2 테스트 전략
-
-**단위 테스트 (Unit)**: 서비스 로직, 스코어링 알고리즘
-**통합 테스트 (Integration)**: 외부 API 호출, 캐시 동작, 이벤트 발행
-**시스템 테스트 (System)**: 전체 플로우 (일정 등록 -> 모니터링 -> 브리핑 -> 대안)
-**카오스 엔지니어링 (Chaos)**: Circuit Breaker, 캐시 폴백 검증
+```
+Scheduler(15분 주기) → MNTR
+    ↓ 모니터링 대상 목록 조회 (DB)
+    ↓ 외부 API 병렬 3종 호출 (Circuit Breaker + Retry)
+        ├─ Google Places API (Circuit Breaker: 5회/1분 → Fallback: 캐시값)
+        ├─ OpenWeatherMap API (Circuit Breaker: 3회/1분 → Fallback: 캐시값)
+        └─ Google Directions API (Circuit Breaker: 3회/1분 → Fallback: 직선거리)
+    ↓ 수집 결과 캐시 저장 (Redis)
+    ↓ 4단계 상태 판정 (임계값: Azure App Configuration)
+    ↓ 상태 변경 감지 → PlaceStatusChanged 이벤트 → BUS → BRIF
+```
 
 ---
 
-## 8. 향후 진화 방향 (Phase 2+)
+## 데이터 흐름 및 캐싱 전략
 
-### 8.1 Phase 2 (3~6개월 후)
+### 데이터 저장 원칙
 
-**외부 설정 관리**:
-- External Configuration Store 패턴 (DB 기반)
-- 도시별 상태 판정 임계값 관리
-- 외부 API 설정 중앙화
+- **PostgreSQL (Azure Database for PostgreSQL)**: 서비스별 논리 스키마 분리. MVP는 단일 인스턴스, 모놀리스 내 공유.
+- **Redis (Azure Cache for Redis)**: 읽기 최적화 전용. 서비스별 캐시 키 네임스페이스 분리.
+- **Azure App Configuration**: MNTR 임계값, 수집 주기, 타임아웃 설정. 재배포 없이 운영 중 변경.
 
-**고급 헬스체크**:
-- Health Endpoint Monitoring 패턴
-- 외부 API 상태 연동 헬스체크
+### 데이터 소유권 (서비스별)
 
-**마이크로서비스 분리**:
-- 각 서비스 독립 배포 (Kubernetes)
-- 외부 메시징 (SQS/SNS 기반 Event Bus)
+| 서비스 | DB 스키마 | 설명 |
+|-------|---------|------|
+| AUTH | users, auth_sessions, consent_records | 사용자 인증 및 동의 이력 |
+| SCHD | trips, schedule_items, travel_routes | 여행 일정 원천 데이터 |
+| PLCE | places, place_details | 장소 마스터 데이터 |
+| MNTR | monitoring_targets, status_history, status_current | 모니터링 대상 및 상태 이력 |
+| BRIF | briefings, briefing_logs | 브리핑 생성 이력 및 멱등성 키 |
+| ALTN | alternative_cards, selection_logs | 대안 카드 생성 및 선택 이력 |
+| PAY | subscriptions, payment_records, refunds | 결제 및 구독 정보 |
 
-**성능 최적화**:
-- CQRS 패턴 (읽기/쓰기 분리, 최적화된 뷰)
-- Asynchronous Request-Reply (대안 검색 비동기화)
+### 캐시 키 설계
 
-### 8.2 Phase 3 (6~12개월 후)
+```
+PLCE: place:{place_id}:status:{floor(timestamp/300)}   # 5분 슬롯 단위 — 동일 시간대 공유
+MNTR: mntr:{place_id}:weather:{floor(timestamp/600)}   # 10분 슬롯
+MNTR: mntr:{place_id}:badge                            # 배지 상태 현재값
+ALTN: altn:{place_id}:{category}:{radius}              # 대안 카드 검색 결과
+AUTH: sess:{user_id}:token                             # 세션 정보
+```
 
-**Event Sourcing**: 모든 상태 변경 이벤트 저장
-**분산 추적 (Distributed Tracing)**: OpenTelemetry 기반 성능 모니터링
-**머신러닝**: AI 컨시어지 고도화 (맥락 맞춤 대안 추천)
+### 캐시 무효화 트리거
+
+- `PlaceStatusChanged` 이벤트 수신 → `mntr:{place_id}:badge` 즉시 무효화
+- 장소 교체(`ScheduleItemReplaced`) → 이전 장소 대안 카드 캐시 무효화
+- 수동 무효화: 운영자 Azure App Configuration 설정 변경 시
 
 ---
 
-## 9. 체크리스트
+## 확장성 및 성능 고려사항
 
-- [x] 유저스토리와 매칭 확인 (29 UFR + 10 NFR, 9 Epic)
-- [x] 9개 MVP 패턴 적용 확인
-- [x] 서비스 간 관계와 이벤트 흐름 명확화
-- [x] 외부 API 의존 명시 (Circuit Breaker + Cache 폴백)
-- [x] 스케줄링 신뢰성 설계 (job_execution_log Supervisor)
-- [x] 멱등성 설계 (브리핑, 대안)
-- [x] 구독 티어 기반 분기 명시
-- [x] 성능 목표 및 달성 방안 제시
-- [x] 보안 및 개인정보 보호 (GDPR)
-- [x] 단일 진입점 (API Gateway) 구조 확인
-- [x] Phase 2+ 진화 방향 제시
+| 도전과제 | 대응 방안 | 적용 패턴 |
+|---------|---------|---------|
+| C1 외부 API 장애 | 3중 방어: Circuit Breaker(차단) + Retry(재시도) + Cache-Aside(Fallback) | Circuit Breaker, Retry, Cache-Aside |
+| C2 15분 주기 대량 수집 | 병렬 3종 API 호출, 수집 타임아웃 2초, 스케줄러 내부 호출 Rate Limit 예외 처리 | External Configuration Store |
+| C3 비동기 이벤트 연동 | 인메모리 이벤트 버스(MVP) → Azure Service Bus(Phase 2) 인터페이스 추상화 | Publisher-Subscriber |
+| C5 읽기/쓰기 불균형 | 배지 조회 Cache-Aside (TTL 10분), 캐시 무효화 이벤트 연동 | Cache-Aside |
+| C6 분산 트랜잭션 | MVP: 단일 DB 트랜잭션. Phase 2: Saga 패턴 도입 | (Phase 2: Saga) |
+| 동시 모니터링 1,000개+ | Phase 2: MNTR 서비스 독립 분리, Azure Container Apps 스케일링 | (Phase 2 배포 전략) |
 
+**Phase 2 전환 조건**:
+- 동시 모니터링 장소 1,000개 초과
+- 배지 조회 응답 2초 초과 지속
+- 인메모리 이벤트 버스 안정성 이슈 발생
+
+---
+
+## 보안 고려사항
+
+| 보안 요구사항 | 대응 방안 | 적용 위치 |
+|-----------|---------|---------|
+| 인증/인가 | Federated Identity(Google/Apple OAuth), JWT(30분 만료) | AUTH, GW |
+| 구독 티어 접근 제어 | JWT 클레임 내 tier 정보, Gateway Offloading 검증 | GW, BRIF, ALTN |
+| API 남용 방지 | Rate Limiting (구독 티어별 차등 적용) | GW |
+| GDPR/위치정보법 | 동의 이력 저장(consent_records), 위치정보 수집 목적 명시 | AUTH, SCHD |
+| 서비스 간 통신 | 내부망 HTTP (모놀리스 내부), JWT 재검증 불필요 (Gateway Offloading 통과 후) | 내부 서비스 |
+| 외부 API 키 관리 | Azure Key Vault 연동 (External Configuration Store와 통합) | 전체 서비스 |
+| 결제 정보 보안 | PCI DSS 준수 결제 게이트웨이 위임, 카드 정보 직접 저장 금지 | PAY |
+
+---
+
+## 논리 아키텍처 다이어그램
+
+다이어그램 파일: `docs/design/logical-architecture.mmd`
+
+주요 표현 요소:
+- 클라이언트 → API Gateway: 단일 연결선 (HTTPS)
+- 서비스 간 동기 통신: 실선 화살표
+- 비동기 이벤트: 점선 화살표
+- Cache-Aside 관계: 점선 (데이터 흐름)
+- AI Pipeline (Phase 2): 점선 박스로 "Phase 2 도입 예정" 표현
+- 외부 시스템: 별도 subgraph
+
+---
+
+*설계 원칙 준수 체크리스트*
+- [x] 유저스토리(UFR)와 매칭 확인
+- [x] 선정된 10개 클라우드 디자인 패턴 반영
+- [x] 서비스 내부 구조 생략, 서비스 간 관계 집중
+- [x] 클라이언트에서 API Gateway로 단일 연결선
+- [x] AI 서비스 인터페이스 추상화 포함 (Phase 3 대비)
+- [x] AI 서비스 폴백 전략 명시 (RuleBasedGenerator Fallback)
+- [x] 물리적 배포 구조(컨테이너 배치 등) 이 단계에서 결정하지 않음
+- [x] 캐시 무효화 전략 명시
+- [x] 충돌 대응 방안(Publisher-Subscriber vs 강한 일관성) 명시

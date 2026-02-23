@@ -1,0 +1,101 @@
+@startuml
+!theme mono
+
+title AI Pipeline 서비스 - 클래스 다이어그램 요약 (Python/FastAPI)
+
+package "app.routers" {
+    class BriefingRouter <<FastAPI Router>>
+    class AlternativeRouter <<FastAPI Router>>
+    class HealthRouter <<FastAPI Router>>
+}
+
+package "app.services" {
+    class BriefingSummaryService
+    class WeightCalculationService
+}
+
+package "app.ai" {
+    class PromptBuilder
+    class LLMClient
+    class CircuitBreaker
+    class ResponseParser
+}
+
+package "app.cache" {
+    class CacheManager
+}
+
+package "app.models.request" {
+    class BriefingSummaryRequest <<pydantic>>
+    class WeightsCalculationRequest <<pydantic>>
+}
+
+package "app.models.response" {
+    class BriefingSummaryResponse <<pydantic>>
+    class WeightsCalculationResponse <<pydantic>>
+    class ScoreWeights <<pydantic>>
+    class HealthResponse <<pydantic>>
+}
+
+package "app.config" {
+    class Settings <<pydantic>>
+}
+
+' 관계
+BriefingRouter --> BriefingSummaryService
+AlternativeRouter --> WeightCalculationService
+HealthRouter --> CacheManager
+HealthRouter --> LLMClient
+
+BriefingSummaryService --> PromptBuilder
+BriefingSummaryService --> LLMClient
+BriefingSummaryService --> ResponseParser
+BriefingSummaryService --> CacheManager
+
+WeightCalculationService --> PromptBuilder
+WeightCalculationService --> LLMClient
+WeightCalculationService --> ResponseParser
+WeightCalculationService --> CacheManager
+
+LLMClient --> CircuitBreaker
+LLMClient --> Settings
+CacheManager --> Settings
+
+BriefingRouter ..> BriefingSummaryRequest
+BriefingRouter ..> BriefingSummaryResponse
+AlternativeRouter ..> WeightsCalculationRequest
+AlternativeRouter ..> WeightsCalculationResponse
+HealthRouter ..> HealthResponse
+
+ResponseParser ..> ScoreWeights
+
+note right of BriefingRouter
+    <b>Router - API 매핑</b>
+    generate_summary: POST /api/v1/briefing/generate-summary
+    ──────────────────────────────────────────
+    AlternativeRouter
+    calculate_weights: POST /api/v1/alternative/calculate-weights
+    ──────────────────────────────────────────
+    HealthRouter
+    get_health: GET /api/v1/health
+end note
+
+note right of LLMClient
+    Circuit Breaker 임계값
+    브리핑: 3회/30초 실패 → OPEN
+    가중치: 5회/1분 실패 → OPEN
+    OPEN 시 폴백: RuleBased / Fixed
+end note
+
+note right of CacheManager
+    TTL 정책
+    브리핑 총평: 30분
+    가중치: 1시간
+    캐시 키(브리핑):
+      hash(place_id+status_level
+           +risk_items+tier)
+    캐시 키(가중치):
+      weights:{user_id}:{category}
+end note
+
+@enduml

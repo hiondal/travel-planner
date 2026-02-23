@@ -1,0 +1,211 @@
+@startuml
+!theme mono
+
+title PLACE 서비스 - 클래스 다이어그램
+
+package "com.travelplanner.place" {
+
+    ' ===== Controller Layer =====
+    package "controller" {
+        class PlceController {
+            - placeService: PlaceService
+            + searchPlaces(keyword: String, city: String, principal: UserPrincipal): ResponseEntity<PlaceSearchResponse>
+            + getPlaceDetail(placeId: String, principal: UserPrincipal): ResponseEntity<PlaceDetailResponse>
+            + searchNearbyPlaces(lat: double, lng: double, category: String, radius: int, principal: UserPrincipal): ResponseEntity<NearbyPlaceSearchResponse>
+            - validateKeyword(keyword: String): void
+            - validateRadius(radius: int): void
+        }
+    }
+
+    ' ===== Service Layer =====
+    package "service" {
+        interface PlaceService {
+            + searchPlaces(keyword: String, city: String): List<Place>
+            + getPlaceDetail(placeId: String): Place
+            + searchNearbyPlaces(lat: double, lng: double, category: String, radius: int): NearbySearchResult
+        }
+
+        class PlaceServiceImpl {
+            - placeRepository: PlaceRepository
+            - googlePlacesClient: GooglePlacesClient
+            - cacheManager: CacheManager
+            + searchPlaces(keyword: String, city: String): List<Place>
+            + getPlaceDetail(placeId: String): Place
+            + searchNearbyPlaces(lat: double, lng: double, category: String, radius: int): NearbySearchResult
+            - upsertPlaces(places: List<Place>): void
+            - calculateDistance(lat1: double, lng1: double, lat2: double, lng2: double): double
+            - buildCacheKey(keyword: String, city: String): String
+            - buildNearbyCacheKey(lat: double, lng: double, category: String, radius: int): String
+        }
+
+        PlaceServiceImpl ..|> PlaceService
+    }
+
+    ' ===== Repository Layer =====
+    package "repository" {
+        interface PlaceRepository {
+            + findById(placeId: String): Optional<Place>
+            + upsert(place: Place): Place
+            + findByCityAndKeyword(city: String, keyword: String): List<Place>
+            + findNearby(lat: double, lng: double, radiusM: int, category: String): List<Place>
+            + saveAll(places: List<Place>): List<Place>
+        }
+    }
+
+    ' ===== External Client =====
+    package "client" {
+        class GooglePlacesClient {
+            - apiKey: String
+            - baseUrl: String
+            + textSearch(keyword: String, city: String): List<GooglePlaceDto>
+            + nearbySearch(lat: double, lng: double, radiusM: int, category: String): List<GooglePlaceDto>
+            + placeDetail(placeId: String): GooglePlaceDto
+        }
+
+        class GooglePlaceDto {
+            - placeId: String
+            - name: String
+            - address: String
+            - rating: float
+            - businessHours: List<BusinessHour>
+            - lat: double
+            - lng: double
+            - timezone: String
+            - photoUrl: String
+            - category: String
+            + toPlace(): Place
+        }
+    }
+
+    ' ===== Domain Model =====
+    package "domain" {
+        class Place {
+            - id: String
+            - name: String
+            - address: String
+            - category: String
+            - rating: float
+            - lat: double
+            - lng: double
+            - timezone: String
+            - photoUrl: String
+            - businessHours: List<BusinessHour>
+            - city: String
+            - updatedAt: LocalDateTime
+            + Place()
+            + isOpenAt(dateTime: LocalDateTime): boolean
+            + getCoordinates(): Coordinates
+            + getBusinessHoursForDay(day: String): Optional<BusinessHour>
+        }
+
+        class BusinessHour {
+            - day: String
+            - open: String
+            - close: String
+            + BusinessHour(day: String, open: String, close: String)
+            + isWithinHours(time: LocalTime): boolean
+        }
+
+        class Coordinates {
+            - lat: double
+            - lng: double
+            + Coordinates(lat: double, lng: double)
+            + distanceTo(other: Coordinates): double
+        }
+
+        Place "1" o-- "0..*" BusinessHour
+        Place ..> Coordinates
+    }
+
+    ' ===== DTO =====
+    package "dto" {
+        package "response" {
+            class PlaceSearchResponse {
+                - places: List<PlaceSummary>
+                + {static} of(places: List<Place>): PlaceSearchResponse
+            }
+            class PlaceDetailResponse {
+                - placeId: String
+                - name: String
+                - address: String
+                - category: String
+                - rating: float
+                - businessHours: List<BusinessHourDto>
+                - coordinates: CoordinatesDto
+                - timezone: String
+                - photoUrl: String
+                + {static} from(place: Place): PlaceDetailResponse
+            }
+            class NearbyPlaceSearchResponse {
+                - places: List<NearbyPlaceDto>
+                - radiusUsed: int
+                + {static} of(places: List<NearbyPlace>, radiusUsed: int): NearbyPlaceSearchResponse
+            }
+            class PlaceSummary {
+                - placeId: String
+                - name: String
+                - address: String
+                - rating: float
+                - businessHours: List<BusinessHourDto>
+                - coordinates: CoordinatesDto
+                + {static} from(place: Place): PlaceSummary
+            }
+            class NearbyPlaceDto {
+                - placeId: String
+                - name: String
+                - address: String
+                - distanceM: int
+                - rating: float
+                - category: String
+                - coordinates: CoordinatesDto
+                - isOpen: boolean
+            }
+            class BusinessHourDto {
+                - day: String
+                - open: String
+                - close: String
+                + {static} from(businessHour: BusinessHour): BusinessHourDto
+            }
+            class CoordinatesDto {
+                - lat: double
+                - lng: double
+                + {static} from(coordinates: Coordinates): CoordinatesDto
+            }
+        }
+
+        package "internal" {
+            class NearbySearchResult {
+                - places: List<NearbyPlace>
+                - radiusUsed: int
+            }
+            class NearbyPlace {
+                - place: Place
+                - distanceM: int
+                - isOpen: boolean
+            }
+        }
+    }
+}
+
+' ===== 관계 =====
+PlceController --> PlaceService
+
+PlaceServiceImpl --> PlaceRepository
+PlaceServiceImpl --> GooglePlacesClient
+
+PlaceRepository ..> Place
+GooglePlacesClient ..> GooglePlaceDto
+GooglePlaceDto ..> Place
+
+PlaceSearchResponse ..> PlaceSummary
+PlaceDetailResponse ..> BusinessHourDto
+PlaceDetailResponse ..> CoordinatesDto
+NearbyPlaceSearchResponse ..> NearbyPlaceDto
+NearbyPlaceDto ..> CoordinatesDto
+PlaceSummary ..> BusinessHourDto
+PlaceSummary ..> CoordinatesDto
+
+NearbySearchResult ..> NearbyPlace
+NearbyPlace ..> Place
+
+@enduml

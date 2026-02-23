@@ -1,0 +1,83 @@
+-- =============================================================
+-- AUTH 서비스 스키마 스크립트
+-- DBMS: PostgreSQL
+-- 서비스: com.travelplanner.auth
+-- =============================================================
+
+-- 스키마 생성
+CREATE SCHEMA IF NOT EXISTS auth;
+
+SET search_path = auth;
+
+-- =============================================================
+-- TABLE: users
+-- =============================================================
+CREATE TABLE users (
+    id              VARCHAR(36)     NOT NULL,
+    provider        VARCHAR(20)     NOT NULL,
+    provider_id     VARCHAR(200)    NOT NULL,
+    email           VARCHAR(200)    NOT NULL,
+    nickname        VARCHAR(100)    NOT NULL,
+    avatar_url      VARCHAR(500),
+    tier            VARCHAR(20)     NOT NULL DEFAULT 'FREE',
+    created_at      TIMESTAMPTZ     NOT NULL DEFAULT NOW(),
+    updated_at      TIMESTAMPTZ     NOT NULL DEFAULT NOW(),
+
+    CONSTRAINT pk_users PRIMARY KEY (id),
+    CONSTRAINT uq_users_provider_id UNIQUE (provider, provider_id),
+    CONSTRAINT chk_users_tier CHECK (tier IN ('FREE', 'TRIP_PASS', 'PRO')),
+    CONSTRAINT chk_users_provider CHECK (provider IN ('GOOGLE', 'APPLE'))
+);
+
+CREATE INDEX idx_users_provider_provider_id ON users (provider, provider_id);
+CREATE INDEX idx_users_email ON users (email);
+
+COMMENT ON TABLE users IS '사용자 기본 정보 (OAuth 기반)';
+COMMENT ON COLUMN users.id IS 'UUID';
+COMMENT ON COLUMN users.provider IS 'OAuth 프로바이더 (GOOGLE, APPLE)';
+COMMENT ON COLUMN users.provider_id IS '프로바이더 고유 식별자';
+COMMENT ON COLUMN users.tier IS '구독 등급 (FREE, TRIP_PASS, PRO) — payment 서비스 이벤트로 업데이트';
+
+-- =============================================================
+-- TABLE: consents
+-- =============================================================
+CREATE TABLE consents (
+    id              VARCHAR(36)     NOT NULL,
+    user_id         VARCHAR(36)     NOT NULL,
+    location        BOOLEAN         NOT NULL,
+    push            BOOLEAN         NOT NULL,
+    consented_at    TIMESTAMPTZ     NOT NULL,
+    created_at      TIMESTAMPTZ     NOT NULL DEFAULT NOW(),
+
+    CONSTRAINT pk_consents PRIMARY KEY (id),
+    CONSTRAINT fk_consents_user_id FOREIGN KEY (user_id)
+        REFERENCES users (id) ON DELETE CASCADE
+);
+
+CREATE INDEX idx_consents_user_id_created_at ON consents (user_id, created_at DESC);
+
+COMMENT ON TABLE consents IS '사용자 동의 이력 (append-only)';
+COMMENT ON COLUMN consents.consented_at IS '사용자가 동의한 시각 (클라이언트 전송)';
+
+-- =============================================================
+-- TABLE: refresh_tokens
+-- =============================================================
+CREATE TABLE refresh_tokens (
+    id              VARCHAR(36)     NOT NULL,
+    user_id         VARCHAR(36)     NOT NULL,
+    refresh_token   VARCHAR(500)    NOT NULL,
+    expires_at      TIMESTAMPTZ     NOT NULL,
+    created_at      TIMESTAMPTZ     NOT NULL DEFAULT NOW(),
+
+    CONSTRAINT pk_refresh_tokens PRIMARY KEY (id),
+    CONSTRAINT uq_refresh_tokens_token UNIQUE (refresh_token),
+    CONSTRAINT fk_refresh_tokens_user_id FOREIGN KEY (user_id)
+        REFERENCES users (id) ON DELETE CASCADE
+);
+
+CREATE INDEX idx_refresh_tokens_user_id ON refresh_tokens (user_id);
+CREATE UNIQUE INDEX idx_refresh_tokens_refresh_token ON refresh_tokens (refresh_token);
+CREATE INDEX idx_refresh_tokens_expires_at ON refresh_tokens (expires_at);
+
+COMMENT ON TABLE refresh_tokens IS '리프레시 토큰 영속화 (Redis DB1 폴백용)';
+COMMENT ON COLUMN refresh_tokens.expires_at IS 'TTL 배치 삭제 기준';

@@ -1,0 +1,95 @@
+-- =============================================================
+-- ALTERNATIVE 서비스 스키마 스크립트
+-- DBMS: PostgreSQL
+-- 서비스: com.travelplanner.alternative
+-- =============================================================
+
+CREATE SCHEMA IF NOT EXISTS alternative;
+
+SET search_path = alternative;
+
+-- =============================================================
+-- TABLE: alternatives
+-- =============================================================
+CREATE TABLE alternatives (
+    id                  VARCHAR(36)     NOT NULL,
+    user_id             VARCHAR(36)     NOT NULL,
+    original_place_id   VARCHAR(200)    NOT NULL,
+    place_id            VARCHAR(200)    NOT NULL,
+    name                VARCHAR(200)    NOT NULL,
+    distance_m          INTEGER         NOT NULL,
+    rating              NUMERIC(3,1),
+    congestion          VARCHAR(20),
+    reason              VARCHAR(200),
+    status_label        VARCHAR(50),
+    lat                 NUMERIC(10,7)   NOT NULL,
+    lng                 NUMERIC(10,7)   NOT NULL,
+    walking_minutes     INTEGER,
+    transit_minutes     INTEGER,
+    score               NUMERIC(5,4)    NOT NULL,
+    created_at          TIMESTAMPTZ     NOT NULL DEFAULT NOW(),
+
+    CONSTRAINT pk_alternatives PRIMARY KEY (id)
+);
+
+CREATE INDEX idx_alternatives_user_id ON alternatives (user_id);
+CREATE INDEX idx_alternatives_original_place_id ON alternatives (original_place_id);
+CREATE INDEX idx_alternatives_place_id ON alternatives (place_id);
+CREATE INDEX idx_alternatives_created_at ON alternatives (created_at);
+
+COMMENT ON TABLE alternatives IS '추천 대안 장소 스냅샷';
+COMMENT ON COLUMN alternatives.original_place_id IS '원래 장소 ID — PLACE 서비스 참조 (DB FK 없음)';
+COMMENT ON COLUMN alternatives.place_id IS '대안 장소 ID — PLACE 서비스 참조 (DB FK 없음)';
+COMMENT ON COLUMN alternatives.status_label IS 'MONITOR 서비스 배지 상태 스냅샷';
+COMMENT ON COLUMN alternatives.score IS 'FixedScoreWeightsProvider 계산 결과 (0.0000 ~ 1.0000)';
+
+-- =============================================================
+-- TABLE: alternative_card_snapshots (ML 학습 데이터 [T3])
+-- =============================================================
+CREATE TABLE alternative_card_snapshots (
+    id                  VARCHAR(36)     NOT NULL,
+    user_id             VARCHAR(36)     NOT NULL,
+    place_id            VARCHAR(200)    NOT NULL,
+    candidate_place_id  VARCHAR(200)    NOT NULL,
+    score_weights       JSONB           NOT NULL,
+    scores              JSONB           NOT NULL,
+    exposed_at          TIMESTAMPTZ     NOT NULL DEFAULT NOW(),
+
+    CONSTRAINT pk_alternative_card_snapshots PRIMARY KEY (id)
+);
+
+CREATE INDEX idx_alt_card_snapshots_user_id ON alternative_card_snapshots (user_id);
+CREATE INDEX idx_alt_card_snapshots_place_id ON alternative_card_snapshots (place_id);
+CREATE INDEX idx_alt_card_snapshots_exposed_at ON alternative_card_snapshots (exposed_at);
+
+COMMENT ON TABLE alternative_card_snapshots IS '대안 카드 노출 스냅샷 (ML 학습 데이터, 최소 1년 보존 [T3])';
+COMMENT ON COLUMN alternative_card_snapshots.score_weights IS 'JSON: {distanceWeight, ratingWeight, congestionWeight}';
+COMMENT ON COLUMN alternative_card_snapshots.scores IS 'JSON: {distanceScore, ratingScore, congestionScore, totalScore}';
+
+-- =============================================================
+-- TABLE: selection_logs (ML 학습 데이터 [T3])
+-- =============================================================
+CREATE TABLE selection_logs (
+    id                  VARCHAR(36)     NOT NULL,
+    alt_card_id         VARCHAR(36)     NOT NULL,
+    user_id             VARCHAR(36)     NOT NULL,
+    selected_rank       INTEGER         NOT NULL,
+    elapsed_seconds     INTEGER         NOT NULL,
+    adopted             BOOLEAN         NOT NULL DEFAULT FALSE,
+    created_at          TIMESTAMPTZ     NOT NULL DEFAULT NOW(),
+
+    CONSTRAINT pk_selection_logs PRIMARY KEY (id),
+    CONSTRAINT fk_selection_logs_alt_card_id FOREIGN KEY (alt_card_id)
+        REFERENCES alternative_card_snapshots (id) ON DELETE RESTRICT,
+    CONSTRAINT chk_selection_logs_rank CHECK (selected_rank >= 1),
+    CONSTRAINT chk_selection_logs_elapsed CHECK (elapsed_seconds >= 0)
+);
+
+CREATE INDEX idx_selection_logs_user_id ON selection_logs (user_id);
+CREATE INDEX idx_selection_logs_alt_card_id ON selection_logs (alt_card_id);
+CREATE INDEX idx_selection_logs_created_at ON selection_logs (created_at);
+
+COMMENT ON TABLE selection_logs IS '사용자 대안 선택 로그 (ML 학습 데이터, 최소 1년 보존 [T3])';
+COMMENT ON COLUMN selection_logs.selected_rank IS '선택한 카드 순위 (1부터 시작)';
+COMMENT ON COLUMN selection_logs.elapsed_seconds IS '화면 표시 후 선택까지 소요 시간';
+COMMENT ON COLUMN selection_logs.adopted IS '일정에 실제 반영 여부 — schedule 서비스 replaceScheduleItem 성공 시 TRUE';
