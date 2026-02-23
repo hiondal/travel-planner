@@ -2,15 +2,16 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../../core/constants/app_colors.dart';
+import '../../../../core/constants/app_spacing.dart';
+import '../../../../core/constants/app_typography.dart';
 import '../../../../core/routing/app_routes.dart';
 import '../../../../core/utils/secure_storage.dart';
 
-/// 스플래시 페이지
-/// - 앱 진입 시 토큰 유효성 확인
-/// - 토큰 있음 → /schedule 이동
-/// - 토큰 없음 → /auth/login 이동
-///
-/// TODO: 실제 구현 시 브랜드 로고 애니메이션 추가
+/// 스플래시 페이지 (SCR-000)
+/// - 앱 진입 시 1.5초 브랜드 표시
+/// - Access Token 존재 → /trips 이동
+/// - 토큰 없음 → /login 이동
 class SplashPage extends ConsumerStatefulWidget {
   const SplashPage({super.key});
 
@@ -18,17 +19,28 @@ class SplashPage extends ConsumerStatefulWidget {
   ConsumerState<SplashPage> createState() => _SplashPageState();
 }
 
-class _SplashPageState extends ConsumerState<SplashPage> {
+class _SplashPageState extends ConsumerState<SplashPage>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _fadeController;
+  late Animation<double> _fadeAnimation;
+
   @override
   void initState() {
     super.initState();
+    _fadeController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 800),
+    );
+    _fadeAnimation = CurvedAnimation(
+      parent: _fadeController,
+      curve: Curves.easeIn,
+    );
+    _fadeController.forward();
     _checkAuthAndNavigate();
   }
 
   Future<void> _checkAuthAndNavigate() async {
-    // 스플래시 최소 표시 시간 (브랜드 노출)
     await Future.delayed(const Duration(milliseconds: 1500));
-
     if (!mounted) return;
 
     final secureStorage = ref.read(secureStorageProvider);
@@ -44,17 +56,63 @@ class _SplashPageState extends ConsumerState<SplashPage> {
   }
 
   @override
+  void dispose() {
+    _fadeController.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    return const Scaffold(
-      body: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            // TODO: 브랜드 로고 위젯으로 교체
-            Icon(Icons.explore, size: 64),
-            SizedBox(height: 16),
-            Text('travel-planner'),
-          ],
+    return Scaffold(
+      backgroundColor: AppColors.bgPrimary,
+      body: FadeTransition(
+        opacity: _fadeAnimation,
+        child: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              // 브랜드 아이콘
+              Container(
+                width: 80,
+                height: 80,
+                decoration: BoxDecoration(
+                  color: AppColors.accentRed.withOpacity(0.15),
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: const Icon(
+                  Icons.explore,
+                  size: 48,
+                  color: AppColors.accentRed,
+                ),
+              ),
+              const SizedBox(height: AppSpacing.spaceXl),
+              // 앱 이름
+              Text(
+                'travel-planner',
+                style: AppTypography.displayMedium.copyWith(
+                  color: AppColors.textPrimary,
+                ),
+              ),
+              const SizedBox(height: AppSpacing.spaceSm),
+              // 슬로건
+              Text(
+                '여행 중 실시간 일정 최적화 가이드',
+                style: AppTypography.bodyMedium.copyWith(
+                  color: AppColors.textSecondary,
+                ),
+              ),
+              const SizedBox(height: AppSpacing.space3xl),
+              // 로딩 인디케이터
+              const SizedBox(
+                width: 24,
+                height: 24,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  valueColor: AlwaysStoppedAnimation<Color>(AppColors.accentRed),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );

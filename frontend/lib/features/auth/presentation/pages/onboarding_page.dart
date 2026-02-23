@@ -1,15 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../../core/constants/app_colors.dart';
+import '../../../../core/constants/app_spacing.dart';
+import '../../../../core/constants/app_typography.dart';
 import '../../../../core/routing/app_routes.dart';
 
-/// 온보딩 페이지
-/// - Step 1: 상태 배지 소개 (UFR-SCHD-005)
-/// - Step 2: 출발 전 브리핑 소개
-/// - Step 3: 대안 카드 소개
-/// 최초 1회 표시 / 설정에서 재진입 가능 (?step=1 쿼리 파라미터)
-///
-/// TODO: 각 단계별 일러스트 및 설명 위젯 구현
+/// 온보딩 가이드 화면 (SCR-002)
+/// UFR-SCHD-005: 최초 로그인 후 서비스 소개 3단계
 class OnboardingPage extends StatefulWidget {
   const OnboardingPage({super.key, this.initialStep = 1});
 
@@ -24,6 +22,27 @@ class _OnboardingPageState extends State<OnboardingPage> {
   late int _currentStep;
 
   static const int _totalSteps = 3;
+
+  static const List<_OnboardingData> _steps = [
+    _OnboardingData(
+      icon: Icons.notifications_active,
+      iconColor: AppColors.accentRed,
+      title: '실시간 상태 배지',
+      description: '날씨, 혼잡도, 영업시간, 교통 정보를\n15분마다 자동으로 확인해 드립니다.',
+    ),
+    _OnboardingData(
+      icon: Icons.alt_route,
+      iconColor: AppColors.accentPurple,
+      title: '출발 전 브리핑',
+      description: 'AI가 오늘 일정을 분석하여\n출발 전 상황을 브리핑합니다.',
+    ),
+    _OnboardingData(
+      icon: Icons.location_on,
+      iconColor: AppColors.statusGreen,
+      title: '위치 정보 사용 동의',
+      description: '현재 위치 기반 서비스 제공을 위해\n위치 정보 사용에 동의가 필요합니다.',
+    ),
+  ];
 
   @override
   void initState() {
@@ -41,7 +60,7 @@ class _OnboardingPageState extends State<OnboardingPage> {
   void _onNext() {
     if (_currentStep < _totalSteps) {
       _pageController.nextPage(
-        duration: const Duration(milliseconds: 250),
+        duration: const Duration(milliseconds: 300),
         curve: Curves.easeInOut,
       );
     } else {
@@ -50,49 +69,66 @@ class _OnboardingPageState extends State<OnboardingPage> {
   }
 
   void _onComplete() {
-    // TODO: 온보딩 완료 플래그 저장 (SharedPreferences 또는 secure_storage)
-    context.goNamed(AppRoutes.tripListName);
+    context.goNamed(AppRoutes.tripCreateName);
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: AppColors.bgPrimary,
       body: SafeArea(
         child: Column(
           children: [
+            // 건너뛰기
+            Align(
+              alignment: Alignment.centerRight,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: AppSpacing.spaceBase,
+                  vertical: AppSpacing.spaceSm,
+                ),
+                child: TextButton(
+                  onPressed: _onComplete,
+                  child: Text(
+                    '건너뛰기',
+                    style: AppTypography.bodyMedium.copyWith(
+                      color: AppColors.textSecondary,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+            // 페이지 내용
             Expanded(
-              child: PageView(
+              child: PageView.builder(
                 controller: _pageController,
                 onPageChanged: (index) {
                   setState(() => _currentStep = index + 1);
                 },
-                children: const [
-                  // TODO: 각 단계별 OnboardingStepCard 위젯으로 교체
-                  _OnboardingStepPlaceholder(
-                    step: 1,
-                    title: '실시간 상태 배지',
-                    description: '장소마다 정상/주의/위험 상태를 실시간으로 확인하세요.',
-                  ),
-                  _OnboardingStepPlaceholder(
-                    step: 2,
-                    title: '출발 전 브리핑',
-                    description: 'AI가 오늘 일정을 분석하여 출발 전 상황을 브리핑합니다.',
-                  ),
-                  _OnboardingStepPlaceholder(
-                    step: 3,
-                    title: '스마트 대안 카드',
-                    description: '문제가 생기면 즉시 최적의 대안 장소를 추천합니다.',
-                  ),
-                ],
+                itemCount: _totalSteps,
+                itemBuilder: (context, index) {
+                  return _OnboardingStepWidget(data: _steps[index]);
+                },
               ),
             ),
+            // 인디케이터 + 버튼
             Padding(
-              padding: const EdgeInsets.all(16),
-              child: ElevatedButton(
-                onPressed: _onNext,
-                child: Text(
-                  _currentStep < _totalSteps ? '다음' : '시작하기',
-                ),
+              padding: const EdgeInsets.all(AppSpacing.spaceBase),
+              child: Column(
+                children: [
+                  _buildIndicator(),
+                  const SizedBox(height: AppSpacing.spaceXl),
+                  SizedBox(
+                    width: double.infinity,
+                    height: AppSpacing.buttonHeight,
+                    child: ElevatedButton(
+                      onPressed: _onNext,
+                      child: Text(
+                        _currentStep < _totalSteps ? '다음' : '시작하기',
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ),
           ],
@@ -100,42 +136,77 @@ class _OnboardingPageState extends State<OnboardingPage> {
       ),
     );
   }
+
+  Widget _buildIndicator() {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: List.generate(_totalSteps, (index) {
+        final isActive = index == _currentStep - 1;
+        return AnimatedContainer(
+          duration: const Duration(milliseconds: 250),
+          margin: const EdgeInsets.symmetric(horizontal: 4),
+          width: isActive ? 24 : 8,
+          height: 8,
+          decoration: BoxDecoration(
+            color: isActive ? AppColors.accentRed : AppColors.textDisabled,
+            borderRadius: BorderRadius.circular(4),
+          ),
+        );
+      }),
+    );
+  }
 }
 
-/// 온보딩 단계 플레이스홀더 (실제 구현 전 임시)
-class _OnboardingStepPlaceholder extends StatelessWidget {
-  const _OnboardingStepPlaceholder({
-    required this.step,
+class _OnboardingData {
+  const _OnboardingData({
+    required this.icon,
+    required this.iconColor,
     required this.title,
     required this.description,
   });
 
-  final int step;
+  final IconData icon;
+  final Color iconColor;
   final String title;
   final String description;
+}
+
+class _OnboardingStepWidget extends StatelessWidget {
+  const _OnboardingStepWidget({required this.data});
+
+  final _OnboardingData data;
 
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.all(32),
+      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.spaceBase),
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Text(
-            '$step / 3',
-            style: Theme.of(context).textTheme.bodySmall,
+          Container(
+            width: 120,
+            height: 120,
+            decoration: BoxDecoration(
+              color: data.iconColor.withOpacity(0.12),
+              borderRadius: BorderRadius.circular(32),
+            ),
+            child: Icon(data.icon, size: 60, color: data.iconColor),
           ),
-          const SizedBox(height: 24),
+          const SizedBox(height: AppSpacing.space2xl),
           Text(
-            title,
-            style: Theme.of(context).textTheme.displaySmall,
+            data.title,
             textAlign: TextAlign.center,
+            style: AppTypography.displayLarge.copyWith(
+              color: AppColors.textPrimary,
+            ),
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: AppSpacing.spaceBase),
           Text(
-            description,
-            style: Theme.of(context).textTheme.bodyMedium,
+            data.description,
             textAlign: TextAlign.center,
+            style: AppTypography.bodyLarge.copyWith(
+              color: AppColors.textSecondary,
+            ),
           ),
         ],
       ),
