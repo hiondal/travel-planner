@@ -20,20 +20,23 @@ class MonitoringDataSource {
 
   final Dio dio;
 
-  /// GET /monitor/places/{placeId}/status
-  /// 장소 실시간 상태 조회
+  /// GET /badges/{placeId}/detail
+  /// 장소 상태 상세 조회 (백엔드: MNTR-02)
+  /// 변경: /monitor/places/{id}/status → /badges/{placeId}/detail
   Future<PlaceStatus> getPlaceStatus(String placeId) async {
     final response = await dio.get<Map<String, dynamic>>(
-      '/monitor/places/$placeId/status',
+      '/badges/$placeId/detail',
     );
     return PlaceStatus.fromJson(response.data!);
   }
 
-  /// GET /monitor/trips/{tripId}/status
-  /// 여행 전체 상태 요약 조회
-  Future<Map<String, dynamic>> getTripStatus(String tripId) async {
+  /// GET /badges?place_ids={placeId1},{placeId2},...
+  /// 장소 상태 배지 목록 일괄 조회 (백엔드: MNTR-01)
+  /// 변경: /monitor/trips/{tripId}/status → /badges?place_ids=...
+  Future<Map<String, dynamic>> getBadges(List<String> placeIds) async {
     final response = await dio.get<Map<String, dynamic>>(
-      '/monitor/trips/$tripId/status',
+      '/badges',
+      queryParameters: {'place_ids': placeIds.join(',')},
     );
     return response.data!;
   }

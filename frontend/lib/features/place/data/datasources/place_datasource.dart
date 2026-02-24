@@ -20,30 +20,51 @@ class PlaceDataSource {
 
   final Dio dio;
 
-  /// GET /places/search
-  /// 장소 키워드 검색
+  /// GET /places/search?keyword={keyword}&city={city}
+  /// 장소 키워드 검색 (백엔드: PLCE-01)
+  /// 주의: 백엔드는 keyword(필수), city(필수) 파라미터만 지원
+  /// category 파라미터는 백엔드 미지원 → 제거
   Future<PlaceSearchResponse> searchPlaces({
     required String keyword,
-    String? city,
-    String? category,
+    required String city,
   }) async {
     final response = await dio.get<Map<String, dynamic>>(
       '/places/search',
       queryParameters: {
         'keyword': keyword,
-        if (city != null) 'city': city,
-        if (category != null) 'category': category,
+        'city': city,
       },
     );
     return PlaceSearchResponse.fromJson(response.data!);
   }
 
   /// GET /places/{placeId}
-  /// 장소 상세 조회
+  /// 장소 상세 조회 (백엔드: PLCE-02)
   Future<Place> getPlace(String placeId) async {
     final response = await dio.get<Map<String, dynamic>>(
       '/places/$placeId',
     );
     return Place.fromJson(response.data!);
+  }
+
+  /// GET /places/nearby?lat={lat}&lng={lng}&category={category}&radius={radius}
+  /// 주변 장소 검색 (백엔드: PLCE-03)
+  /// radius: 1000, 2000, 3000 중 하나
+  Future<Map<String, dynamic>> searchNearbyPlaces({
+    required double lat,
+    required double lng,
+    required String category,
+    required int radius,
+  }) async {
+    final response = await dio.get<Map<String, dynamic>>(
+      '/places/nearby',
+      queryParameters: {
+        'lat': lat,
+        'lng': lng,
+        'category': category,
+        'radius': radius,
+      },
+    );
+    return response.data!;
   }
 }

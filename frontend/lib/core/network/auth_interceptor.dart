@@ -72,12 +72,15 @@ class AuthInterceptor extends Interceptor {
       );
 
       final response = await refreshDio.post(
-        '/auth/refresh',
-        data: {'refreshToken': refreshToken},
+        '/api/v1/auth/token/refresh',
+        data: {'refresh_token': refreshToken},
       );
 
-      final newAccessToken = response.data['accessToken'] as String?;
-      final newRefreshToken = response.data['refreshToken'] as String?;
+      // 백엔드 응답: ApiResponse { success, data: { access_token, expires_in } }
+      final data = response.data['data'] as Map<String, dynamic>?;
+      final newAccessToken = data?['access_token'] as String?;
+      // 백엔드는 access_token만 발급하므로 refresh_token 갱신 없음
+      final newRefreshToken = null as String?;
 
       if (newAccessToken == null) {
         await _handleAuthFailure(handler, err);

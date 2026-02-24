@@ -20,28 +20,45 @@ class AlternativeDataSource {
 
   final Dio dio;
 
-  /// GET /alternatives
-  /// 대안 장소 목록 조회 (브리핑 기반)
-  Future<AlternativeListResponse> getAlternatives(String briefingId) async {
-    final response = await dio.get<Map<String, dynamic>>(
-      '/alternatives',
-      queryParameters: {'briefing_id': briefingId},
+  /// POST /alternatives/search
+  /// 대안 장소 검색 — 카드 3장 생성 (백엔드: ALTN 서비스)
+  /// 변경: GET /alternatives → POST /alternatives/search
+  Future<AlternativeListResponse> searchAlternatives({
+    required String placeId,
+    required String category,
+    required double lat,
+    required double lng,
+  }) async {
+    final response = await dio.post<Map<String, dynamic>>(
+      '/alternatives/search',
+      data: {
+        'place_id': placeId,
+        'category': category,
+        'location': {'lat': lat, 'lng': lng},
+      },
     );
     return AlternativeListResponse.fromJson(response.data!);
   }
 
-  /// POST /alternatives/{alternativeId}/apply
-  /// 대안 장소 적용 (일정 교체)
-  Future<Map<String, dynamic>> applyAlternative(
-    String alternativeId,
-    String tripId,
-    String scheduleItemId,
-  ) async {
+  /// POST /alternatives/{altId}/select
+  /// 대안 카드 선택 및 일정 반영 (백엔드: ALTN 서비스)
+  /// 변경: POST /alternatives/{id}/apply → POST /alternatives/{altId}/select
+  Future<Map<String, dynamic>> selectAlternative({
+    required String altId,
+    required String originalPlaceId,
+    required String scheduleItemId,
+    required String tripId,
+    required int selectedRank,
+    int? elapsedSeconds,
+  }) async {
     final response = await dio.post<Map<String, dynamic>>(
-      '/alternatives/$alternativeId/apply',
+      '/alternatives/$altId/select',
       data: {
-        'trip_id': tripId,
+        'original_place_id': originalPlaceId,
         'schedule_item_id': scheduleItemId,
+        'trip_id': tripId,
+        'selected_rank': selectedRank,
+        if (elapsedSeconds != null) 'elapsed_seconds': elapsedSeconds,
       },
     );
     return response.data!;

@@ -20,10 +20,13 @@ class BriefingDataSource {
 
   final Dio dio;
 
-  /// GET /briefings
-  /// 브리핑 목록 조회
-  Future<BriefingListResponse> getBriefings({String? tripId}) async {
-    final queryParams = tripId != null ? {'trip_id': tripId} : null;
+  /// GET /briefings?date={date}
+  /// 브리핑 목록 조회 (백엔드 파라미터: date, 형식: yyyy-MM-dd)
+  /// 변경: trip_id 쿼리 파라미터 → date 쿼리 파라미터
+  Future<BriefingListResponse> getBriefings({DateTime? date}) async {
+    final queryParams = date != null
+        ? {'date': date.toIso8601String().substring(0, 10)}
+        : null;
     final response = await dio.get<Map<String, dynamic>>(
       '/briefings',
       queryParameters: queryParams,

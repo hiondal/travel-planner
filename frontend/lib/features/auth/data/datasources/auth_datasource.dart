@@ -42,15 +42,31 @@ class AuthDataSource {
   }
 
   /// POST /auth/logout
-  /// 서버 토큰 폐기
-  Future<void> logout() async {
-    await dio.post<void>('/auth/logout');
+  /// 서버 토큰 폐기 (백엔드: refresh_token 필드 필요)
+  Future<void> logout(String refreshToken) async {
+    await dio.post<void>(
+      '/auth/logout',
+      data: {'refresh_token': refreshToken},
+    );
   }
 
-  /// GET /auth/me
-  /// 현재 사용자 프로필 조회
-  Future<UserProfile> getMe() async {
-    final response = await dio.get<Map<String, dynamic>>('/auth/me');
-    return UserProfile.fromJson(response.data!);
+  /// POST /users/consent
+  /// 사용자 위치정보/Push 동의 저장
+  /// 주의: 백엔드에 /auth/me 엔드포인트 없음
+  /// 사용자 프로필은 socialLogin 응답의 user 필드에서 획득
+  Future<Map<String, dynamic>> saveConsent({
+    required bool location,
+    required bool push,
+    required String timestamp,
+  }) async {
+    final response = await dio.post<Map<String, dynamic>>(
+      '/users/consent',
+      data: {
+        'location': location,
+        'push': push,
+        'timestamp': timestamp,
+      },
+    );
+    return response.data!;
   }
 }

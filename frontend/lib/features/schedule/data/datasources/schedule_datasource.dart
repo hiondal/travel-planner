@@ -60,37 +60,41 @@ class ScheduleDataSource {
     return ScheduleResponse.fromJson(response.data!);
   }
 
-  /// POST /trips/{tripId}/schedule
-  /// 장소 추가
+  /// POST /trips/{tripId}/schedule-items
+  /// 장소 추가 (백엔드: SCHD-04)
   Future<ScheduleItem> addScheduleItem(
     String tripId,
     AddScheduleItemRequest request,
   ) async {
     final response = await dio.post<Map<String, dynamic>>(
-      '/trips/$tripId/schedule',
+      '/trips/$tripId/schedule-items',
       data: request.toJson(),
     );
     return ScheduleItem.fromJson(response.data!);
   }
 
-  /// DELETE /trips/{tripId}/schedule/{scheduleItemId}
-  /// 장소 삭제
+  /// DELETE /trips/{tripId}/schedule-items/{scheduleItemId}
+  /// 장소 삭제 (백엔드: SCHD-05)
   Future<void> deleteScheduleItem(
     String tripId,
     String scheduleItemId,
   ) async {
-    await dio.delete<void>('/trips/$tripId/schedule/$scheduleItemId');
+    await dio.delete<void>('/trips/$tripId/schedule-items/$scheduleItemId');
   }
 
-  /// PUT /trips/{tripId}/schedule/reorder
-  /// 장소 순서 변경
-  Future<void> reorderScheduleItems(
+  /// PUT /trips/{tripId}/schedule-items/{itemId}/replace
+  /// 장소 교체 (백엔드: SCHD-06)
+  /// 주의: 백엔드는 순서 변경(reorder) 엔드포인트를 지원하지 않음
+  /// 장소 교체는 /schedule-items/{itemId}/replace 로 처리
+  Future<Map<String, dynamic>> replaceScheduleItem(
     String tripId,
-    List<String> orderedItemIds,
+    String itemId,
+    String newPlaceId,
   ) async {
-    await dio.put<void>(
-      '/trips/$tripId/schedule/reorder',
-      data: {'item_ids': orderedItemIds},
+    final response = await dio.put<Map<String, dynamic>>(
+      '/trips/$tripId/schedule-items/$itemId/replace',
+      data: {'new_place_id': newPlaceId},
     );
+    return response.data!;
   }
 }
