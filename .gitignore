@@ -24,6 +24,7 @@ venv/
 .vscode/
 *.iml
 *.swp
+.run/
 
 # OS
 .DS_Store
