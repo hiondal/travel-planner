@@ -94,6 +94,9 @@ public class MntrController {
             @PathVariable String placeId,
             @AuthenticationPrincipal UserPrincipal principal) {
 
+        // 모니터링 대상 먼저 확인 (없으면 404 — rate limit 소모하지 않음)
+        MonitoringTarget target = dataCollectionService.findTargetByPlaceId(placeId);
+
         // Rate limit 체크 (setIfAbsent 원자적 연산)
         String rateLimitKey = REFRESH_KEY_PREFIX + placeId;
         Boolean acquired = mntrRedisTemplate.opsForValue()
@@ -106,8 +109,7 @@ public class MntrController {
                     "message", "잠시 후 다시 시도해주세요. (60초 간격)"));
         }
 
-        // 모니터링 대상 조회 + 수집 + 상태 조회 (관심사 분리: 컨트롤러에서 오케스트레이션)
-        MonitoringTarget target = dataCollectionService.findTargetByPlaceId(placeId);
+        // 수집 + 상태 조회 (관심사 분리: 컨트롤러에서 오케스트레이션)
         dataCollectionService.collectForTarget(target);
         StatusDetail detail = badgeService.getStatusDetail(placeId);
 
