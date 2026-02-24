@@ -50,7 +50,7 @@ public class PlaceSummary {
                 place.getId(),
                 place.getName(),
                 place.getAddress(),
-                place.getRating(),
+                place.getRating() != null ? place.getRating().floatValue() : null,
                 hours,
                 CoordinatesDto.from(place.getCoordinates())
         );

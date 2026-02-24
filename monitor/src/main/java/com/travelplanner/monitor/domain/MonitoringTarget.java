@@ -49,10 +49,10 @@ public class MonitoringTarget {
     @Column(name = "visit_datetime", nullable = false)
     private LocalDateTime visitDatetime;
 
-    @Column(name = "lat", nullable = false, precision = 10, scale = 7)
+    @Column(name = "lat", nullable = false)
     private double lat;
 
-    @Column(name = "lng", nullable = false, precision = 10, scale = 7)
+    @Column(name = "lng", nullable = false)
     private double lng;
 
     @Column(name = "category", length = 50)

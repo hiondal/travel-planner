@@ -49,7 +49,7 @@ public class StatusHistory {
     @Column(name = "judgment_at", nullable = false)
     private LocalDateTime judgmentAt;
 
-    @Column(name = "confidence_score", precision = 4, scale = 3)
+    @Column(name = "confidence_score")
     private Double confidenceScore;
 
     public StatusHistory(String id, String placeId, String scheduleItemId,

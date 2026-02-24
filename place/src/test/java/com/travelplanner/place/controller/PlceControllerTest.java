@@ -20,6 +20,7 @@ import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 
+import java.math.BigDecimal;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
@@ -58,9 +59,9 @@ class PlceControllerTest {
                 "이치란 라멘 시부야",
                 "도쿄 시부야구 도겐자카 1-22-7",
                 "restaurant",
-                4.2f,
-                35.6595,
-                139.7004,
+                new BigDecimal("4.2"),
+                new BigDecimal("35.6595"),
+                new BigDecimal("139.7004"),
                 "Asia/Tokyo",
                 "https://example.com/photo.jpg",
                 "도쿄"
@@ -71,9 +72,9 @@ class PlceControllerTest {
                 "후쿠로쿠 라멘",
                 "도쿄 시부야구 우다가와초 13-11",
                 "restaurant",
-                4.0f,
-                35.6621,
-                139.6982,
+                new BigDecimal("4.0"),
+                new BigDecimal("35.6621"),
+                new BigDecimal("139.6982"),
                 "Asia/Tokyo",
                 null,
                 "도쿄"

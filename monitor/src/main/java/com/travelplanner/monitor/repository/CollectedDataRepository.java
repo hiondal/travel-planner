@@ -5,7 +5,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
-import java.util.Optional;
+import java.util.List;
 
 /**
  * 수집 데이터 리포지토리.
@@ -17,6 +17,6 @@ public interface CollectedDataRepository extends JpaRepository<CollectedData, St
 
     @Query("SELECT cd FROM CollectedData cd WHERE cd.placeId = :placeId " +
            "ORDER BY cd.collectedAt DESC")
-    Optional<CollectedData> findLatestByPlaceId(@Param("placeId") String placeId,
+    List<CollectedData> findLatestByPlaceId(@Param("placeId") String placeId,
         org.springframework.data.domain.Pageable pageable);
 }

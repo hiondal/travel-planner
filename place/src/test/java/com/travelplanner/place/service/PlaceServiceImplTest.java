@@ -20,6 +20,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.data.redis.core.ValueOperations;
 
+import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -75,9 +76,9 @@ class PlaceServiceImplTest {
                 "이치란 라멘 시부야",
                 "도쿄 시부야구 도겐자카 1-22-7",
                 "restaurant",
-                4.2f,
-                35.6595,
-                139.7004,
+                new BigDecimal("4.2"),
+                new BigDecimal("35.6595"),
+                new BigDecimal("139.7004"),
                 "Asia/Tokyo",
                 "https://example.com/photo.jpg",
                 "도쿄"
@@ -165,7 +166,7 @@ class PlaceServiceImplTest {
         for (int i = 0; i < 15; i++) {
             manyPlaces.add(Place.create(
                     "place_" + i, "장소" + i, "주소" + i, "restaurant",
-                    4.0f, 35.0 + i * 0.01, 139.0 + i * 0.01, "Asia/Tokyo", null, "도쿄"
+                    new BigDecimal("4.0"), BigDecimal.valueOf(35.0 + i * 0.01), BigDecimal.valueOf(139.0 + i * 0.01), "Asia/Tokyo", null, "도쿄"
             ));
         }
 
@@ -274,7 +275,7 @@ class PlaceServiceImplTest {
         // given
         Place farPlace = Place.create(
                 "place_far", "먼 장소", "먼 주소", "restaurant",
-                4.0f, 36.0, 140.0, "Asia/Tokyo", null, "도쿄"
+                new BigDecimal("4.0"), new BigDecimal("36.0"), new BigDecimal("140.0"), "Asia/Tokyo", null, "도쿄"
         );
 
         given(placeRedisTemplate.opsForValue()).willReturn(valueOperations);

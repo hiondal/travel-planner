@@ -37,7 +37,7 @@ public class NearbyPlaceSearchResponse {
                         np.getPlace().getName(),
                         np.getPlace().getAddress(),
                         np.getDistanceM(),
-                        np.getPlace().getRating(),
+                        np.getPlace().getRating() != null ? np.getPlace().getRating().floatValue() : null,
                         np.getPlace().getCategory(),
                         CoordinatesDto.from(np.getPlace().getCoordinates()),
                         np.isOpen()

@@ -14,6 +14,7 @@ import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.util.ArrayList;
@@ -60,13 +61,13 @@ public class Place {
     private String category;
 
     @Column(name = "rating", precision = 3, scale = 1)
-    private Float rating;
+    private BigDecimal rating;
 
     @Column(name = "lat", nullable = false, precision = 10, scale = 7)
-    private double lat;
+    private BigDecimal lat;
 
     @Column(name = "lng", nullable = false, precision = 10, scale = 7)
-    private double lng;
+    private BigDecimal lng;
 
     @Column(name = "timezone", length = 50)
     private String timezone;
@@ -100,7 +101,7 @@ public class Place {
      * @return 생성된 Place
      */
     public static Place create(String id, String name, String address, String category,
-                               Float rating, double lat, double lng,
+                               BigDecimal rating, BigDecimal lat, BigDecimal lng,
                                String timezone, String photoUrl, String city) {
         Place place = new Place();
         place.id = id;
@@ -129,7 +130,7 @@ public class Place {
      * @param city     도시명
      */
     public void update(String name, String address, String category,
-                       Float rating, String timezone, String photoUrl, String city) {
+                       BigDecimal rating, String timezone, String photoUrl, String city) {
         this.name = name;
         this.address = address;
         this.category = category;
@@ -182,7 +183,7 @@ public class Place {
      * @return Coordinates
      */
     public Coordinates getCoordinates() {
-        return new Coordinates(lat, lng);
+        return new Coordinates(lat.doubleValue(), lng.doubleValue());
     }
 
     /**

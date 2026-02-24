@@ -3,6 +3,7 @@ package com.travelplanner.place.client;
 import com.travelplanner.place.domain.BusinessHour;
 import com.travelplanner.place.domain.Place;
 
+import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -37,7 +38,9 @@ public class GooglePlaceDto {
     public Place toPlace(String city) {
         Place place = Place.create(
                 placeId, name, address, category,
-                rating, lat, lng, timezone, photoUrl, city
+                rating != null ? new BigDecimal(rating.toString()) : null,
+                BigDecimal.valueOf(lat), BigDecimal.valueOf(lng),
+                timezone, photoUrl, city
         );
         List<BusinessHour> hours = new ArrayList<>();
         for (BusinessHourData data : businessHours) {

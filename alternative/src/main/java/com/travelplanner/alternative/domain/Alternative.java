@@ -44,7 +44,7 @@ public class Alternative {
     @Column(name = "distance_m", nullable = false)
     private int distanceM;
 
-    @Column(name = "rating", precision = 3, scale = 1)
+    @Column(name = "rating")
     private Float rating;
 
     @Column(name = "congestion", length = 20)
@@ -56,10 +56,10 @@ public class Alternative {
     @Column(name = "status_label", length = 50)
     private String statusLabel;
 
-    @Column(name = "lat", nullable = false, precision = 10, scale = 7)
+    @Column(name = "lat", nullable = false)
     private double lat;
 
-    @Column(name = "lng", nullable = false, precision = 10, scale = 7)
+    @Column(name = "lng", nullable = false)
     private double lng;
 
     @Column(name = "walking_minutes")
@@ -68,7 +68,7 @@ public class Alternative {
     @Column(name = "transit_minutes")
     private Integer transitMinutes;
 
-    @Column(name = "score", nullable = false, precision = 5, scale = 4)
+    @Column(name = "score", nullable = false)
     private double score;
 
     @Column(name = "created_at", nullable = false)

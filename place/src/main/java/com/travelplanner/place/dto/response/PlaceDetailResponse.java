@@ -60,7 +60,7 @@ public class PlaceDetailResponse {
                 place.getName(),
                 place.getAddress(),
                 place.getCategory(),
-                place.getRating(),
+                place.getRating() != null ? place.getRating().floatValue() : null,
                 hours,
                 CoordinatesDto.from(place.getCoordinates()),
                 place.getTimezone(),
