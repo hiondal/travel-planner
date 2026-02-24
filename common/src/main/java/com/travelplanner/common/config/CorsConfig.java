@@ -1,5 +1,6 @@
 package com.travelplanner.common.config;
 
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.web.cors.CorsConfiguration;
@@ -10,15 +11,18 @@ import java.util.List;
 
 /**
  * 공통 CORS 설정.
- * Flutter 웹 디버그 모드(localhost:8888)에서 백엔드 API 호출을 허용한다.
+ * 허용 Origin은 환경변수(CORS_ALLOWED_ORIGINS)로 제어한다.
  */
 @Configuration
 public class CorsConfig {
 
+    @Value("${cors.allowed-origins:http://localhost:*}")
+    private String allowedOrigins;
+
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration config = new CorsConfiguration();
-        config.setAllowedOriginPatterns(List.of("http://localhost:*"));
+        config.setAllowedOriginPatterns(List.of(allowedOrigins.split(",")));
         config.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"));
         config.setAllowedHeaders(List.of("*"));
         config.setAllowCredentials(true);
