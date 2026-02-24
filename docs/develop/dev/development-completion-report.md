@@ -150,19 +150,45 @@ travel-planner/
 
 ---
 
-## 9. 다음 단계 (Phase 1 나머지)
+## 9. 런타임 기동 검증 결과 (Step 4)
 
-| 단계 | 내용 | 필요 조건 |
-|------|------|----------|
-| 서비스 기동 테스트 | PostgreSQL + Redis + 7개 서비스 순차 기동 | Docker Compose UP |
-| E2E 테스트 | TC-01 ~ TC-10 시나리오 검증 | 전 서비스 기동 |
-| Flutter 빌드 | `flutter pub get && flutter build` | Flutter SDK PATH |
-| 프론트-백 통합 | Mock → 실제 API 전환 확인 | 양쪽 기동 |
-| FCM Push 연동 | Firebase Admin SDK 실제 연동 | Firebase 프로젝트 설정 |
+### 9-1. 서비스 기동 결과 (Docker PostgreSQL + Redis 환경)
+
+| 서비스 | 포트 | Health 상태 | API 응답 | 비고 |
+|--------|------|------------|----------|------|
+| AUTH | 8081 | UP | 401 (인증 필요) | JWT_SECRET export 필요 |
+| SCHD | 8082 | UP | 200 (트립 목록) | 정상 |
+| PLCE | 8083 | UP | 200 (검색 응답) | BigDecimal 변환 후 정상 |
+| MNTR | 8084 | UP | 400 (파라미터 필요) | Repository 수정 후 정상 |
+| BRIF | 8085 | UP | 401 (인증 필요) | null 체크 추가 후 정상 |
+| ALTN | 8086 | UP | POST 전용 엔드포인트 | 정상 |
+| PAY | 8087 | UP | 200 (플랜 목록) | 정상 |
+
+### 9-2. 런타임에서 발견/수정한 버그 (4건)
+
+| # | 버그 | 영향 범위 | 수정 내용 |
+|---|------|----------|----------|
+| 1 | Hibernate: precision/scale on float/double | Place, Monitor, Alternative | Place→BigDecimal, 나머지→속성 제거 |
+| 2 | Spring Data: Optional+Pageable 리턴타입 | Monitor | List로 변경 |
+| 3 | Spring Cloud BOM 2023.0.2와 Boot 3.4.3 비호환 | Briefing, Payment | 2024.0.0 업그레이드 |
+| 4 | BriefController NPE (@AuthenticationPrincipal null) | Briefing | null 체크 + 401 반환 |
 
 ---
 
-## 10. 미결 사항
+## 10. 다음 단계
+
+| 단계 | 내용 | 상태 | 필요 조건 |
+|------|------|------|----------|
+| 서비스 기동 테스트 | 7개 서비스 순차/동시 기동 | **완료** | Docker Compose UP |
+| 서비스 간 REST 통신 | SCHD→PLCE, BRIF→MNTR 등 실제 호출 | 미완료 | 테스트 데이터 필요 |
+| E2E 테스트 | TC-01 ~ TC-10 시나리오 검증 | 미완료 | 전 서비스 기동 + 인증 토큰 |
+| Flutter 빌드 | `flutter pub get && flutter build` | 미완료 | Flutter SDK PATH |
+| 프론트-백 통합 | Mock → 실제 API 전환 확인 | 미완료 | 양쪽 기동 |
+| FCM Push 연동 | Firebase Admin SDK 실제 연동 | 미완료 | Firebase 프로젝트 설정 |
+
+---
+
+## 11. 미결 사항
 
 | # | 항목 | 영향 | 우선순위 |
 |---|------|------|---------|
@@ -171,3 +197,4 @@ travel-planner/
 | 3 | IAP Mock 검증 (항상 성공) | Phase 2 실제 검증 예정 | 중간 |
 | 4 | Flutter build_runner 코드 생성 필요 | 로컬 빌드 시 실행 | 높음 |
 | 5 | @MockBean deprecated 경고 | @MockitoBean 전환 권장 | 낮음 |
+| 6 | .env 수동 export 필요 (Spring Boot .env 미지원) | 개발 편의 | 중간 |
