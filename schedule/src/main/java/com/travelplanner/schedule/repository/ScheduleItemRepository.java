@@ -5,6 +5,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 
@@ -25,4 +26,14 @@ public interface ScheduleItemRepository extends JpaRepository<ScheduleItem, Stri
 
     @Query("SELECT si FROM ScheduleItem si WHERE si.tripId = :tripId ORDER BY si.visitDatetime ASC")
     List<ScheduleItem> findSurroundingItems(@Param("tripId") String tripId);
+
+    @Query("SELECT si FROM ScheduleItem si WHERE si.tripId = :tripId " +
+           "AND si.visitDatetime >= :startOfDay AND si.visitDatetime < :endOfDay " +
+           "ORDER BY si.visitDatetime ASC")
+    List<ScheduleItem> findByTripIdAndDate(
+        @Param("tripId") String tripId,
+        @Param("startOfDay") LocalDateTime startOfDay,
+        @Param("endOfDay") LocalDateTime endOfDay);
+
+    void deleteAllByTripId(String tripId);
 }

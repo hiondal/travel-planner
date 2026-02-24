@@ -74,6 +74,22 @@ class ScheduleItemDeleteNotifier extends _$ScheduleItemDeleteNotifier {
   }
 }
 
+/// 여행 삭제 Notifier
+@riverpod
+class TripDeleteNotifier extends _$TripDeleteNotifier {
+  @override
+  AsyncValue<void> build() => const AsyncValue.data(null);
+
+  Future<bool> deleteTrip(String tripId) async {
+    state = const AsyncValue.loading();
+    state = await AsyncValue.guard(() async {
+      await ref.read(scheduleRepositoryProvider).deleteTrip(tripId);
+      ref.invalidate(tripListProvider);
+    });
+    return !state.hasError;
+  }
+}
+
 /// 장소 추가 Notifier
 @riverpod
 class ScheduleItemAddNotifier extends _$ScheduleItemAddNotifier {

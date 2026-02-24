@@ -3,10 +3,12 @@ package com.travelplanner.monitor.service;
 import com.travelplanner.common.exception.ResourceNotFoundException;
 import com.travelplanner.monitor.domain.*;
 import com.travelplanner.monitor.dto.internal.StatusDetail;
+import com.travelplanner.monitor.repository.CollectedDataRepository;
 import com.travelplanner.monitor.repository.MonitoringRepository;
 import com.travelplanner.monitor.repository.StatusHistoryRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -32,6 +34,7 @@ public class BadgeServiceImpl implements BadgeService {
 
     private final MonitoringRepository monitoringRepository;
     private final StatusHistoryRepository statusHistoryRepository;
+    private final CollectedDataRepository collectedDataRepository;
     private final RedisTemplate<String, String> mntrRedisTemplate;
 
     private static final String BADGE_KEY_PREFIX = "mntr:badge:";
@@ -45,20 +48,49 @@ public class BadgeServiceImpl implements BadgeService {
 
     @Override
     public StatusDetail getStatusDetail(String placeId) {
-        MonitoringTarget target = monitoringRepository.findByPlaceId(placeId)
+        MonitoringTarget target = monitoringRepository.findTopByPlaceIdOrderByVisitDatetimeDesc(placeId)
             .orElseThrow(() -> new ResourceNotFoundException("NOT_FOUND",
                 "장소 상태 정보를 찾을 수 없습니다. placeId: " + placeId));
 
         PlaceStatusEnum status = target.getCurrentStatus();
         boolean showAlternative = status == PlaceStatusEnum.YELLOW || status == PlaceStatusEnum.RED;
 
+        // 실제 수집 데이터 조회
+        List<CollectedData> latestData = collectedDataRepository
+            .findLatestByPlaceId(placeId, PageRequest.of(0, 1));
+
+        if (!latestData.isEmpty()) {
+            CollectedData cd = latestData.get(0);
+            return StatusDetail.builder()
+                .placeId(placeId)
+                .placeName(placeId)
+                .overallStatus(status)
+                .businessStatus(new BusinessStatusData(
+                    cd.getBusinessStatus() != null ? cd.getBusinessStatus() : "UNKNOWN", false))
+                .weatherData(new WeatherData(
+                    cd.getPrecipitationProb() != null ? cd.getPrecipitationProb() : 0,
+                    cd.getWeatherCondition() != null ? cd.getWeatherCondition() : "UNKNOWN", false))
+                .travelTimeData(new TravelTimeData(
+                    cd.getWalkingMinutes() != null ? cd.getWalkingMinutes() : 0,
+                    cd.getTransitMinutes(),
+                    cd.getDistanceM() != null ? cd.getDistanceM() : 0, false))
+                .congestionValue(resolveCongestionLabel(cd.getCongestionLevel()))
+                .congestionUnknown(cd.getCongestionLevel() == null)
+                .reason(resolveReason(status))
+                .showAlternativeButton(showAlternative)
+                .updatedAt(target.getCurrentStatusUpdatedAt() != null
+                    ? target.getCurrentStatusUpdatedAt() : cd.getCollectedAt())
+                .build();
+        }
+
+        // 수집 데이터 없음 — fallback
         return StatusDetail.builder()
             .placeId(placeId)
             .placeName(placeId)
             .overallStatus(status)
-            .businessStatus(new BusinessStatusData("OPEN", false))
-            .weatherData(new WeatherData(0, "Clear", false))
-            .travelTimeData(new TravelTimeData(0, null, 0, false))
+            .businessStatus(new BusinessStatusData("UNKNOWN", true))
+            .weatherData(new WeatherData(0, "UNKNOWN", true))
+            .travelTimeData(new TravelTimeData(0, null, 0, true))
             .congestionValue("정보 없음")
             .congestionUnknown(true)
             .reason(resolveReason(status))
@@ -94,6 +126,16 @@ public class BadgeServiceImpl implements BadgeService {
                 return new StatusBadge(placeId, target.getCurrentStatus(), updatedAt);
             })
             .orElse(new StatusBadge(placeId, PlaceStatusEnum.GREY, LocalDateTime.now()));
+    }
+
+    private String resolveCongestionLabel(String congestionLevel) {
+        if (congestionLevel == null) return "정보 없음";
+        return switch (congestionLevel) {
+            case "VERY_CROWDED" -> "매우 혼잡";
+            case "CROWDED" -> "혼잡";
+            case "NORMAL" -> "보통";
+            default -> congestionLevel;
+        };
     }
 
     private String resolveReason(PlaceStatusEnum status) {

@@ -21,6 +21,8 @@ public interface MonitoringRepository extends JpaRepository<MonitoringTarget, St
 
     Optional<MonitoringTarget> findByPlaceId(String placeId);
 
+    Optional<MonitoringTarget> findTopByPlaceIdOrderByVisitDatetimeDesc(String placeId);
+
     Optional<MonitoringTarget> findByScheduleItemId(String scheduleItemId);
 
     @Query("SELECT mt FROM MonitoringTarget mt WHERE mt.visitDatetime BETWEEN :from AND :to")

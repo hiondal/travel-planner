@@ -10,6 +10,7 @@ String _$secureStorageHash() => r'493c5de81d0d8c369c4450c51217fdecea2f7a69';
 
 /// flutter_secure_storage 래퍼
 /// JWT 토큰의 안전한 저장/조회/삭제를 담당한다.
+/// Web에서는 localStorage를 사용한다 (crypto.subtle OperationError 우회).
 ///
 /// Copied from [secureStorage].
 @ProviderFor(secureStorage)

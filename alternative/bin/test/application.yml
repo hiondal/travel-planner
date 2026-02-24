@@ -1,0 +1,48 @@
+spring:
+  application:
+    name: alternative-service-test
+
+  autoconfigure:
+    exclude:
+      - org.springframework.boot.autoconfigure.data.redis.RedisRepositoriesAutoConfiguration
+
+  datasource:
+    url: jdbc:h2:mem:alternative_testdb;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE;MODE=PostgreSQL
+    username: sa
+    password:
+    driver-class-name: org.h2.Driver
+
+  jpa:
+    show-sql: true
+    hibernate:
+      ddl-auto: create-drop
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.H2Dialect
+    open-in-view: false
+
+  data:
+    redis:
+      host: localhost
+      port: 6379
+
+server:
+  port: 0
+
+jwt:
+  secret: test-secret-key-must-be-at-least-32-chars-long-for-hmac
+  access-token-validity: 1800
+  refresh-token-validity: 86400
+
+place-service:
+  base-url: http://localhost:${wiremock.server.port:8089}
+
+monitor-service:
+  base-url: http://localhost:${wiremock.server.port:8089}
+
+schedule-service:
+  base-url: http://localhost:${wiremock.server.port:8089}
+
+logging:
+  level:
+    com.travelplanner.alternative: DEBUG

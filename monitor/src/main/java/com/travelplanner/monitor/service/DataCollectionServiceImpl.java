@@ -138,6 +138,14 @@ public class DataCollectionServiceImpl implements DataCollectionService {
     }
 
     @Override
+    @Transactional(readOnly = true)
+    public MonitoringTarget findTargetByPlaceId(String placeId) {
+        return monitoringRepository.findTopByPlaceIdOrderByVisitDatetimeDesc(placeId)
+            .orElseThrow(() -> new com.travelplanner.common.exception.ResourceNotFoundException(
+                "NOT_FOUND", "모니터링 대상을 찾을 수 없습니다. placeId: " + placeId));
+    }
+
+    @Override
     public void unregisterTarget(String scheduleItemId) {
         monitoringRepository.findByScheduleItemId(scheduleItemId)
             .ifPresent(target -> {

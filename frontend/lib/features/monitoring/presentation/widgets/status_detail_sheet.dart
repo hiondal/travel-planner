@@ -1,3 +1,4 @@
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -9,7 +10,9 @@ import '../../../../core/constants/app_typography.dart';
 import '../../../../core/routing/app_routes.dart';
 import '../../../../shared/models/status_level.dart';
 import '../../../../shared/widgets/app_skeleton.dart';
+import '../../../../shared/widgets/app_snack_bar.dart';
 import '../../../../shared/widgets/status_badge.dart';
+import '../../data/repositories/monitoring_repository.dart';
 import '../../domain/models/monitoring_model.dart';
 import '../providers/monitoring_provider.dart';
 
@@ -150,7 +153,7 @@ class _ErrorBody extends StatelessWidget {
   }
 }
 
-class _StatusBody extends StatelessWidget {
+class _StatusBody extends ConsumerStatefulWidget {
   const _StatusBody({
     required this.status,
     required this.tripId,
@@ -162,7 +165,44 @@ class _StatusBody extends StatelessWidget {
   final VoidCallback onClose;
 
   @override
+  ConsumerState<_StatusBody> createState() => _StatusBodyState();
+}
+
+class _StatusBodyState extends ConsumerState<_StatusBody> {
+  bool _isRefreshing = false;
+
+  Future<void> _onRefresh() async {
+    if (_isRefreshing) return;
+    setState(() => _isRefreshing = true);
+
+    try {
+      final repo = ref.read(monitoringRepositoryProvider);
+      await repo.refreshPlaceStatus(widget.status.placeId);
+      ref.invalidate(placeStatusProvider(widget.status.placeId));
+      if (mounted) {
+        AppSnackBar.show(context, '장소 정보가 갱신되었습니다.');
+      }
+    } on DioException catch (e) {
+      if (mounted) {
+        if (e.response?.statusCode == 429) {
+          AppSnackBar.showError(context, '잠시 후 다시 시도해주세요. (60초 간격)');
+        } else {
+          AppSnackBar.showError(context, '새로고침에 실패했습니다.');
+        }
+      }
+    } catch (_) {
+      if (mounted) {
+        AppSnackBar.showError(context, '새로고침에 실패했습니다.');
+      }
+    } finally {
+      if (mounted) setState(() => _isRefreshing = false);
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final status = widget.status;
+    final onClose = widget.onClose;
     final timeFormat = DateFormat('HH:mm', 'ko');
     final isActionNeeded = status.overallStatus == StatusLevel.caution ||
         status.overallStatus == StatusLevel.danger;
@@ -188,11 +228,31 @@ class _StatusBody extends StatelessWidget {
           ],
         ),
         const SizedBox(height: AppSpacing.spaceXs),
-        Text(
-          '업데이트: ${timeFormat.format(status.updatedAt)}',
-          style: AppTypography.bodySmall.copyWith(
-            color: AppColors.textSecondary,
-          ),
+        Row(
+          children: [
+            Text(
+              '업데이트: ${timeFormat.format(status.updatedAt)}',
+              style: AppTypography.bodySmall.copyWith(
+                color: AppColors.textSecondary,
+              ),
+            ),
+            const Spacer(),
+            TextButton.icon(
+              onPressed: _isRefreshing ? null : _onRefresh,
+              icon: _isRefreshing
+                  ? const SizedBox(
+                      width: 14,
+                      height: 14,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.refresh, size: 16),
+              label: Text(_isRefreshing ? '새로고침 중...' : '정보 새로고침'),
+              style: TextButton.styleFrom(
+                textStyle: AppTypography.labelSmall,
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              ),
+            ),
+          ],
         ),
         const SizedBox(height: AppSpacing.spaceXl),
 

@@ -14,6 +14,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.UUID;
 
@@ -66,17 +67,40 @@ public class TripServiceImpl implements TripService {
 
     @Override
     public ScheduleResult getSchedule(String tripId, String userId) {
+        return getSchedule(tripId, userId, null);
+    }
+
+    @Override
+    public ScheduleResult getSchedule(String tripId, String userId, LocalDate date) {
         Trip trip = tripRepository.findByIdAndUserId(tripId, userId)
             .orElseThrow(() -> new ResourceNotFoundException("NOT_FOUND",
                 "여행을 찾을 수 없습니다. tripId: " + tripId));
 
-        List<ScheduleItem> items =
-            scheduleItemRepository.findByTripIdOrderByVisitDatetimeAsc(tripId);
+        List<ScheduleItem> items;
+        if (date != null) {
+            LocalDateTime startOfDay = date.atStartOfDay();
+            LocalDateTime endOfDay = date.plusDays(1).atStartOfDay();
+            items = scheduleItemRepository.findByTripIdAndDate(tripId, startOfDay, endOfDay);
+        } else {
+            items = scheduleItemRepository.findByTripIdOrderByVisitDatetimeAsc(tripId);
+        }
 
         return ScheduleResult.builder()
             .trip(trip)
             .items(items)
             .build();
+    }
+
+    @Override
+    @Transactional
+    public void deleteTrip(String tripId, String userId) {
+        Trip trip = tripRepository.findByIdAndUserId(tripId, userId)
+            .orElseThrow(() -> new ResourceNotFoundException("NOT_FOUND",
+                "여행을 찾을 수 없습니다. tripId: " + tripId));
+
+        scheduleItemRepository.deleteAllByTripId(tripId);
+        tripRepository.delete(trip);
+        log.info("여행 삭제 완료 - tripId: {}, userId: {}", tripId, userId);
     }
 
     private void validateDateRange(LocalDate startDate, LocalDate endDate) {

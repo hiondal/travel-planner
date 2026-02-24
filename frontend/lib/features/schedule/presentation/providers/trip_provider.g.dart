@@ -224,7 +224,7 @@ final tripCreateNotifierProvider =
 
 typedef _$TripCreateNotifier = AutoDisposeNotifier<AsyncValue<Trip?>>;
 String _$scheduleItemDeleteNotifierHash() =>
-    r'5f6bc59fd8c5a0b71ea4dd7feeb086b45985afca';
+    r'1d88dbb940388d0cbbf3c7efc421a68fd771f7d2';
 
 /// 장소 삭제 Notifier
 ///
@@ -242,8 +242,27 @@ final scheduleItemDeleteNotifierProvider = AutoDisposeNotifierProvider<
 );
 
 typedef _$ScheduleItemDeleteNotifier = AutoDisposeNotifier<AsyncValue<void>>;
+String _$tripDeleteNotifierHash() =>
+    r'36c048f63aa679bf9e1bfb4b9eb1989e52f93030';
+
+/// 여행 삭제 Notifier
+///
+/// Copied from [TripDeleteNotifier].
+@ProviderFor(TripDeleteNotifier)
+final tripDeleteNotifierProvider =
+    AutoDisposeNotifierProvider<TripDeleteNotifier, AsyncValue<void>>.internal(
+  TripDeleteNotifier.new,
+  name: r'tripDeleteNotifierProvider',
+  debugGetCreateSourceHash: const bool.fromEnvironment('dart.vm.product')
+      ? null
+      : _$tripDeleteNotifierHash,
+  dependencies: null,
+  allTransitiveDependencies: null,
+);
+
+typedef _$TripDeleteNotifier = AutoDisposeNotifier<AsyncValue<void>>;
 String _$scheduleItemAddNotifierHash() =>
-    r'af51b1953c76bcd35233d6ff5ffa0cf81831212b';
+    r'26865292edd00ab2a849964c00746c93e42c7a4c';
 
 /// 장소 추가 Notifier
 ///

@@ -20,4 +20,6 @@ public interface DataCollectionService {
                         double lat, double lng);
 
     void unregisterTarget(String scheduleItemId);
+
+    MonitoringTarget findTargetByPlaceId(String placeId);
 }

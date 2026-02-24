@@ -25,4 +25,8 @@ class MonitoringRepository {
   Future<Map<String, dynamic>> getBadges(List<String> placeIds) async {
     return dataSource.getBadges(placeIds);
   }
+
+  Future<PlaceStatus> refreshPlaceStatus(String placeId) async {
+    return dataSource.refreshPlaceStatus(placeId);
+  }
 }

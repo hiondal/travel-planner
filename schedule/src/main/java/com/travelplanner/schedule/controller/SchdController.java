@@ -24,6 +24,8 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
+import java.time.LocalDate;
+import java.time.format.DateTimeParseException;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -93,18 +95,42 @@ public class SchdController {
     }
 
     /**
-     * SCHD-03: 일정표 조회.
+     * SCHD-03: 일정표 조회 (날짜 필터링 지원).
      */
     @GetMapping("/trips/{tripId}/schedule")
-    @Operation(summary = "일정표 조회", description = "여행 일정의 장소 목록을 시간순으로 조회한다.")
+    @Operation(summary = "일정표 조회", description = "여행 일정의 장소 목록을 시간순으로 조회한다. date 파라미터로 특정 날짜 필터링 가능.")
     public ResponseEntity<ApiResponse<ScheduleResponse>> getSchedule(
+            @PathVariable String tripId,
+            @RequestParam(required = false) String date,
+            @AuthenticationPrincipal UserPrincipal principal) {
+
+        String userId = resolveUserId(principal);
+        LocalDate filterDate = null;
+        if (date != null && !date.isEmpty()) {
+            try {
+                filterDate = LocalDate.parse(date);
+            } catch (DateTimeParseException e) {
+                throw new com.travelplanner.common.exception.ValidationException(
+                    "date", "날짜 형식이 올바르지 않습니다. (예: 2025-01-01)", date);
+            }
+        }
+        ScheduleResult result = tripService.getSchedule(tripId, userId, filterDate);
+        return ResponseEntity.ok(ApiResponse.ok(
+            ScheduleResponse.from(result.getTrip(), result.getItems())));
+    }
+
+    /**
+     * 여행 삭제.
+     */
+    @DeleteMapping("/trips/{tripId}")
+    @Operation(summary = "여행 삭제", description = "여행과 관련된 모든 일정을 삭제한다.")
+    public ResponseEntity<Void> deleteTrip(
             @PathVariable String tripId,
             @AuthenticationPrincipal UserPrincipal principal) {
 
         String userId = resolveUserId(principal);
-        ScheduleResult result = tripService.getSchedule(tripId, userId);
-        return ResponseEntity.ok(ApiResponse.ok(
-            ScheduleResponse.from(result.getTrip(), result.getItems())));
+        tripService.deleteTrip(tripId, userId);
+        return ResponseEntity.noContent().build();
     }
 
     /**

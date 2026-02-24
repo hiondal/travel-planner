@@ -7,6 +7,7 @@ import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_spacing.dart';
 import '../../../../core/constants/app_typography.dart';
 import '../../../../core/routing/app_routes.dart';
+import '../../../../shared/widgets/app_alert_dialog.dart';
 import '../../../../shared/widgets/app_skeleton.dart';
 import '../../../../shared/widgets/app_snack_bar.dart';
 import '../../../../shared/widgets/status_badge.dart';
@@ -70,10 +71,56 @@ class _TripListView extends ConsumerWidget {
         itemCount: trips.length,
         separatorBuilder: (_, __) => const SizedBox(height: AppSpacing.spaceMd),
         itemBuilder: (context, index) {
-          return _TripCard(trip: trips[index]);
+          final trip = trips[index];
+          return Dismissible(
+            key: Key(trip.tripId),
+            direction: DismissDirection.endToStart,
+            background: Container(
+              alignment: Alignment.centerRight,
+              padding: const EdgeInsets.only(right: AppSpacing.spaceXl),
+              decoration: BoxDecoration(
+                color: AppColors.statusRed,
+                borderRadius: BorderRadius.circular(AppSpacing.radiusCard),
+              ),
+              child: const Icon(
+                Icons.delete_outline,
+                color: AppColors.textPrimary,
+                size: 28,
+              ),
+            ),
+            confirmDismiss: (_) => _confirmDelete(context, ref, trip),
+            child: _TripCard(trip: trip),
+          );
         },
       ),
     );
+  }
+
+  Future<bool> _confirmDelete(
+    BuildContext context,
+    WidgetRef ref,
+    Trip trip,
+  ) async {
+    final confirmed = await AppAlertDialog.show(
+      context,
+      title: '여행 삭제',
+      content: '\'${trip.tripName}\' 여행을 삭제할까요?\n관련된 모든 일정이 함께 삭제됩니다.',
+      confirmLabel: '삭제',
+      cancelLabel: '취소',
+      isDestructive: true,
+    );
+    if (confirmed != true) return false;
+
+    final notifier = ref.read(tripDeleteNotifierProvider.notifier);
+    final success = await notifier.deleteTrip(trip.tripId);
+    if (context.mounted) {
+      if (success) {
+        AppSnackBar.show(context, '\'${trip.tripName}\' 여행이 삭제되었습니다.');
+      } else {
+        AppSnackBar.showError(context, '여행 삭제에 실패했습니다.');
+      }
+    }
+    return false; // Dismissible 자체 삭제는 하지 않음 (provider가 목록 갱신)
   }
 }
 

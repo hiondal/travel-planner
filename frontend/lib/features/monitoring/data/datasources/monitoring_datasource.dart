@@ -32,6 +32,15 @@ class MonitoringDataSource {
     return PlaceStatus.fromJson(response.data!);
   }
 
+  /// POST /badges/{placeId}/refresh
+  /// 장소 상태 수동 새로고침 (백엔드: MNTR-03)
+  Future<PlaceStatus> refreshPlaceStatus(String placeId) async {
+    final response = await dio.post<Map<String, dynamic>>(
+      '/badges/$placeId/refresh',
+    );
+    return PlaceStatus.fromJson(response.data!);
+  }
+
   /// GET /badges?place_ids={placeId1},{placeId2},...
   /// 장소 상태 배지 목록 일괄 조회 (백엔드: MNTR-01)
   /// 변경: /monitor/trips/{tripId}/status → /badges?place_ids=...

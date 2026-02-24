@@ -3,6 +3,7 @@ package com.travelplanner.monitor.controller;
 import com.travelplanner.common.response.ApiResponse;
 import com.travelplanner.common.security.UserPrincipal;
 import com.travelplanner.monitor.domain.CollectionJob;
+import com.travelplanner.monitor.domain.MonitoringTarget;
 import com.travelplanner.monitor.domain.StatusBadge;
 import com.travelplanner.monitor.dto.internal.StatusDetail;
 import com.travelplanner.monitor.dto.request.CollectTriggerRequest;
@@ -18,6 +19,7 @@ import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -26,6 +28,7 @@ import org.springframework.web.bind.annotation.*;
 import java.time.LocalDateTime;
 import java.util.Arrays;
 import java.util.List;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 /**
@@ -44,9 +47,13 @@ public class MntrController {
 
     private final BadgeService badgeService;
     private final DataCollectionService dataCollectionService;
+    private final RedisTemplate<String, String> mntrRedisTemplate;
 
     @Value("${internal.service-key:}")
     private String internalServiceKey;
+
+    private static final String REFRESH_KEY_PREFIX = "mntr:refresh:";
+    private static final long REFRESH_COOLDOWN_SECONDS = 60;
 
     /**
      * MNTR-01: 장소별 상태 배지 목록 조회.
@@ -74,6 +81,36 @@ public class MntrController {
             @AuthenticationPrincipal UserPrincipal principal) {
 
         StatusDetail detail = badgeService.getStatusDetail(placeId);
+        return ResponseEntity.ok(ApiResponse.ok(StatusDetailResponse.from(detail)));
+    }
+
+    /**
+     * MNTR-03: 장소 상태 수동 새로고침.
+     */
+    @PostMapping("/badges/{placeId}/refresh")
+    @Operation(summary = "장소 상태 수동 새로고침",
+               description = "특정 장소의 외부 데이터를 즉시 수집하여 상태를 갱신한다. (60초 rate limit)")
+    public ResponseEntity<?> refreshPlaceStatus(
+            @PathVariable String placeId,
+            @AuthenticationPrincipal UserPrincipal principal) {
+
+        // Rate limit 체크 (setIfAbsent 원자적 연산)
+        String rateLimitKey = REFRESH_KEY_PREFIX + placeId;
+        Boolean acquired = mntrRedisTemplate.opsForValue()
+            .setIfAbsent(rateLimitKey, "1", REFRESH_COOLDOWN_SECONDS, TimeUnit.SECONDS);
+
+        if (Boolean.FALSE.equals(acquired)) {
+            return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS)
+                .body(java.util.Map.of(
+                    "error", "TOO_MANY_REQUESTS",
+                    "message", "잠시 후 다시 시도해주세요. (60초 간격)"));
+        }
+
+        // 모니터링 대상 조회 + 수집 + 상태 조회 (관심사 분리: 컨트롤러에서 오케스트레이션)
+        MonitoringTarget target = dataCollectionService.findTargetByPlaceId(placeId);
+        dataCollectionService.collectForTarget(target);
+        StatusDetail detail = badgeService.getStatusDetail(placeId);
+
         return ResponseEntity.ok(ApiResponse.ok(StatusDetailResponse.from(detail)));
     }
 

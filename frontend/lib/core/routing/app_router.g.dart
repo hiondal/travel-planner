@@ -6,7 +6,7 @@ part of 'app_router.dart';
 // RiverpodGenerator
 // **************************************************************************
 
-String _$appRouterHash() => r'158565d00879cd372c58feba4140f9379691f17d';
+String _$appRouterHash() => r'be184f6196e52513e4215e343739604f4cb91730';
 
 /// GoRouter 루트 정의 (전체 라우트 트리)
 /// ia.md 사이트맵 기반으로 라우트를 구성한다.

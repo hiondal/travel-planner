@@ -4,6 +4,7 @@ import com.travelplanner.schedule.domain.Trip;
 import com.travelplanner.schedule.dto.internal.ScheduleResult;
 import com.travelplanner.schedule.dto.request.CreateTripRequest;
 
+import java.time.LocalDate;
 import java.util.List;
 
 /**
@@ -21,4 +22,8 @@ public interface TripService {
     Trip getTrip(String tripId, String userId);
 
     ScheduleResult getSchedule(String tripId, String userId);
+
+    ScheduleResult getSchedule(String tripId, String userId, LocalDate date);
+
+    void deleteTrip(String tripId, String userId);
 }
