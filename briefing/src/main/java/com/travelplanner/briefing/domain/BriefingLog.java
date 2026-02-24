@@ -23,7 +23,7 @@ public class BriefingLog {
     @Column(name = "id", length = 36)
     private String id;
 
-    @Column(name = "briefing_id", nullable = false, length = 36)
+    @Column(name = "briefing_id", length = 36)
     private String briefingId;
 
     @Column(name = "user_id", nullable = false, length = 36)

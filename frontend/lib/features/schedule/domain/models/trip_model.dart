@@ -25,7 +25,7 @@ class Trip {
   factory Trip.fromJson(Map<String, dynamic> json) {
     return Trip(
       tripId: json['trip_id'] as String,
-      tripName: json['trip_name'] as String,
+      tripName: (json['trip_name'] ?? json['name']) as String,
       city: json['city'] as String,
       startDate: DateTime.parse(json['start_date'] as String),
       endDate: DateTime.parse(json['end_date'] as String),
@@ -67,7 +67,7 @@ class TripCreateRequest {
   final DateTime endDate;
 
   Map<String, dynamic> toJson() => {
-        'trip_name': tripName,
+        'name': tripName,
         'city': city,
         'start_date': startDate.toIso8601String().substring(0, 10),
         'end_date': endDate.toIso8601String().substring(0, 10),
@@ -80,10 +80,10 @@ class ScheduleItem {
     required this.scheduleItemId,
     required this.placeId,
     required this.placeName,
-    required this.category,
+    this.category = '',
     required this.scheduledAt,
-    required this.durationMinutes,
-    required this.status,
+    this.durationMinutes = 60,
+    this.status = StatusLevel.unknown,
     this.thumbnailUrl,
     this.address,
     this.lat,
@@ -103,12 +103,19 @@ class ScheduleItem {
   final double? lng;
 
   factory ScheduleItem.fromJson(Map<String, dynamic> json) {
+    // 백엔드 ScheduleItemResponse/ScheduleItemSummary 필드:
+    // visit_datetime, order, outside_business_hours
+    // category / duration_minutes / status 는 응답에 없으므로 기본값 사용
+    final visitDatetimeStr =
+        (json['visit_datetime'] ?? json['scheduled_at']) as String?;
     return ScheduleItem(
       scheduleItemId: json['schedule_item_id'] as String,
       placeId: json['place_id'] as String,
       placeName: json['place_name'] as String,
-      category: json['category'] as String,
-      scheduledAt: DateTime.parse(json['scheduled_at'] as String),
+      category: json['category'] as String? ?? '',
+      scheduledAt: visitDatetimeStr != null
+          ? DateTime.parse(visitDatetimeStr)
+          : DateTime.now(),
       durationMinutes: json['duration_minutes'] as int? ?? 60,
       status: StatusLevel.fromString(json['status'] as String? ?? 'unknown'),
       thumbnailUrl: json['thumbnail_url'] as String?,
@@ -123,20 +130,19 @@ class ScheduleItem {
 class ScheduleResponse {
   const ScheduleResponse({
     required this.tripId,
-    required this.targetDate,
-    required this.items,
+    required this.scheduleItems,
   });
 
   final String tripId;
-  final DateTime targetDate;
-  final List<ScheduleItem> items;
+  final List<ScheduleItem> scheduleItems;
 
   factory ScheduleResponse.fromJson(Map<String, dynamic> json) {
-    final list = json['items'] as List<dynamic>? ?? [];
+    // 백엔드 ScheduleResponse 필드: trip_id, name, city, schedule_items
+    final list =
+        (json['schedule_items'] ?? json['items']) as List<dynamic>? ?? [];
     return ScheduleResponse(
       tripId: json['trip_id'] as String,
-      targetDate: DateTime.parse(json['target_date'] as String),
-      items: list
+      scheduleItems: list
           .map((e) => ScheduleItem.fromJson(e as Map<String, dynamic>))
           .toList(),
     );
@@ -157,7 +163,15 @@ class AddScheduleItemRequest {
 
   Map<String, dynamic> toJson() => {
         'place_id': placeId,
-        'scheduled_at': scheduledAt.toIso8601String(),
-        'duration_minutes': durationMinutes,
+        'visit_datetime': scheduledAt.toIso8601String(),
+        'timezone': _formatTimezone(scheduledAt),
+        'force': false,
       };
+
+  static String _formatTimezone(DateTime dt) {
+    final offset = dt.timeZoneOffset;
+    final h = offset.inHours.abs().toString().padLeft(2, '0');
+    final m = (offset.inMinutes.abs() % 60).toString().padLeft(2, '0');
+    return offset.isNegative ? '-$h:$m' : '+$h:$m';
+  }
 }

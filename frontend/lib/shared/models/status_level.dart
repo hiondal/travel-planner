@@ -58,10 +58,12 @@ enum StatusLevel {
       };
 
   /// JSON 값에서 변환
-  static StatusLevel fromString(String value) => switch (value) {
-        'SAFE' || 'safe' || 'green' => StatusLevel.safe,
-        'CAUTION' || 'caution' || 'yellow' => StatusLevel.caution,
-        'DANGER' || 'danger' || 'red' => StatusLevel.danger,
+  /// 백엔드 overall_status: GREEN|YELLOW|RED|GREY
+  /// 백엔드 detail status: NORMAL|WARNING|DANGER
+  static StatusLevel fromString(String value) => switch (value.toUpperCase()) {
+        'SAFE' || 'GREEN' || 'NORMAL' => StatusLevel.safe,
+        'CAUTION' || 'YELLOW' || 'WARNING' => StatusLevel.caution,
+        'DANGER' || 'RED' => StatusLevel.danger,
         _ => StatusLevel.unknown,
       };
 }

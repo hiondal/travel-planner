@@ -1,6 +1,9 @@
 spring:
   application:
     name: place-service-test
+  autoconfigure:
+    exclude:
+      - org.springframework.boot.autoconfigure.data.redis.RedisRepositoriesAutoConfiguration
 
   datasource:
     url: jdbc:h2:mem:testdb;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE;MODE=PostgreSQL
@@ -24,6 +27,11 @@ spring:
 
 server:
   port: 0
+
+jwt:
+  secret: test-secret-key-must-be-at-least-32-chars-long-for-hmac
+  access-token-validity: 1800
+  refresh-token-validity: 86400
 
 google:
   places:

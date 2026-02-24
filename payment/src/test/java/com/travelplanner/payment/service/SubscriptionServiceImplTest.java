@@ -199,22 +199,24 @@ class SubscriptionServiceImplTest {
     // ========================== getSubscriptionStatus ==========================
 
     @Test
-    @DisplayName("구독 상태 조회 - 캐시 히트")
-    void getSubscriptionStatus_cacheHit() {
-        // Given
-        given(hashOperations.get(anyString(), eq("tier"))).willReturn("PRO");
-        given(hashOperations.get(anyString(), eq("status"))).willReturn("ACTIVE");
-        given(hashOperations.get(anyString(), eq("subscriptionId"))).willReturn("sub-cached-001");
+    @DisplayName("구독 상태 조회 - DB에서 구독 존재하는 경우 캐시 저장 후 반환")
+    void getSubscriptionStatus_dbHitAndCacheStore() {
+        // Given — 현재 구현은 항상 DB를 조회하므로 캐시 히트 시나리오가 아닌
+        // DB 조회 + 캐시 저장 동작을 검증한다.
+        Subscription sub = Subscription.create("sub-cached-001", USER_ID, PLAN_PRO,
+                SubscriptionTier.PRO, "APPLE", "txn_cached_001");
+        given(subscriptionRepository.findByUserId(USER_ID)).willReturn(Optional.of(sub));
+        given(redisTemplate.expire(anyString(), anyLong(), any(TimeUnit.class))).willReturn(true);
+        doNothing().when(hashOperations).putAll(anyString(), anyMap());
 
         // When
         SubscriptionStatus status = subscriptionService.getSubscriptionStatus(USER_ID);
 
         // Then
         assertThat(status.getTier()).isEqualTo(SubscriptionTier.PRO);
-        assertThat(status.getStatus()).isEqualTo(SubscriptionStatusEnum.ACTIVE);
         assertThat(status.getSubscriptionId()).isEqualTo("sub-cached-001");
 
-        then(subscriptionRepository).should(never()).findByUserId(any());
+        then(subscriptionRepository).should().findByUserId(USER_ID);
     }
 
     @Test

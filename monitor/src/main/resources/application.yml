@@ -45,6 +45,9 @@ google:
     api-key: ${GOOGLE_DIRECTIONS_API_KEY:}
     base-url: ${GOOGLE_DIRECTIONS_BASE_URL:https://maps.googleapis.com/maps/api}
 
+internal:
+  service-key: ${INTERNAL_SERVICE_KEY:}
+
 monitor:
   collection:
     window-hours: 2

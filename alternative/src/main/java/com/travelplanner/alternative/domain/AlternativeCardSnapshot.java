@@ -28,10 +28,10 @@ public class AlternativeCardSnapshot {
     @Column(name = "candidate_place_id", nullable = false, length = 200)
     private String candidatePlaceId;
 
-    @Column(name = "score_weights", nullable = false, columnDefinition = "jsonb")
+    @Column(name = "score_weights", nullable = false, columnDefinition = "text")
     private String scoreWeights;
 
-    @Column(name = "scores", nullable = false, columnDefinition = "jsonb")
+    @Column(name = "scores", nullable = false, columnDefinition = "text")
     private String scores;
 
     @Column(name = "exposed_at", nullable = false)

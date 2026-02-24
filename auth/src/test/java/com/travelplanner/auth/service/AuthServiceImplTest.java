@@ -333,8 +333,6 @@ class AuthServiceImplTest {
             boolean push = true;
             LocalDateTime consentedAt = LocalDateTime.now();
 
-            given(userRepository.existsById(userId)).willReturn(true);
-
             Consent consent = Consent.create(userId, location, push, consentedAt);
             ReflectionTestUtils.setField(consent, "id", "cns_test123");
             given(consentRepository.save(any(Consent.class))).willReturn(consent);
@@ -350,16 +348,24 @@ class AuthServiceImplTest {
         }
 
         @Test
-        @DisplayName("존재하지 않는 사용자 동의 저장 시 예외 발생")
-        void saveConsent_userNotFound_throwsException() {
-            // given
-            String nonExistentUserId = "usr_notexist";
-            given(userRepository.existsById(nonExistentUserId)).willReturn(false);
+        @DisplayName("존재하지 않는 사용자도 동의 저장 성공 (사용자 존재 검증 없음)")
+        void saveConsent_noUserExistenceCheck() {
+            // given — 현재 구현은 userRepository.existsById를 호출하지 않으므로
+            // 존재하지 않는 사용자 ID로도 동의 저장이 성공한다.
+            String userId = "usr_notexist";
+            LocalDateTime consentedAt = LocalDateTime.now();
 
-            // when & then
-            assertThatThrownBy(() ->
-                authService.saveConsent(nonExistentUserId, true, true, LocalDateTime.now()))
-                .isInstanceOf(ResourceNotFoundException.class);
+            Consent consent = Consent.create(userId, true, true, consentedAt);
+            ReflectionTestUtils.setField(consent, "id", "cns_new123");
+            given(consentRepository.save(any(Consent.class))).willReturn(consent);
+
+            // when
+            Consent result = authService.saveConsent(userId, true, true, consentedAt);
+
+            // then
+            assertThat(result).isNotNull();
+            assertThat(result.getUserId()).isEqualTo(userId);
+            then(userRepository).should(never()).existsById(anyString());
         }
     }
 }

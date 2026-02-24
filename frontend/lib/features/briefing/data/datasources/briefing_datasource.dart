@@ -2,16 +2,18 @@ import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
+import '../../../../core/config/app_config.dart';
 import '../../../../core/network/dio_client.dart';
 import '../../domain/models/briefing_model.dart';
 
 part 'briefing_datasource.g.dart';
 
 /// Briefing Service DataSource
-/// Prism Mock: http://localhost:4014
+// 변경: Prism Mock(http://localhost:4010) → BRIF 서비스(http://localhost:8085/api/v1)
+// dioClientProvider(ApiService.briefing) 주입으로 포트 분리
 @riverpod
 BriefingDataSource briefingDataSource(Ref ref) {
-  final dio = ref.watch(dioClientProvider);
+  final dio = ref.watch(dioClientProvider(ApiService.briefing));
   return BriefingDataSource(dio: dio);
 }
 

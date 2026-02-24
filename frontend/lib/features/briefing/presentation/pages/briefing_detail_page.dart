@@ -68,6 +68,7 @@ class _BriefingDetailBody extends StatelessWidget {
     final dateFormat = DateFormat('yyyy년 MM월 dd일 HH:mm', 'ko');
     final isActionNeeded = briefing.overallStatus == StatusLevel.caution ||
         briefing.overallStatus == StatusLevel.danger;
+    final content = briefing.content;
     final isExpired = briefing.isExpired;
 
     return SingleChildScrollView(
@@ -87,7 +88,7 @@ class _BriefingDetailBody extends StatelessWidget {
                   ),
                 ),
               ),
-              StatusBadge(level: briefing.overallStatus),
+              StatusBadge(level: briefing.overallStatus ?? StatusLevel.unknown),
             ],
           ),
           const SizedBox(height: AppSpacing.spaceBase),
@@ -123,14 +124,14 @@ class _BriefingDetailBody extends StatelessWidget {
 
           // 요약 텍스트
           Text(
-            briefing.summary,
+            briefing.summary ?? briefing.placeName,
             style: AppTypography.bodyLarge.copyWith(
               color: AppColors.textPrimary,
             ),
           ),
 
-          // 세부 상태
-          if (briefing.details != null) ...[
+          // 세부 상태 (content가 있을 때만)
+          if (content != null) ...[
             const SizedBox(height: AppSpacing.spaceXl),
             Text(
               '상세 현황',
@@ -139,26 +140,30 @@ class _BriefingDetailBody extends StatelessWidget {
               ),
             ),
             const SizedBox(height: AppSpacing.spaceMd),
-            _DetailItemRow(
-              icon: Icons.wb_sunny_outlined,
-              label: '날씨',
-              detail: briefing.details!.weather,
-            ),
-            _DetailItemRow(
-              icon: Icons.people_outline,
-              label: '혼잡도',
-              detail: briefing.details!.crowding,
-            ),
-            _DetailItemRow(
-              icon: Icons.access_time_outlined,
-              label: '영업시간',
-              detail: briefing.details!.businessHours,
-            ),
-            _DetailItemRow(
-              icon: Icons.directions_car_outlined,
-              label: '교통',
-              detail: briefing.details!.traffic,
-            ),
+            if (content.weather != null)
+              _SimpleDetailRow(
+                icon: Icons.wb_sunny_outlined,
+                label: '날씨',
+                value: content.weather!,
+              ),
+            if (content.congestion != null)
+              _SimpleDetailRow(
+                icon: Icons.people_outline,
+                label: '혼잡도',
+                value: content.congestion!,
+              ),
+            if (content.businessStatus != null)
+              _SimpleDetailRow(
+                icon: Icons.access_time_outlined,
+                label: '영업시간',
+                value: content.businessStatus!,
+              ),
+            if (content.travelTime != null)
+              _SimpleDetailRow(
+                icon: Icons.directions_car_outlined,
+                label: '이동 시간',
+                value: '도보 ${content.travelTime!['walking_minutes'] ?? '-'}분',
+              ),
           ],
 
           const SizedBox(height: AppSpacing.space2xl),
@@ -246,6 +251,56 @@ class _DetailItemRow extends StatelessWidget {
               ),
             const SizedBox(width: AppSpacing.spaceSm),
             StatusBadge(level: detail.status),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _SimpleDetailRow extends StatelessWidget {
+  const _SimpleDetailRow({
+    required this.icon,
+    required this.label,
+    required this.value,
+  });
+
+  final IconData icon;
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: AppSpacing.spaceMd),
+      child: Container(
+        padding: const EdgeInsets.all(AppSpacing.spaceMd),
+        decoration: BoxDecoration(
+          color: AppColors.bgCard,
+          borderRadius: BorderRadius.circular(AppSpacing.radiusButton),
+        ),
+        child: Row(
+          children: [
+            Icon(icon, size: 20, color: AppColors.textSecondary),
+            const SizedBox(width: AppSpacing.spaceSm),
+            Text(
+              label,
+              style: AppTypography.bodyMedium.copyWith(
+                color: AppColors.textPrimary,
+              ),
+            ),
+            const Spacer(),
+            Flexible(
+              child: Text(
+                value,
+                style: AppTypography.bodySmall.copyWith(
+                  color: AppColors.textSecondary,
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                textAlign: TextAlign.end,
+              ),
+            ),
           ],
         ),
       ),

@@ -13,6 +13,9 @@ import com.travelplanner.schedule.dto.response.*;
 import com.travelplanner.schedule.service.ScheduleItemService;
 import com.travelplanner.schedule.service.TripService;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Schema;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -109,6 +112,12 @@ public class SchdController {
      */
     @PostMapping("/trips/{tripId}/schedule-items")
     @Operation(summary = "장소 추가", description = "일정에 장소를 추가한다.")
+    @ApiResponses({
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "201", description = "장소 추가 성공",
+            content = @Content(schema = @Schema(implementation = ScheduleItemResponse.class))),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "영업시간 외 경고",
+            content = @Content(schema = @Schema(implementation = BusinessHoursWarningResponse.class)))
+    })
     public ResponseEntity<?> addScheduleItem(
             @PathVariable String tripId,
             @Valid @RequestBody AddScheduleItemRequest request,

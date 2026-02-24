@@ -42,7 +42,7 @@ class AuthRepository {
         secureStorage.saveRefreshToken(response.refreshToken),
       ]);
       return response.userProfile;
-    } on AppException {
+    } on ApiException {
       rethrow;
     }
   }
@@ -51,16 +51,14 @@ class AuthRepository {
   /// 서버 토큰 폐기 후 로컬 토큰 삭제
   Future<void> logout() async {
     try {
-      await dataSource.logout();
+      final refreshToken = await secureStorage.getRefreshToken();
+      if (refreshToken != null) {
+        await dataSource.logout(refreshToken);
+      }
     } catch (_) {
       // 서버 오류여도 로컬 토큰은 반드시 삭제
     } finally {
       await secureStorage.clearTokens();
     }
-  }
-
-  /// 현재 사용자 프로필 조회
-  Future<UserProfile> getMe() async {
-    return dataSource.getMe();
   }
 }

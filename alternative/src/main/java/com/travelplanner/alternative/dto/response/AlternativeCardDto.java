@@ -14,6 +14,9 @@ public class AlternativeCardDto {
     @JsonProperty("alt_id")
     private final String altId;
 
+    @JsonProperty("rank")
+    private final int rank;
+
     @JsonProperty("place_id")
     private final String placeId;
 
@@ -41,8 +44,9 @@ public class AlternativeCardDto {
     @JsonProperty("travel_time")
     private final TravelTimeDto travelTime;
 
-    private AlternativeCardDto(Alternative alternative) {
+    private AlternativeCardDto(Alternative alternative, int rank) {
         this.altId = alternative.getId();
+        this.rank = rank;
         this.placeId = alternative.getPlaceId();
         this.name = alternative.getName();
         this.distanceM = alternative.getDistanceM();
@@ -55,7 +59,11 @@ public class AlternativeCardDto {
     }
 
     public static AlternativeCardDto from(Alternative alternative) {
-        return new AlternativeCardDto(alternative);
+        return new AlternativeCardDto(alternative, 0);
+    }
+
+    public static AlternativeCardDto from(Alternative alternative, int rank) {
+        return new AlternativeCardDto(alternative, rank);
     }
 
     @Getter

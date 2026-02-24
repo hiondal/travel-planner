@@ -1,6 +1,8 @@
 package com.travelplanner.schedule.dto.request;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
+import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
+import com.travelplanner.schedule.dto.request.deserializer.FlexibleLocalDateTimeDeserializer;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import lombok.Getter;
@@ -24,6 +26,7 @@ public class AddScheduleItemRequest {
 
     @NotNull(message = "방문 일시는 필수입니다.")
     @JsonProperty("visit_datetime")
+    @JsonDeserialize(using = FlexibleLocalDateTimeDeserializer.class)
     private LocalDateTime visitDatetime;
 
     @NotBlank(message = "타임존은 필수입니다.")

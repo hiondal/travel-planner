@@ -9,6 +9,7 @@ import com.travelplanner.alternative.dto.request.AlternativeSearchRequest;
 import com.travelplanner.alternative.dto.request.SelectAlternativeRequest;
 import com.travelplanner.alternative.service.AlternativeService;
 import com.travelplanner.common.enums.SubscriptionTier;
+import com.travelplanner.common.security.JwtProvider;
 import com.travelplanner.common.exception.GlobalExceptionHandler;
 import com.travelplanner.common.exception.ResourceNotFoundException;
 import com.travelplanner.common.security.UserPrincipal;
@@ -45,6 +46,9 @@ class AltnControllerTest {
 
     @Autowired
     private ObjectMapper objectMapper;
+
+    @MockitoBean
+    private JwtProvider jwtProvider;
 
     @MockitoBean
     private AlternativeService alternativeService;
@@ -85,7 +89,7 @@ class AltnControllerTest {
                             .content(requestBody))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.data.original_place_id").value("place_001"))
-                    .andExpect(jsonPath("$.data.cards").isArray());
+                    .andExpect(jsonPath("$.data.alternatives").isArray());
         }
 
         @Test

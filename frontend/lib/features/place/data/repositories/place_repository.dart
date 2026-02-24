@@ -20,13 +20,11 @@ class PlaceRepository {
 
   Future<List<Place>> searchPlaces({
     required String keyword,
-    String? city,
-    String? category,
+    String city = '',
   }) async {
     final response = await dataSource.searchPlaces(
       keyword: keyword,
       city: city,
-      category: category,
     );
     return response.places;
   }

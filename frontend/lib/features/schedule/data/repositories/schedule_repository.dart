@@ -48,7 +48,7 @@ class ScheduleRepository {
     DateTime? targetDate,
   }) async {
     final response = await dataSource.getSchedule(tripId, targetDate: targetDate);
-    return response.items;
+    return response.scheduleItems;
   }
 
   Future<ScheduleItem> addScheduleItem({
@@ -74,10 +74,11 @@ class ScheduleRepository {
     await dataSource.deleteScheduleItem(tripId, scheduleItemId);
   }
 
-  Future<void> reorderScheduleItems(
+  Future<Map<String, dynamic>> replaceScheduleItem(
     String tripId,
-    List<String> orderedItemIds,
+    String itemId,
+    String newPlaceId,
   ) async {
-    await dataSource.reorderScheduleItems(tripId, orderedItemIds);
+    return dataSource.replaceScheduleItem(tripId, itemId, newPlaceId);
   }
 }

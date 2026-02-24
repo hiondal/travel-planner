@@ -1,12 +1,18 @@
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:google_sign_in/google_sign_in.dart';
+
+import '../../data/google_auth_web_helper.dart';
 
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_spacing.dart';
 import '../../../../core/constants/app_typography.dart';
 import '../../../../core/routing/app_routes.dart';
 import '../../../../core/utils/secure_storage.dart';
+import '../../../../shared/models/subscription_tier.dart';
+import '../../../../shared/providers/app_user_provider.dart';
 import '../../../../shared/widgets/app_snack_bar.dart';
 import '../providers/auth_provider.dart';
 
@@ -23,15 +29,44 @@ class _LoginPageState extends ConsumerState<LoginPage> {
   bool _isGoogleLoading = false;
   bool _isAppleLoading = false;
 
-  /// Prism Mock 환경: 실제 OAuth 없이 stub token으로 로그인 처리
+  /// Google OAuth 실제 로그인
   Future<void> _handleGoogleLogin() async {
     setState(() => _isGoogleLoading = true);
     try {
-      // Prism Mock: stub oauth_code로 직접 호출
+      String oauthCode;
+
+      if (kIsWeb) {
+        // Web: GIS 직접 호출 (google_sign_in 플러그인의 People API 의존성 우회)
+        const clientId = '1052974040617-bhirm9gls5h3vgias0nqmhe7lkai1rf3.apps.googleusercontent.com';
+        final token = await triggerGoogleSignInWeb(clientId);
+        if (token == null) {
+          if (mounted) setState(() => _isGoogleLoading = false);
+          return;
+        }
+        oauthCode = token;
+      } else {
+        // Mobile: google_sign_in 패키지 사용
+        final googleSignIn = GoogleSignIn(scopes: ['email', 'profile']);
+        final account = await googleSignIn.signIn();
+        if (account == null) {
+          if (mounted) setState(() => _isGoogleLoading = false);
+          return;
+        }
+        final auth = await account.authentication;
+        oauthCode = account.serverAuthCode
+            ?? auth.idToken
+            ?? auth.accessToken
+            ?? '';
+      }
+
+      if (oauthCode.isEmpty) {
+        throw Exception('Google 인증 코드를 가져올 수 없습니다.');
+      }
+
       final notifier = ref.read(socialLoginNotifierProvider.notifier);
       final isNewUser = await notifier.login(
         provider: 'google',
-        oauthCode: 'mock_google_code_for_prism',
+        oauthCode: oauthCode,
       );
       if (!mounted) return;
       if (isNewUser) {
@@ -71,11 +106,20 @@ class _LoginPageState extends ConsumerState<LoginPage> {
     }
   }
 
-  /// 개발 환경 전용: 토큰 stub으로 바이패스
+  /// 개발 환경 전용: 유효한 JWT로 바이패스
   Future<void> _handleDevBypass() async {
+    // HS256 JWT signed with dev secret, 1-year expiry
+    const devToken = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.'
+        'eyJzdWIiOiJkZXYtdXNlciIsImVtYWlsIjoiZGV2QHRlc3QuY29tIiwidGllciI6IlBSTyIsImlhdCI6MTc3MTkzNjk4OSwiZXhwIjoxODAzNDcyOTg5fQ.'
+        '0v53MnXAf5_u1iSpHrvBBRG-PnWXFdHAn29u3pJVVog';
     final storage = ref.read(secureStorageProvider);
-    await storage.saveAccessToken('dev_stub_access_token');
-    await storage.saveRefreshToken('dev_stub_refresh_token');
+    await storage.saveAccessToken(devToken);
+    await storage.saveRefreshToken(devToken);
+    ref.read(appUserProvider.notifier).signIn(
+      userId: 'dev-user',
+      email: 'dev@test.com',
+      tier: SubscriptionTier.pro,
+    );
     if (mounted) context.goNamed(AppRoutes.tripListName);
   }
 

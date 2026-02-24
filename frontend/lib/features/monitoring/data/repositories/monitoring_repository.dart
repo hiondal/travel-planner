@@ -22,7 +22,7 @@ class MonitoringRepository {
     return dataSource.getPlaceStatus(placeId);
   }
 
-  Future<Map<String, dynamic>> getTripStatus(String tripId) async {
-    return dataSource.getTripStatus(tripId);
+  Future<Map<String, dynamic>> getBadges(List<String> placeIds) async {
+    return dataSource.getBadges(placeIds);
   }
 }

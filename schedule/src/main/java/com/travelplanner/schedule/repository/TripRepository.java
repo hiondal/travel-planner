@@ -16,8 +16,9 @@ import java.util.Optional;
  */
 public interface TripRepository extends JpaRepository<Trip, String> {
 
-    Optional<Trip> findByIdAndUserId(String id, String userId);
+    @Query("SELECT t FROM Trip t LEFT JOIN FETCH t.scheduleItems WHERE t.id = :id AND t.userId = :userId")
+    Optional<Trip> findByIdAndUserId(@Param("id") String id, @Param("userId") String userId);
 
-    @Query("SELECT t FROM Trip t WHERE t.userId = :userId ORDER BY t.createdAt DESC")
+    @Query("SELECT DISTINCT t FROM Trip t LEFT JOIN FETCH t.scheduleItems WHERE t.userId = :userId ORDER BY t.createdAt DESC")
     List<Trip> findByUserIdOrderByCreatedAtDesc(@Param("userId") String userId);
 }

@@ -10,7 +10,6 @@ import '../../features/briefing/presentation/pages/alternative_card_page.dart';
 import '../../features/briefing/presentation/pages/briefing_detail_page.dart';
 import '../../features/briefing/presentation/pages/briefing_list_page.dart';
 import '../../features/briefing/presentation/pages/paywall_page.dart';
-import '../../features/monitoring/presentation/widgets/status_detail_sheet.dart';
 import '../../features/payment/presentation/pages/payment_checkout_page.dart';
 import '../../features/payment/presentation/pages/payment_success_page.dart';
 import '../../features/profile/presentation/pages/location_consent_page.dart';
@@ -111,7 +110,19 @@ GoRouter appRouter(Ref ref) {
                     name: AppRoutes.scheduleDetailName,
                     builder: (context, state) {
                       final tripId = state.pathParameters['tripId']!;
-                      return ScheduleDetailPage(tripId: tripId);
+                      final startDateStr = state.uri.queryParameters['startDate'];
+                      final endDateStr = state.uri.queryParameters['endDate'];
+                      final startDate = startDateStr != null
+                          ? DateTime.parse(startDateStr)
+                          : DateTime.now();
+                      final endDate = endDateStr != null
+                          ? DateTime.parse(endDateStr)
+                          : DateTime.now().add(const Duration(days: 6));
+                      return ScheduleDetailPage(
+                        tripId: tripId,
+                        startDate: startDate,
+                        endDate: endDate,
+                      );
                     },
                     routes: [
                       GoRoute(
@@ -119,7 +130,11 @@ GoRouter appRouter(Ref ref) {
                         name: AppRoutes.placeSearchName,
                         builder: (context, state) {
                           final tripId = state.pathParameters['tripId']!;
-                          return PlaceSearchPage(tripId: tripId);
+                          return PlaceSearchPage(
+                            tripId: tripId,
+                            startDate: state.uri.queryParameters['startDate'],
+                            endDate: state.uri.queryParameters['endDate'],
+                          );
                         },
                         routes: [
                           GoRoute(
@@ -129,9 +144,15 @@ GoRouter appRouter(Ref ref) {
                               final tripId = state.pathParameters['tripId']!;
                               final placeId =
                                   state.uri.queryParameters['placeId'];
+                              final startDateStr =
+                                  state.uri.queryParameters['startDate'];
+                              final endDateStr =
+                                  state.uri.queryParameters['endDate'];
                               return PlaceTimePickerPage(
                                 tripId: tripId,
                                 placeId: placeId,
+                                startDate: startDateStr,
+                                endDate: endDateStr,
                               );
                             },
                           ),

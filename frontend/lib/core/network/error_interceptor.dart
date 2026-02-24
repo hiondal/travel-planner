@@ -5,6 +5,18 @@ import 'api_exception.dart';
 /// HTTP 에러를 AppException으로 변환하는 인터셉터
 /// 모든 네트워크 오류를 통일된 ApiException 타입으로 래핑한다.
 class ErrorInterceptor extends Interceptor {
+  /// 백엔드 공통 응답 래퍼 {"success":true,"data":{...}} 에서 data 필드를 언래핑
+  @override
+  void onResponse(Response response, ResponseInterceptorHandler handler) {
+    final data = response.data;
+    if (data is Map<String, dynamic> &&
+        data.containsKey('success') &&
+        data.containsKey('data')) {
+      response.data = data['data'];
+    }
+    handler.next(response);
+  }
+
   @override
   void onError(DioException err, ErrorInterceptorHandler handler) {
     final exception = _mapToApiException(err);

@@ -63,7 +63,7 @@ public class BriefingServiceImpl implements BriefingService {
     @Override
     @Transactional
     public GenerateBriefingResult generateBriefing(GenerateBriefingRequest request) {
-        String idempotencyKey = buildIdempotencyKey(request.getPlaceId(), request.getDepartureTime());
+        String idempotencyKey = buildIdempotencyKey(request.getScheduleItemId(), request.getPlaceId(), request.getDepartureTime());
         log.info("브리핑 생성 시작: userId={}, placeId={}, idempotencyKey={}", request.getUserId(), request.getPlaceId(), idempotencyKey);
 
         // 멱등성 체크
@@ -140,8 +140,12 @@ public class BriefingServiceImpl implements BriefingService {
 
     @Override
     public Briefing getBriefing(String briefingId, String userId) {
-        return briefingRepository.findByIdAndUserId(briefingId, userId)
+        Briefing briefing = briefingRepository.findById(briefingId)
                 .orElseThrow(() -> new ResourceNotFoundException("BRIEFING", briefingId));
+        if (!briefing.getUserId().equals(userId)) {
+            throw new BusinessException("FORBIDDEN", "해당 브리핑에 접근 권한이 없습니다.", 403);
+        }
+        return briefing;
     }
 
     @Override
@@ -151,20 +155,28 @@ public class BriefingServiceImpl implements BriefingService {
     }
 
     private Optional<Briefing> checkIdempotency(String idempotencyKey) {
-        String cachedId = redisTemplate.opsForValue().get(CACHE_IDEM_PREFIX + idempotencyKey);
-        if (cachedId != null) {
-            return briefingRepository.findById(cachedId);
+        try {
+            String cachedId = redisTemplate.opsForValue().get(CACHE_IDEM_PREFIX + idempotencyKey);
+            if (cachedId != null) {
+                return briefingRepository.findById(cachedId);
+            }
+        } catch (Exception e) {
+            log.warn("Redis 멱등성 캐시 조회 실패: key={}, error={}", idempotencyKey, e.getMessage());
         }
         return briefingRepository.findByIdempotencyKey(idempotencyKey);
     }
 
     private boolean checkFreeTierLimit(String userId) {
-        String countKey = CACHE_COUNT_PREFIX + userId + ":" + LocalDate.now();
-        String countStr = redisTemplate.opsForValue().get(countKey);
-        int count = countStr != null ? Integer.parseInt(countStr) : 0;
+        try {
+            String countKey = CACHE_COUNT_PREFIX + userId + ":" + LocalDate.now();
+            String countStr = redisTemplate.opsForValue().get(countKey);
+            int count = countStr != null ? Integer.parseInt(countStr) : 0;
 
-        if (count < freeTierDailyLimit) {
-            return true;
+            if (count < freeTierDailyLimit) {
+                return true;
+            }
+        } catch (Exception e) {
+            log.warn("Redis 브리핑 카운트 조회 실패: userId={}, error={}", userId, e.getMessage());
         }
         // DB에서 재확인
         int dbCount = briefingRepository.countByUserIdAndCreatedAtDate(userId, LocalDate.now());
@@ -200,10 +212,10 @@ public class BriefingServiceImpl implements BriefingService {
         return statusLevel == StatusLevel.SAFE ? BriefingType.SAFE : BriefingType.WARNING;
     }
 
-    private String buildIdempotencyKey(String placeId, LocalDateTime departureTime) {
-        // 출발 시간을 시간 단위로 정규화 (분/초 제거)
+    private String buildIdempotencyKey(String scheduleItemId, String placeId, LocalDateTime departureTime) {
+        // 일정 아이템 ID + 장소 ID + 출발 시간(시간 단위 정규화)으로 멱등성 키 생성
         String normalizedTime = departureTime.format(DateTimeFormatter.ofPattern("yyyyMMddHH"));
-        return placeId + ":" + normalizedTime;
+        return scheduleItemId + ":" + placeId + ":" + normalizedTime;
     }
 
     private void cacheIdempotencyKey(String idempotencyKey, String briefingId) {

@@ -36,16 +36,19 @@
           <entry key="CORS_ALLOWED_ORIGINS" value="http://localhost:3000" />
 
           <!-- Google Places API -->
-          <entry key="GOOGLE_PLACES_API_KEY" value="your-google-places-api-key" />
+          <entry key="GOOGLE_PLACES_API_KEY" value="AIzaSyB_RJusBzOhFU-wZT92YSr5VcG9YUAy2sE" />
           <entry key="GOOGLE_PLACES_BASE_URL" value="https://maps.googleapis.com/maps/api" />
 
           <!-- Google Directions API -->
-          <entry key="GOOGLE_DIRECTIONS_API_KEY" value="your-google-directions-api-key" />
+          <entry key="GOOGLE_DIRECTIONS_API_KEY" value="AIzaSyB_RJusBzOhFU-wZT92YSr5VcG9YUAy2sE" />
           <entry key="GOOGLE_DIRECTIONS_BASE_URL" value="https://maps.googleapis.com/maps/api" />
 
           <!-- OpenWeatherMap API -->
           <entry key="OPENWEATHERMAP_API_KEY" value="your-openweathermap-api-key" />
           <entry key="OPENWEATHERMAP_BASE_URL" value="https://api.openweathermap.org/data/2.5" />
+
+          <!-- 내부 서비스 키 (서비스 간 통신용) -->
+          <entry key="INTERNAL_SERVICE_KEY" value="e2e-internal-service-key" />
 
           <!-- Azure App Configuration (로컬 개발 시 미사용) -->
           <entry key="AZURE_APP_CONFIG_ENDPOINT" value="" />

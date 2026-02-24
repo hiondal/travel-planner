@@ -70,8 +70,6 @@ class ScheduleItemDeleteNotifier extends _$ScheduleItemDeleteNotifier {
             tripId,
             scheduleItemId,
           );
-      // 일정표 캐시 무효화
-      ref.invalidate(scheduleProvider(tripId));
     });
   }
 }
@@ -96,7 +94,8 @@ class ScheduleItemAddNotifier extends _$ScheduleItemAddNotifier {
             scheduledAt: scheduledAt,
             durationMinutes: durationMinutes,
           );
-      ref.invalidate(scheduleProvider(tripId));
+      final targetDate = DateTime(scheduledAt.year, scheduledAt.month, scheduledAt.day);
+      ref.invalidate(scheduleProvider(tripId, targetDate: targetDate));
       return item;
     });
     state = result;

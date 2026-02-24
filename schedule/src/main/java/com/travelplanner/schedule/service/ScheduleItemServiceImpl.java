@@ -112,7 +112,7 @@ public class ScheduleItemServiceImpl implements ScheduleItemService {
     @Override
     @Transactional
     public void deleteScheduleItem(String tripId, String itemId, String userId) {
-        tripRepository.findByIdAndUserId(tripId, userId)
+        Trip trip = tripRepository.findByIdAndUserId(tripId, userId)
             .orElseThrow(() -> new ResourceNotFoundException("NOT_FOUND",
                 "여행을 찾을 수 없습니다. tripId: " + tripId));
 
@@ -121,7 +121,7 @@ public class ScheduleItemServiceImpl implements ScheduleItemService {
                 "일정 아이템을 찾을 수 없습니다. itemId: " + itemId));
 
         String placeId = item.getPlaceId();
-        scheduleItemRepository.deleteById(itemId);
+        trip.getScheduleItems().removeIf(si -> si.getId().equals(itemId));
         log.info("일정 장소 삭제 완료 - itemId: {}, tripId: {}", itemId, tripId);
 
         eventPublisher.publishEvent(new ScheduleItemDeletedEvent(itemId, placeId, tripId));

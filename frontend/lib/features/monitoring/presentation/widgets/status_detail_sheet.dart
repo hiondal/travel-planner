@@ -205,17 +205,17 @@ class _StatusBody extends StatelessWidget {
         _StatusDetailItem(
           icon: Icons.people_outline,
           label: '혼잡도',
-          detail: status.crowding,
+          detail: status.congestion,
         ),
         _StatusDetailItem(
           icon: Icons.access_time_outlined,
           label: '영업시간',
-          detail: status.businessHours,
+          detail: status.businessStatus,
         ),
         _StatusDetailItem(
           icon: Icons.directions_car_outlined,
           label: '교통',
-          detail: status.traffic,
+          detail: status.travelTime,
         ),
 
         // 판정 사유

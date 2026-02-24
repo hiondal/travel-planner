@@ -283,7 +283,7 @@ class _PlanCard extends StatelessWidget {
               Padding(
                 padding: const EdgeInsets.only(bottom: 2),
                 child: Text(
-                  plan.billingPeriod == 'monthly' ? '/월' : '/1회 여행',
+                  (plan.billingPeriod == 'monthly' || plan.billingPeriod == '월') ? '/월' : '/1회 여행',
                   style: AppTypography.bodySmall.copyWith(
                     color: AppColors.textSecondary,
                   ),

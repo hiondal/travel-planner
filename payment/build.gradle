@@ -9,4 +9,5 @@ dependencies {
     implementation 'org.springframework.boot:spring-boot-starter-aop'
     runtimeOnly 'org.postgresql:postgresql'
     testImplementation 'org.testcontainers:postgresql'
+    testRuntimeOnly 'com.h2database:h2'
 }

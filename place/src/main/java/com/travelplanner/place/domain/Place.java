@@ -54,7 +54,7 @@ public class Place {
     @Column(name = "name", nullable = false, length = 200)
     private String name;
 
-    @Column(name = "address", length = 500)
+    @Column(name = "address", length = 2000)
     private String address;
 
     @Column(name = "category", length = 50)
@@ -72,7 +72,7 @@ public class Place {
     @Column(name = "timezone", length = 50)
     private String timezone;
 
-    @Column(name = "photo_url", length = 500)
+    @Column(name = "photo_url", length = 2000)
     private String photoUrl;
 
     @Column(name = "city", length = 100)

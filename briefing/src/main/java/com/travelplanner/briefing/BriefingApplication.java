@@ -12,7 +12,7 @@ import org.springframework.scheduling.annotation.EnableScheduling;
  * @author 강도윤/데브-백
  * @since 1.0.0
  */
-@SpringBootApplication
+@SpringBootApplication(scanBasePackages = {"com.travelplanner.briefing", "com.travelplanner.common"})
 @EnableScheduling
 public class BriefingApplication {
 

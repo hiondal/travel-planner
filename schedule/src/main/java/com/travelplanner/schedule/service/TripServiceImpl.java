@@ -42,7 +42,7 @@ public class TripServiceImpl implements TripService {
     public Trip createTrip(String userId, CreateTripRequest request) {
         validateDateRange(request.getStartDate(), request.getEndDate());
 
-        String tripId = "trip_" + UUID.randomUUID().toString().replace("-", "");
+        String tripId = UUID.randomUUID().toString();
         Trip trip = new Trip(
             tripId,
             userId,

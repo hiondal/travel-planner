@@ -2,17 +2,18 @@ import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
+import '../../../../core/config/app_config.dart';
 import '../../../../core/network/dio_client.dart';
 import '../../domain/models/trip_model.dart';
 
 part 'schedule_datasource.g.dart';
 
 /// Schedule Service DataSource
-/// Prism Mock: http://localhost:4011
-/// api-mapping.md SCHD 서비스 엔드포인트 기반
+// 변경: Prism Mock(http://localhost:4010) → SCHD 서비스(http://localhost:8082/api/v1)
+// dioClientProvider(ApiService.schedule) 주입으로 포트 분리
 @riverpod
 ScheduleDataSource scheduleDataSource(Ref ref) {
-  final dio = ref.watch(dioClientProvider);
+  final dio = ref.watch(dioClientProvider(ApiService.schedule));
   return ScheduleDataSource(dio: dio);
 }
 

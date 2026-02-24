@@ -22,6 +22,7 @@ class AlternativeCardPage extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final userState = ref.watch(appUserProvider);
+    final briefingAsync = ref.watch(briefingDetailProvider(briefingId));
     final alternativesAsync = ref.watch(alternativeListProvider(briefingId));
 
     // 무료 티어 → Paywall 리다이렉트
@@ -35,35 +36,41 @@ class AlternativeCardPage extends ConsumerWidget {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
 
+    // briefing 상세가 아직 로딩 중이면 tripId를 알 수 없으므로 스켈레톤 표시
+    final briefing = briefingAsync.valueOrNull;
+
     return Scaffold(
       appBar: AppBar(title: const Text('대안 장소')),
-      body: alternativesAsync.when(
-        loading: () => _AlternativeSkeleton(),
-        error: (err, _) => Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              const Icon(
-                Icons.error_outline,
-                size: 48,
-                color: AppColors.statusRed,
+      body: briefing == null
+          ? _AlternativeSkeleton()
+          : alternativesAsync.when(
+              loading: () => _AlternativeSkeleton(),
+              error: (err, _) => Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const Icon(
+                      Icons.error_outline,
+                      size: 48,
+                      color: AppColors.statusRed,
+                    ),
+                    const SizedBox(height: AppSpacing.spaceBase),
+                    OutlinedButton(
+                      onPressed: () =>
+                          ref.invalidate(alternativeListProvider(briefingId)),
+                      child: const Text('다시 시도'),
+                    ),
+                  ],
+                ),
               ),
-              const SizedBox(height: AppSpacing.spaceBase),
-              OutlinedButton(
-                onPressed: () =>
-                    ref.invalidate(alternativeListProvider(briefingId)),
-                child: const Text('다시 시도'),
-              ),
-            ],
-          ),
-        ),
-        data: (alternatives) => alternatives.isEmpty
-            ? _EmptyAlternativeView()
-            : _AlternativeListView(
-                alternatives: alternatives,
-                briefingId: briefingId,
-              ),
-      ),
+              data: (alternatives) => alternatives.isEmpty
+                  ? _EmptyAlternativeView()
+                  : _AlternativeListView(
+                      alternatives: alternatives,
+                      briefingId: briefingId,
+                      tripId: '',
+                    ),
+            ),
     );
   }
 }
@@ -72,10 +79,12 @@ class _AlternativeListView extends ConsumerWidget {
   const _AlternativeListView({
     required this.alternatives,
     required this.briefingId,
+    required this.tripId,
   });
 
   final List<Alternative> alternatives;
   final String briefingId;
+  final String tripId;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -120,8 +129,8 @@ class _AlternativeListView extends ConsumerWidget {
     final notifier = ref.read(applyAlternativeNotifierProvider.notifier);
     final result = await notifier.apply(
       alternativeId: alt.alternativeId,
-      tripId: '',
-      scheduleItemId: '',
+      tripId: tripId,
+      scheduleItemId: alt.placeId,
     );
     if (!context.mounted) return;
     if (result != null) {

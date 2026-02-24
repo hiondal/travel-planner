@@ -92,6 +92,10 @@ class _TripCard extends StatelessWidget {
       onTap: () => context.goNamed(
         AppRoutes.scheduleDetailName,
         pathParameters: {'tripId': trip.tripId},
+        queryParameters: {
+          'startDate': trip.startDate.toIso8601String().substring(0, 10),
+          'endDate': trip.endDate.toIso8601String().substring(0, 10),
+        },
       ),
       borderRadius: BorderRadius.circular(AppSpacing.radiusCard),
       child: Container(

@@ -12,8 +12,12 @@ import com.travelplanner.monitor.dto.response.StatusDetailResponse;
 import com.travelplanner.monitor.service.BadgeService;
 import com.travelplanner.monitor.service.DataCollectionService;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Schema;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -40,6 +44,9 @@ public class MntrController {
 
     private final BadgeService badgeService;
     private final DataCollectionService dataCollectionService;
+
+    @Value("${internal.service-key:}")
+    private String internalServiceKey;
 
     /**
      * MNTR-01: 장소별 상태 배지 목록 조회.
@@ -76,8 +83,21 @@ public class MntrController {
     @PostMapping("/monitor/collect")
     @Operation(summary = "외부 데이터 수집 트리거",
                description = "스케줄러가 15분 주기로 호출하여 외부 데이터를 수집한다.")
-    public ResponseEntity<CollectTriggerResponse> triggerDataCollection(
-            @RequestBody(required = false) CollectTriggerRequest request) {
+    @ApiResponses({
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "202", description = "수집 작업 시작",
+            content = @Content(schema = @Schema(implementation = CollectTriggerResponse.class))),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "내부 서비스 키 없음",
+            content = @Content(schema = @Schema(type = "object")))
+    })
+    public ResponseEntity<?> triggerDataCollection(
+            @RequestBody(required = false) CollectTriggerRequest request,
+            @RequestHeader(value = "X-Internal-Service-Key", required = false) String serviceKey) {
+
+        // 내부 서비스 키 검증
+        if (serviceKey == null || serviceKey.isBlank() || !serviceKey.equals(internalServiceKey)) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                .body(java.util.Map.of("error", "UNAUTHORIZED", "message", "유효한 내부 서비스 키가 필요합니다."));
+        }
 
         String triggeredBy = request != null ? request.getTriggeredBy() : "api";
         LocalDateTime triggeredAt = request != null ? request.getTriggeredAt() : LocalDateTime.now();

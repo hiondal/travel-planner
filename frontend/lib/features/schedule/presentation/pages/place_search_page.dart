@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -14,9 +16,16 @@ import '../../../place/presentation/providers/place_provider.dart';
 /// 장소 검색 화면 (SCR-014)
 /// UFR-SCHD-020, UFR-PLCE-010: 장소 검색 및 일정 추가
 class PlaceSearchPage extends ConsumerStatefulWidget {
-  const PlaceSearchPage({super.key, required this.tripId});
+  const PlaceSearchPage({
+    super.key,
+    required this.tripId,
+    this.startDate,
+    this.endDate,
+  });
 
   final String tripId;
+  final String? startDate;
+  final String? endDate;
 
   @override
   ConsumerState<PlaceSearchPage> createState() => _PlaceSearchPageState();
@@ -25,6 +34,7 @@ class PlaceSearchPage extends ConsumerStatefulWidget {
 class _PlaceSearchPageState extends ConsumerState<PlaceSearchPage> {
   final _searchController = TextEditingController();
   final _focusNode = FocusNode();
+  Timer? _debounce;
 
   @override
   void initState() {
@@ -36,20 +46,28 @@ class _PlaceSearchPageState extends ConsumerState<PlaceSearchPage> {
 
   @override
   void dispose() {
+    _debounce?.cancel();
     _searchController.dispose();
     _focusNode.dispose();
     super.dispose();
   }
 
   void _onSearch(String keyword) {
-    ref.read(placeSearchProvider.notifier).search(keyword: keyword);
+    _debounce?.cancel();
+    if (keyword.length < 2) {
+      ref.read(placeSearchProvider.notifier).clear();
+      return;
+    }
+    _debounce = Timer(const Duration(milliseconds: 500), () {
+      ref.read(placeSearchProvider.notifier).search(keyword: keyword);
+    });
   }
 
   void _onPlaceTap(Place place) {
-    context.goNamed(
-      AppRoutes.placeTimePickerName,
-      pathParameters: {'tripId': widget.tripId},
-      queryParameters: {'placeId': place.placeId},
+    context.go(
+      '${AppRoutes.placeTimePicker(widget.tripId)}?placeId=${place.placeId}'
+      '${widget.startDate != null ? '&startDate=${widget.startDate}' : ''}'
+      '${widget.endDate != null ? '&endDate=${widget.endDate}' : ''}',
     );
   }
 

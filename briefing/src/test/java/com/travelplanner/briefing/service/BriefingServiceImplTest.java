@@ -195,9 +195,9 @@ class BriefingServiceImplTest {
         @Test
         @DisplayName("존재하는 브리핑을 정상 조회한다")
         void getBriefing_success() {
-            // given
+            // given — 현재 구현은 findById로 조회 후 userId 소유권을 수동 검증한다.
             Briefing briefing = createBriefing("brif_001", "user_001", BriefingType.SAFE);
-            given(briefingRepository.findByIdAndUserId("brif_001", "user_001"))
+            given(briefingRepository.findById("brif_001"))
                     .willReturn(Optional.of(briefing));
 
             // when
@@ -212,7 +212,7 @@ class BriefingServiceImplTest {
         @DisplayName("존재하지 않는 브리핑 조회 시 ResourceNotFoundException이 발생한다")
         void getBriefing_notFound() {
             // given
-            given(briefingRepository.findByIdAndUserId("brif_999", "user_001"))
+            given(briefingRepository.findById("brif_999"))
                     .willReturn(Optional.empty());
 
             // when & then

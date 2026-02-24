@@ -10,4 +10,5 @@ dependencies {
     runtimeOnly "io.jsonwebtoken:jjwt-jackson:${jjwtVersion}"
     runtimeOnly 'org.postgresql:postgresql'
     testImplementation 'org.testcontainers:postgresql'
+    testRuntimeOnly 'com.h2database:h2'
 }

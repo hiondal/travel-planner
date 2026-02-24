@@ -2,17 +2,18 @@ import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
+import '../../../../core/config/app_config.dart';
 import '../../../../core/network/dio_client.dart';
 import '../../domain/models/auth_model.dart';
 
 part 'auth_datasource.g.dart';
 
 /// Auth Service DataSource
-/// Prism Mock: http://localhost:4010
-/// api-mapping.md API-01 ~ API-04 기반 엔드포인트 구현
+// 변경: Prism Mock(http://localhost:4010) → AUTH 서비스(http://localhost:8081/api/v1)
+// dioClientProvider(ApiService.auth) 주입으로 포트 분리
 @riverpod
 AuthDataSource authDataSource(Ref ref) {
-  final dio = ref.watch(dioClientProvider);
+  final dio = ref.watch(dioClientProvider(ApiService.auth));
   return AuthDataSource(dio: dio);
 }
 

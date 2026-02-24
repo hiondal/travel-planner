@@ -2,16 +2,18 @@ import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
+import '../../../../core/config/app_config.dart';
 import '../../../../core/network/dio_client.dart';
 import '../../domain/models/briefing_model.dart';
 
 part 'alternative_datasource.g.dart';
 
 /// Alternative Service DataSource
-/// Prism Mock: http://localhost:4015
+// 변경: Prism Mock(http://localhost:4010) → ALTN 서비스(http://localhost:8086/api/v1)
+// dioClientProvider(ApiService.alternative) 주입으로 포트 분리
 @riverpod
 AlternativeDataSource alternativeDataSource(Ref ref) {
-  final dio = ref.watch(dioClientProvider);
+  final dio = ref.watch(dioClientProvider(ApiService.alternative));
   return AlternativeDataSource(dio: dio);
 }
 

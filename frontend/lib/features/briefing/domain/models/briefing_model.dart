@@ -1,48 +1,80 @@
 import '../../../../shared/models/status_level.dart';
 
 /// 브리핑 아이템 모델 (BRIF 서비스)
+/// 목록/상세 두 API 응답을 모두 파싱할 수 있도록 nullable 처리.
 class Briefing {
   const Briefing({
     required this.briefingId,
-    required this.tripId,
     required this.briefingType,
-    required this.summary,
-    required this.overallStatus,
+    required this.placeName,
     required this.createdAt,
-    required this.isRead,
-    this.expiresAt,
-    this.details,
+    required this.isExpired,
+    this.placeId,
+    this.summary,
+    this.overallStatus,
+    this.isRead = false,
+    this.content,
   });
 
   final String briefingId;
-  final String tripId;
-  final String briefingType; // 'safe' | 'caution' | 'expired'
-  final String summary;
-  final StatusLevel overallStatus;
+  final String briefingType; // 'SAFE' | 'CAUTION' | 'EXPIRED'
+  final String placeName;
   final DateTime createdAt;
+  final bool isExpired;
+  final String? placeId;
+  final String? summary;
+  final StatusLevel? overallStatus;
   final bool isRead;
-  final DateTime? expiresAt;
-  final BriefingDetails? details;
-
-  bool get isExpired =>
-      expiresAt != null && DateTime.now().isAfter(expiresAt!);
+  final BriefingContent? content;
 
   factory Briefing.fromJson(Map<String, dynamic> json) {
+    // content 내부에서 summary 추출 (상세 응답용)
+    final contentMap = json['content'] as Map<String, dynamic>?;
+    final summary = contentMap?['summary'] as String? ??
+        json['summary'] as String?;
+
     return Briefing(
       briefingId: json['briefing_id'] as String,
-      tripId: json['trip_id'] as String,
-      briefingType: json['briefing_type'] as String? ?? 'safe',
-      summary: json['summary'] as String,
-      overallStatus:
-          StatusLevel.fromString(json['overall_status'] as String? ?? 'unknown'),
+      briefingType: (json['type'] as String? ??
+          json['briefing_type'] as String? ?? 'SAFE').toUpperCase(),
+      placeName: json['place_name'] as String? ?? '',
+      placeId: json['place_id'] as String?,
       createdAt: DateTime.parse(json['created_at'] as String),
+      isExpired: json['expired'] as bool? ?? false,
+      summary: summary,
+      overallStatus: StatusLevel.fromString(
+          json['overall_status'] as String? ?? json['type'] as String? ?? 'unknown'),
       isRead: json['is_read'] as bool? ?? false,
-      expiresAt: json['expires_at'] != null
-          ? DateTime.parse(json['expires_at'] as String)
+      content: contentMap != null
+          ? BriefingContent.fromJson(contentMap)
           : null,
-      details: json['details'] != null
-          ? BriefingDetails.fromJson(json['details'] as Map<String, dynamic>)
-          : null,
+    );
+  }
+}
+
+/// 브리핑 상세 컨텐츠 (상세 API에서만 제공)
+class BriefingContent {
+  const BriefingContent({
+    required this.summary,
+    this.businessStatus,
+    this.congestion,
+    this.weather,
+    this.travelTime,
+  });
+
+  final String summary;
+  final String? businessStatus;
+  final String? congestion;
+  final String? weather;
+  final Map<String, dynamic>? travelTime;
+
+  factory BriefingContent.fromJson(Map<String, dynamic> json) {
+    return BriefingContent(
+      summary: json['summary'] as String? ?? '',
+      businessStatus: json['business_status'] as String?,
+      congestion: json['congestion'] as String?,
+      weather: json['weather'] as String?,
+      travelTime: json['travel_time'] as Map<String, dynamic>?,
     );
   }
 }
@@ -138,19 +170,30 @@ class Alternative {
   final StatusLevel? status;
 
   factory Alternative.fromJson(Map<String, dynamic> json) {
+    // Backend sends distance_m (meters), convert to km
+    final distanceM = json['distance_m'] as num?;
+    final distanceKm = json['distance_km'] as num? ??
+        (distanceM != null ? distanceM / 1000.0 : 0);
+    // Backend sends walking_minutes inside travel_time
+    final travelTime = json['travel_time'] as Map<String, dynamic>?;
+    final walkingMin = travelTime?['walking_minutes'] as int?;
+
     return Alternative(
-      alternativeId: json['alternative_id'] as String,
+      alternativeId: json['alternative_id'] as String? ??
+          json['alt_id'] as String? ?? '',
       placeId: json['place_id'] as String,
-      placeName: json['place_name'] as String,
-      category: json['category'] as String,
+      placeName: json['place_name'] as String? ??
+          json['name'] as String? ?? '',
+      category: json['category'] as String? ?? '',
       rating: (json['rating'] as num? ?? 0).toDouble(),
       reviewCount: json['review_count'] as int? ?? 0,
       reason: json['reason'] as String? ?? '',
-      distanceKm: (json['distance_km'] as num? ?? 0).toDouble(),
-      estimatedMinutes: json['estimated_minutes'] as int? ?? 0,
+      distanceKm: distanceKm.toDouble(),
+      estimatedMinutes: json['estimated_minutes'] as int? ?? walkingMin ?? 0,
       imageUrl: json['image_url'] as String?,
-      status: json['status'] != null
-          ? StatusLevel.fromString(json['status'] as String)
+      status: json['status'] != null || json['status_label'] != null
+          ? StatusLevel.fromString(
+              json['status'] as String? ?? json['status_label'] as String? ?? 'unknown')
           : null,
     );
   }

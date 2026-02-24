@@ -1,0 +1,20 @@
+{
+  "name": "travel-planner-e2e",
+  "version": "1.0.0",
+  "description": "travel-planner Phase 1 MVP E2E 테스트 — Playwright API 레벨",
+  "private": true,
+  "scripts": {
+    "test": "npx playwright test",
+    "test:headed": "npx playwright test --headed",
+    "test:auth": "npx playwright test tests/auth-flow.spec.ts",
+    "test:trip": "npx playwright test tests/trip-management.spec.ts",
+    "test:monitor": "npx playwright test tests/monitoring-briefing.spec.ts",
+    "test:alternative": "npx playwright test tests/alternative-selection.spec.ts",
+    "test:payment": "npx playwright test tests/payment-subscription.spec.ts",
+    "test:report": "npx playwright show-report"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.40.0",
+    "typescript": "^5.3.0"
+  }
+}

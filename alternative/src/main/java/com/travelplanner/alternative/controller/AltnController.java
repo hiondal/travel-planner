@@ -12,6 +12,9 @@ import com.travelplanner.common.enums.SubscriptionTier;
 import com.travelplanner.common.response.ApiResponse;
 import com.travelplanner.common.security.UserPrincipal;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Schema;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
@@ -47,6 +50,12 @@ public class AltnController {
      * @return 대안 카드 목록 또는 Paywall 응답
      */
     @Operation(summary = "대안 장소 검색 (대안 카드 3장 생성)", security = @SecurityRequirement(name = "BearerAuth"))
+    @ApiResponses({
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "대안 카드 반환",
+            content = @Content(schema = @Schema(implementation = AlternativeSearchResponse.class))),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "402", description = "구독 필요 (Free 티어)",
+            content = @Content(schema = @Schema(implementation = PaywallResponse.class)))
+    })
     @PostMapping("/alternatives/search")
     public ResponseEntity<?> searchAlternatives(
             @Valid @RequestBody AlternativeSearchRequest request,

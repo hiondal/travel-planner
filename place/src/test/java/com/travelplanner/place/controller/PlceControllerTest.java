@@ -10,6 +10,7 @@ import com.travelplanner.place.domain.Place;
 import com.travelplanner.place.dto.internal.NearbyPlace;
 import com.travelplanner.place.dto.internal.NearbySearchResult;
 import com.travelplanner.place.service.PlaceService;
+import com.travelplanner.common.security.JwtProvider;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -18,6 +19,7 @@ import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
+import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.test.web.servlet.MockMvc;
 
 import java.math.BigDecimal;
@@ -41,10 +43,14 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  */
 @WebMvcTest(controllers = PlceController.class)
 @Import({SecurityConfig.class, SwaggerConfig.class, GlobalExceptionHandler.class, PlaceExceptionHandler.class})
+@WithMockUser
 class PlceControllerTest {
 
     @Autowired
     private MockMvc mockMvc;
+
+    @MockBean
+    private JwtProvider jwtProvider;
 
     @MockBean
     private PlaceService placeService;

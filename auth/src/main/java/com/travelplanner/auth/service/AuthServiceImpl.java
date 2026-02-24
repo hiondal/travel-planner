@@ -164,9 +164,6 @@ public class AuthServiceImpl implements AuthService {
     @Override
     @Transactional
     public Consent saveConsent(String userId, boolean location, boolean push, LocalDateTime consentedAt) {
-        if (!userRepository.existsById(userId)) {
-            throw new ResourceNotFoundException("USER", userId);
-        }
         Consent consent = Consent.create(userId, location, push, consentedAt);
         Consent saved = consentRepository.save(consent);
         log.info("동의 저장 완료: userId={}, location={}, push={}", userId, location, push);

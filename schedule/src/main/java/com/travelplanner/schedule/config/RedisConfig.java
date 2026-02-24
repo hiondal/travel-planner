@@ -3,6 +3,7 @@ package com.travelplanner.schedule.config;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Primary;
 import org.springframework.data.redis.connection.RedisConnectionFactory;
 import org.springframework.data.redis.connection.RedisStandaloneConfiguration;
 import org.springframework.data.redis.connection.lettuce.LettuceConnectionFactory;
@@ -44,6 +45,7 @@ public class RedisConfig {
      * @return DB2 RedisTemplate (String-String)
      */
     @Bean
+    @Primary
     public RedisTemplate<String, String> scheduleRedisTemplate() {
         RedisTemplate<String, String> template = new RedisTemplate<>();
         template.setConnectionFactory(scheduleRedisConnectionFactory());

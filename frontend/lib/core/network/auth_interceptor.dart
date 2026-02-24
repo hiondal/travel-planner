@@ -1,7 +1,10 @@
+import 'dart:async';
+
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
+import '../config/app_config.dart';
 import '../utils/secure_storage.dart';
 import 'api_exception.dart';
 
@@ -22,8 +25,8 @@ class AuthInterceptor extends Interceptor {
 
   final SecureStorage secureStorage;
 
-  /// 토큰 갱신 중 중복 요청 방지 플래그
-  bool _isRefreshing = false;
+  /// 동시 401 처리 시 토큰 갱신을 직렬화하는 Completer
+  Completer<String>? _refreshCompleter;
 
   @override
   Future<void> onRequest(
@@ -48,61 +51,84 @@ class AuthInterceptor extends Interceptor {
       return;
     }
 
-    // 토큰 갱신 중 401이 발생하면 무한 루프 방지
-    if (_isRefreshing) {
-      handler.reject(err);
+    // 이미 토큰 갱신 중이면 완료를 기다린 후 새 토큰으로 재시도
+    if (_refreshCompleter != null) {
+      try {
+        final newToken = await _refreshCompleter!.future;
+        final retryOptions = err.requestOptions;
+        retryOptions.headers['Authorization'] = 'Bearer $newToken';
+        final retryDio = Dio(BaseOptions(
+          baseUrl: retryOptions.baseUrl,
+          headers: {'Content-Type': 'application/json'},
+        ));
+        handler.resolve(await retryDio.fetch(retryOptions));
+      } catch (_) {
+        handler.reject(err);
+      }
       return;
     }
 
-    _isRefreshing = true;
+    _refreshCompleter = Completer<String>();
 
     try {
       final refreshToken = await secureStorage.getRefreshToken();
       if (refreshToken == null) {
+        _refreshCompleter!.completeError('no refresh token');
         await _handleAuthFailure(handler, err);
         return;
       }
 
+      // auth 서비스는 항상 8081 포트이므로 AppConfig.authBaseUrl 고정 사용
+      final authBaseUrl = AppConfig.authBaseUrl;
+
       // 토큰 갱신 API 호출 (인터셉터 없는 별도 Dio 인스턴스 사용)
       final refreshDio = Dio(
         BaseOptions(
-          baseUrl: err.requestOptions.baseUrl,
+          baseUrl: authBaseUrl,
           headers: {'Content-Type': 'application/json'},
         ),
       );
 
       final response = await refreshDio.post(
-        '/api/v1/auth/token/refresh',
+        '/auth/token/refresh',
         data: {'refresh_token': refreshToken},
       );
 
       // 백엔드 응답: ApiResponse { success, data: { access_token, expires_in } }
       final data = response.data['data'] as Map<String, dynamic>?;
       final newAccessToken = data?['access_token'] as String?;
-      // 백엔드는 access_token만 발급하므로 refresh_token 갱신 없음
-      final newRefreshToken = null as String?;
 
       if (newAccessToken == null) {
+        _refreshCompleter!.completeError('no access token in response');
         await _handleAuthFailure(handler, err);
         return;
       }
 
       // 새 토큰 저장
       await secureStorage.saveAccessToken(newAccessToken);
-      if (newRefreshToken != null) {
-        await secureStorage.saveRefreshToken(newRefreshToken);
-      }
+
+      // 대기 중인 요청들에게 새 토큰 전달
+      _refreshCompleter!.complete(newAccessToken);
 
       // 원래 요청 재시도 (새 토큰으로)
       final retryOptions = err.requestOptions;
       retryOptions.headers['Authorization'] = 'Bearer $newAccessToken';
 
-      final retryResponse = await refreshDio.fetch(retryOptions);
+      final retryDio = Dio(
+        BaseOptions(
+          baseUrl: retryOptions.baseUrl,
+          headers: {'Content-Type': 'application/json'},
+        ),
+      );
+      final retryResponse = await retryDio.fetch(retryOptions);
       handler.resolve(retryResponse);
     } on DioException {
+      if (!_refreshCompleter!.isCompleted) {
+        _refreshCompleter!.completeError('refresh failed');
+      }
       await _handleAuthFailure(handler, err);
     } finally {
-      _isRefreshing = false;
+      _refreshCompleter = null;
     }
   }
 

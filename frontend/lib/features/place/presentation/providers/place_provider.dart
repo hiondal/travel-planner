@@ -14,8 +14,7 @@ class PlaceSearch extends _$PlaceSearch {
 
   Future<void> search({
     required String keyword,
-    String? city,
-    String? category,
+    String city = '',
   }) async {
     if (keyword.trim().isEmpty) {
       state = const AsyncValue.data([]);
@@ -26,7 +25,6 @@ class PlaceSearch extends _$PlaceSearch {
       return ref.read(placeRepositoryProvider).searchPlaces(
             keyword: keyword,
             city: city,
-            category: category,
           );
     });
   }

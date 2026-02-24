@@ -7,13 +7,16 @@ import com.travelplanner.monitor.domain.*;
 import com.travelplanner.monitor.dto.internal.StatusDetail;
 import com.travelplanner.monitor.service.BadgeService;
 import com.travelplanner.monitor.service.DataCollectionService;
+import com.travelplanner.common.security.JwtProvider;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.context.annotation.Import;
+import org.springframework.test.context.TestPropertySource;
 import org.springframework.http.MediaType;
+import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.test.web.servlet.MockMvc;
 
 import java.time.LocalDateTime;
@@ -33,6 +36,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @WebMvcTest(controllers = MntrController.class)
 @Import({GlobalExceptionHandler.class,
     com.travelplanner.monitor.config.SecurityConfig.class})
+@WithMockUser
+@TestPropertySource(properties = "internal.service-key=test-service-key")
 class MntrControllerTest {
 
     @Autowired
@@ -43,6 +48,9 @@ class MntrControllerTest {
 
     @MockBean
     private BadgeService badgeService;
+
+    @MockBean
+    private JwtProvider jwtProvider;
 
     @MockBean
     private DataCollectionService dataCollectionService;
@@ -137,6 +145,7 @@ class MntrControllerTest {
             """;
 
         mockMvc.perform(post("/api/v1/monitor/collect")
+                .header("X-Internal-Service-Key", "test-service-key")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(body))
             .andExpect(status().isAccepted())
@@ -152,7 +161,8 @@ class MntrControllerTest {
 
         given(dataCollectionService.triggerCollection(any(), any())).willReturn(job);
 
-        mockMvc.perform(post("/api/v1/monitor/collect"))
+        mockMvc.perform(post("/api/v1/monitor/collect")
+                .header("X-Internal-Service-Key", "test-service-key"))
             .andExpect(status().isAccepted());
     }
 }

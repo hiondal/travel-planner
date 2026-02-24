@@ -1,0 +1,5 @@
+{
+  "plan_id": "plan_trip_pass",
+  "receipt": "MOCK_APPLE_RECEIPT_DATA_FOR_TEST",
+  "provider": "apple"
+}

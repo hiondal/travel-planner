@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <!--
+    If you are serving your web app in a path other than the root, change the
+    href value below to reflect the base path you are serving from.
+
+    The path provided below has to start and end with a slash "/" in order for
+    it to work correctly.
+
+    For more details:
+    * https://developer.mozilla.org/en-US/docs/Web/HTML/Element/base
+
+    This is a placeholder for base href that will be replaced by the value of
+    the `--base-href` argument provided to `flutter build`.
+  -->
+  <base href="$FLUTTER_BASE_HREF">
+
+  <meta charset="UTF-8">
+  <meta content="IE=Edge" http-equiv="X-UA-Compatible">
+  <meta name="description" content="A new Flutter project.">
+
+  <!-- iOS meta tags & icons -->
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black">
+  <meta name="apple-mobile-web-app-title" content="travel_planner">
+  <link rel="apple-touch-icon" href="icons/Icon-192.png">
+
+  <!-- Google Sign-In client ID (for google_sign_in web) -->
+  <meta name="google-signin-client_id" content="1052974040617-bhirm9gls5h3vgias0nqmhe7lkai1rf3.apps.googleusercontent.com">
+
+  <!-- Favicon -->
+  <link rel="icon" type="image/png" href="favicon.png"/>
+
+  <title>travel_planner</title>
+  <link rel="manifest" href="manifest.json">
+
+  <!-- Google Identity Services -->
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
+</head>
+<body>
+  <script src="flutter_bootstrap.js" async></script>
+
+  <script>
+    // Web Token Storage — flutter_secure_storage 대신 localStorage 사용 (OperationError 우회)
+    function tpStorageSet(key, value) {
+      try { localStorage.setItem('tp_' + key, value); } catch(e) {}
+    }
+    function tpStorageGet(key) {
+      try { return localStorage.getItem('tp_' + key) || ''; } catch(e) { return ''; }
+    }
+    function tpStorageRemove(key) {
+      try { localStorage.removeItem('tp_' + key); } catch(e) {}
+    }
+
+    // GIS 직접 호출 — google_sign_in 플러그인의 People API 의존성을 우회
+    function triggerGoogleSignIn(clientId) {
+      return new Promise(function(resolve, reject) {
+        if (typeof google === 'undefined' || !google.accounts || !google.accounts.oauth2) {
+          reject(new Error('Google Identity Services not loaded'));
+          return;
+        }
+        var client = google.accounts.oauth2.initTokenClient({
+          client_id: clientId,
+          scope: 'email profile openid',
+          callback: function(response) {
+            if (response.error) {
+              reject(new Error(response.error));
+            } else {
+              resolve(response.access_token);
+            }
+          },
+          error_callback: function(error) {
+            reject(new Error(error.type || 'popup_closed'));
+          }
+        });
+        client.requestAccessToken();
+      });
+    }
+  </script>
+</body>
+</html>

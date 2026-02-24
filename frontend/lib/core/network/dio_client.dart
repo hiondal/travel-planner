@@ -8,13 +8,18 @@ import 'error_interceptor.dart';
 
 part 'dio_client.g.dart';
 
-/// Dio HTTP 클라이언트 팩토리
-/// JWT 인터셉터, 에러 핸들링 인터셉터가 자동으로 등록된다.
+// 변경: 단일 dioClient → 서비스별 Dio provider family 패턴으로 전환
+// 각 마이크로서비스가 다른 포트(8081~8087)를 사용하므로 baseUrl을 서비스별로 분리
+
+/// 서비스별 Dio 인스턴스를 생성하는 provider family
+/// 사용 예: ref.watch(dioClientProvider(ApiService.auth))
 @riverpod
-Dio dioClient(Ref ref) {
+Dio dioClient(Ref ref, ApiService service) {
+  final baseUrl = AppConfig.serviceUrl(service);
+
   final dio = Dio(
     BaseOptions(
-      baseUrl: AppConfig.apiBaseUrl,
+      baseUrl: baseUrl,
       connectTimeout: const Duration(milliseconds: AppConfig.connectTimeout),
       receiveTimeout: const Duration(milliseconds: AppConfig.receiveTimeout),
       headers: {

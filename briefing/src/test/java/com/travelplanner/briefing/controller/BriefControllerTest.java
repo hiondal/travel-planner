@@ -6,6 +6,7 @@ import com.travelplanner.briefing.domain.BriefingContent;
 import com.travelplanner.briefing.domain.StatusLevel;
 import com.travelplanner.briefing.service.BriefingService;
 import com.travelplanner.common.enums.BriefingType;
+import com.travelplanner.common.security.JwtProvider;
 import com.travelplanner.common.enums.SubscriptionTier;
 import com.travelplanner.common.exception.GlobalExceptionHandler;
 import com.travelplanner.common.exception.ResourceNotFoundException;
@@ -45,6 +46,9 @@ class BriefControllerTest {
 
     @Autowired
     private ObjectMapper objectMapper;
+
+    @MockBean
+    private JwtProvider jwtProvider;
 
     @MockBean
     private BriefingService briefingService;

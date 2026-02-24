@@ -20,9 +20,16 @@ import '../providers/trip_provider.dart';
 /// UFR-SCHD-050: 일별 타임라인, 배지 4단계 색상
 /// UFR-MNTR-030: 상태 배지 실시간 표시
 class ScheduleDetailPage extends ConsumerStatefulWidget {
-  const ScheduleDetailPage({super.key, required this.tripId});
+  const ScheduleDetailPage({
+    super.key,
+    required this.tripId,
+    required this.startDate,
+    required this.endDate,
+  });
 
   final String tripId;
+  final DateTime startDate;
+  final DateTime endDate;
 
   @override
   ConsumerState<ScheduleDetailPage> createState() =>
@@ -30,7 +37,13 @@ class ScheduleDetailPage extends ConsumerStatefulWidget {
 }
 
 class _ScheduleDetailPageState extends ConsumerState<ScheduleDetailPage> {
-  DateTime _selectedDate = DateTime.now();
+  late DateTime _selectedDate;
+
+  @override
+  void initState() {
+    super.initState();
+    _selectedDate = DateTime(widget.startDate.year, widget.startDate.month, widget.startDate.day);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -55,6 +68,8 @@ class _ScheduleDetailPageState extends ConsumerState<ScheduleDetailPage> {
         children: [
           // 날짜 선택 탭
           _DateSelectorRow(
+            startDate: widget.startDate,
+            endDate: widget.endDate,
             selectedDate: _selectedDate,
             onDateSelected: (date) {
               setState(() => _selectedDate = date);
@@ -99,9 +114,8 @@ class _ScheduleDetailPageState extends ConsumerState<ScheduleDetailPage> {
               ),
               data: (items) => items.isEmpty
                   ? _EmptyScheduleView(
-                      onAddTap: () => context.goNamed(
-                        AppRoutes.placeSearchName,
-                        pathParameters: {'tripId': widget.tripId},
+                      onAddTap: () => context.go(
+                        '${AppRoutes.placeSearch(widget.tripId)}?startDate=${widget.startDate.toIso8601String().substring(0, 10)}&endDate=${widget.endDate.toIso8601String().substring(0, 10)}',
                       ),
                     )
                   : _ScheduleTimeline(
@@ -115,9 +129,8 @@ class _ScheduleDetailPageState extends ConsumerState<ScheduleDetailPage> {
         ],
       ),
       floatingActionButton: FloatingActionButton(
-        onPressed: () => context.goNamed(
-          AppRoutes.placeSearchName,
-          pathParameters: {'tripId': widget.tripId},
+        onPressed: () => context.go(
+          '${AppRoutes.placeSearch(widget.tripId)}?startDate=${widget.startDate.toIso8601String().substring(0, 10)}&endDate=${widget.endDate.toIso8601String().substring(0, 10)}',
         ),
         backgroundColor: AppColors.accentRed,
         child: const Icon(Icons.add_location_alt, color: AppColors.textPrimary),
@@ -154,6 +167,7 @@ class _ScheduleDetailPageState extends ConsumerState<ScheduleDetailPage> {
       scheduleItemId: item.scheduleItemId,
     );
     if (mounted) {
+      ref.invalidate(scheduleProvider(widget.tripId, targetDate: _selectedDate));
       AppSnackBar.show(context, '${item.placeName}이(가) 삭제되었습니다.');
     }
   }
@@ -162,17 +176,24 @@ class _ScheduleDetailPageState extends ConsumerState<ScheduleDetailPage> {
 /// 날짜 선택 행
 class _DateSelectorRow extends StatelessWidget {
   const _DateSelectorRow({
+    required this.startDate,
+    required this.endDate,
     required this.selectedDate,
     required this.onDateSelected,
   });
 
+  final DateTime startDate;
+  final DateTime endDate;
   final DateTime selectedDate;
   final ValueChanged<DateTime> onDateSelected;
 
   @override
   Widget build(BuildContext context) {
-    final today = DateTime.now();
-    final dates = List.generate(7, (i) => today.add(Duration(days: i)));
+    final dayCount = endDate.difference(startDate).inDays + 1;
+    final dates = List.generate(dayCount, (i) {
+      final d = startDate.add(Duration(days: i));
+      return DateTime(d.year, d.month, d.day);
+    });
 
     return SizedBox(
       height: 64,
@@ -185,8 +206,9 @@ class _DateSelectorRow extends StatelessWidget {
         itemCount: dates.length,
         itemBuilder: (context, index) {
           final date = dates[index];
-          final isSelected = date.day == selectedDate.day &&
-              date.month == selectedDate.month;
+          final isSelected = date.year == selectedDate.year &&
+              date.month == selectedDate.month &&
+              date.day == selectedDate.day;
           return Padding(
             padding: const EdgeInsets.only(right: AppSpacing.spaceSm),
             child: InkWell(
@@ -330,7 +352,7 @@ class _ScheduleTimelineItem extends StatelessWidget {
             Container(
               width: 2,
               height: 72,
-              color: item.status == _isActiveStatus(item)
+              color: _isActiveStatus(item)
                   ? AppColors.accentRed
                   : AppColors.outline,
             ),

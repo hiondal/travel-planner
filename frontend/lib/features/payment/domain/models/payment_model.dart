@@ -17,12 +17,28 @@ class SubscriptionPlan {
   final List<String> features;
 
   factory SubscriptionPlan.fromJson(Map<String, dynamic> json) {
+    // Backend sends price as nested object: {amount, currency, period}
+    final priceRaw = json['price'];
+    int price;
+    String currency;
+    String billingPeriod;
+    if (priceRaw is Map<String, dynamic>) {
+      price = (priceRaw['amount'] as num? ?? 0).toInt();
+      currency = priceRaw['currency'] as String? ?? 'KRW';
+      billingPeriod = priceRaw['period'] as String? ?? 'monthly';
+    } else {
+      price = (priceRaw as num? ?? 0).toInt();
+      currency = json['currency'] as String? ?? 'KRW';
+      billingPeriod = json['billing_period'] as String? ?? 'monthly';
+    }
+
     return SubscriptionPlan(
       planId: json['plan_id'] as String,
-      planName: json['plan_name'] as String,
-      price: json['price'] as int,
-      currency: json['currency'] as String? ?? 'KRW',
-      billingPeriod: json['billing_period'] as String? ?? 'monthly',
+      planName: json['plan_name'] as String? ??
+          json['name'] as String? ?? '',
+      price: price,
+      currency: currency,
+      billingPeriod: billingPeriod,
       features: (json['features'] as List<dynamic>?)
               ?.map((e) => e as String)
               .toList() ??

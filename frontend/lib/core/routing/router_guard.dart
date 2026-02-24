@@ -1,3 +1,4 @@
+import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
@@ -14,7 +15,7 @@ class RouterGuard {
   /// GoRouter redirect 콜백
   /// - 미인증 상태에서 보호된 경로 접근 시 /auth/login 리다이렉트
   /// - 인증 상태에서 /splash, /auth/* 접근 시 /schedule 리다이렉트
-  String? redirect(GoRouterState state) {
+  String? redirect(BuildContext context, GoRouterState state) {
     final appUserState = ref.read(appUserProvider);
     final isAuthenticated = appUserState.isAuthenticated;
     final location = state.matchedLocation;

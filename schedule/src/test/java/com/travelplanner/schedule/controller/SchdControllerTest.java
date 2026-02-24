@@ -10,6 +10,7 @@ import com.travelplanner.schedule.dto.internal.ScheduleResult;
 import com.travelplanner.schedule.domain.ScheduleItem;
 import com.travelplanner.schedule.service.ScheduleItemService;
 import com.travelplanner.schedule.service.TripService;
+import com.travelplanner.common.security.JwtProvider;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -17,6 +18,7 @@ import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
+import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.test.web.servlet.MockMvc;
 
 import java.time.LocalDate;
@@ -38,6 +40,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @WebMvcTest(controllers = SchdController.class)
 @Import({GlobalExceptionHandler.class,
     com.travelplanner.schedule.config.SecurityConfig.class})
+@WithMockUser
 class SchdControllerTest {
 
     @Autowired
@@ -48,6 +51,9 @@ class SchdControllerTest {
 
     @MockBean
     private TripService tripService;
+
+    @MockBean
+    private JwtProvider jwtProvider;
 
     @MockBean
     private ScheduleItemService scheduleItemService;

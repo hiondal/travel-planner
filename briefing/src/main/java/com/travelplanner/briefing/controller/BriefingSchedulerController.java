@@ -6,6 +6,9 @@ import com.travelplanner.briefing.dto.response.GenerateBriefingResponse;
 import com.travelplanner.briefing.service.BriefingService;
 import com.travelplanner.common.response.ApiResponse;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Schema;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -40,6 +43,14 @@ public class BriefingSchedulerController {
      * @return 생성 결과
      */
     @Operation(summary = "브리핑 생성 트리거 (내부 스케줄러 호출용)")
+    @ApiResponses({
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "201", description = "브리핑 생성 완료",
+            content = @Content(schema = @Schema(implementation = GenerateBriefingResponse.class))),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "기존 브리핑 반환",
+            content = @Content(schema = @Schema(implementation = GenerateBriefingResponse.class))),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "422", description = "Free 티어 한도 초과",
+            content = @Content(schema = @Schema(type = "object")))
+    })
     @PostMapping("/briefings/generate")
     public ResponseEntity<?> generateBriefing(@Valid @RequestBody GenerateBriefingRequest request) {
         log.info("브리핑 생성 요청: userId={}, placeId={}", request.getUserId(), request.getPlaceId());
@@ -58,8 +69,8 @@ public class BriefingSchedulerController {
         GenerateBriefingResponse response = GenerateBriefingResponse.from(result);
 
         if (result.isCreated()) {
-            return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.created(response));
+            return ResponseEntity.status(HttpStatus.CREATED).body(response);
         }
-        return ResponseEntity.ok(ApiResponse.ok(response));
+        return ResponseEntity.ok(response);
     }
 }

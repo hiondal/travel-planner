@@ -2,16 +2,18 @@ import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
+import '../../../../core/config/app_config.dart';
 import '../../../../core/network/dio_client.dart';
 import '../../domain/models/monitoring_model.dart';
 
 part 'monitoring_datasource.g.dart';
 
 /// Monitor Service DataSource
-/// Prism Mock: http://localhost:4013
+// 변경: Prism Mock(http://localhost:4010) → MNTR 서비스(http://localhost:8084/api/v1)
+// dioClientProvider(ApiService.monitor) 주입으로 포트 분리
 @riverpod
 MonitoringDataSource monitoringDataSource(Ref ref) {
-  final dio = ref.watch(dioClientProvider);
+  final dio = ref.watch(dioClientProvider(ApiService.monitor));
   return MonitoringDataSource(dio: dio);
 }
 

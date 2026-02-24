@@ -17,10 +17,14 @@ class PlaceTimePickerPage extends ConsumerStatefulWidget {
     super.key,
     required this.tripId,
     this.placeId,
+    this.startDate,
+    this.endDate,
   });
 
   final String tripId;
   final String? placeId;
+  final String? startDate;
+  final String? endDate;
 
   @override
   ConsumerState<PlaceTimePickerPage> createState() =>
@@ -28,18 +32,34 @@ class PlaceTimePickerPage extends ConsumerStatefulWidget {
 }
 
 class _PlaceTimePickerPageState extends ConsumerState<PlaceTimePickerPage> {
-  DateTime _selectedDate = DateTime.now();
+  late DateTime _selectedDate;
   TimeOfDay _selectedTime = const TimeOfDay(hour: 10, minute: 0);
   int _durationMinutes = 60;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.startDate != null) {
+      _selectedDate = DateTime.parse(widget.startDate!);
+    } else {
+      _selectedDate = DateTime.now();
+    }
+  }
 
   static const List<int> _durationOptions = [30, 60, 90, 120, 180, 240];
 
   Future<void> _pickDate() async {
+    final firstDate = widget.startDate != null
+        ? DateTime.parse(widget.startDate!)
+        : DateTime.now();
+    final lastDate = widget.endDate != null
+        ? DateTime.parse(widget.endDate!)
+        : DateTime.now().add(const Duration(days: 365));
     final picked = await showDatePicker(
       context: context,
       initialDate: _selectedDate,
-      firstDate: DateTime.now(),
-      lastDate: DateTime.now().add(const Duration(days: 365)),
+      firstDate: firstDate,
+      lastDate: lastDate,
       builder: (context, child) => Theme(
         data: Theme.of(context).copyWith(
           colorScheme: Theme.of(context).colorScheme.copyWith(
@@ -93,10 +113,12 @@ class _PlaceTimePickerPageState extends ConsumerState<PlaceTimePickerPage> {
     if (!mounted) return;
     if (item != null) {
       AppSnackBar.show(context, '일정에 추가되었습니다.');
-      context.goNamed(
-        AppRoutes.scheduleDetailName,
-        pathParameters: {'tripId': widget.tripId},
-      );
+      final params = [
+        if (widget.startDate != null) 'startDate=${widget.startDate}',
+        if (widget.endDate != null) 'endDate=${widget.endDate}',
+      ];
+      final query = params.isEmpty ? '' : '?${params.join('&')}';
+      context.go('${AppRoutes.scheduleDetail(widget.tripId)}$query');
     } else {
       AppSnackBar.showError(context, '장소 추가에 실패했습니다.');
     }

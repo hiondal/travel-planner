@@ -11,7 +11,7 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
  * @author 강도윤/데브-백
  * @since 1.0.0
  */
-@SpringBootApplication
+@SpringBootApplication(scanBasePackages = {"com.travelplanner.alternative", "com.travelplanner.common"})
 public class AlternativeApplication {
 
     public static void main(String[] args) {

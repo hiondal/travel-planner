@@ -106,20 +106,9 @@ public class SubscriptionServiceImpl implements SubscriptionService {
 
     @Override
     public SubscriptionStatus getSubscriptionStatus(String userId) {
-        // 캐시 확인
         String cacheKey = CACHE_SUBSCRIPTION_PREFIX + userId;
-        String cachedTier = (String) redisTemplate.opsForHash().get(cacheKey, "tier");
-        String cachedStatus = (String) redisTemplate.opsForHash().get(cacheKey, "status");
 
-        if (cachedTier != null && cachedStatus != null) {
-            log.debug("구독 캐시 히트: userId={}", userId);
-            String cachedSubId = (String) redisTemplate.opsForHash().get(cacheKey, "subscriptionId");
-            SubscriptionTier tier = SubscriptionTier.valueOf(cachedTier);
-            SubscriptionStatusEnum status = SubscriptionStatusEnum.valueOf(cachedStatus);
-            return new SubscriptionStatus(tier, status, cachedSubId, null, null);
-        }
-
-        // DB 조회
+        // DB 조회 (정확성 보장)
         Optional<Subscription> subOptional = subscriptionRepository.findByUserId(userId);
         if (subOptional.isEmpty()) {
             cacheSubscriptionStatus(cacheKey, SubscriptionTier.FREE, SubscriptionStatusEnum.ACTIVE, null);

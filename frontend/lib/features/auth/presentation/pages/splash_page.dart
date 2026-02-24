@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -7,6 +9,8 @@ import '../../../../core/constants/app_spacing.dart';
 import '../../../../core/constants/app_typography.dart';
 import '../../../../core/routing/app_routes.dart';
 import '../../../../core/utils/secure_storage.dart';
+import '../../../../shared/models/subscription_tier.dart';
+import '../../../../shared/providers/app_user_provider.dart';
 
 /// 스플래시 페이지 (SCR-000)
 /// - 앱 진입 시 1.5초 브랜드 표시
@@ -44,12 +48,32 @@ class _SplashPageState extends ConsumerState<SplashPage>
     if (!mounted) return;
 
     final secureStorage = ref.read(secureStorageProvider);
-    final hasToken = await secureStorage.hasAccessToken();
+    final accessToken = await secureStorage.getAccessToken();
+    final hasToken = accessToken != null && accessToken.isNotEmpty;
 
     if (!mounted) return;
 
     if (hasToken) {
-      context.goNamed(AppRoutes.tripListName);
+      // JWT 페이로드 디코딩 → 인메모리 auth 상태 복원
+      try {
+        final parts = accessToken.split('.');
+        if (parts.length == 3) {
+          final normalized = base64Url.normalize(parts[1]);
+          final decoded = utf8.decode(base64Url.decode(normalized));
+          final payload = jsonDecode(decoded) as Map<String, dynamic>;
+          ref.read(appUserProvider.notifier).signIn(
+                userId: payload['sub'] as String? ?? '',
+                email: payload['email'] as String? ?? '',
+                tier: SubscriptionTier.fromString(
+                    payload['tier'] as String? ?? 'FREE'),
+              );
+        }
+        context.goNamed(AppRoutes.tripListName);
+      } catch (_) {
+        // JWT 디코딩 실패 → 토큰 파기 후 로그인
+        await secureStorage.clearTokens();
+        if (mounted) context.goNamed(AppRoutes.loginName);
+      }
     } else {
       context.goNamed(AppRoutes.loginName);
     }

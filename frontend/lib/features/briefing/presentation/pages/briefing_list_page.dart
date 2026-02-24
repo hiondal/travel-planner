@@ -8,6 +8,7 @@ import '../../../../core/constants/app_spacing.dart';
 import '../../../../core/constants/app_typography.dart';
 import '../../../../core/routing/app_routes.dart';
 import '../../../../shared/widgets/app_skeleton.dart';
+import '../../../../shared/models/status_level.dart';
 import '../../../../shared/widgets/status_badge.dart';
 import '../../domain/models/briefing_model.dart';
 import '../providers/briefing_provider.dart';
@@ -91,7 +92,7 @@ class _BriefingCard extends StatelessWidget {
         decoration: BoxDecoration(
           color: AppColors.bgCard,
           borderRadius: BorderRadius.circular(AppSpacing.radiusCard),
-          border: briefing.overallStatus.name == 'danger'
+          border: briefing.overallStatus?.name == 'danger'
               ? Border.all(color: AppColors.statusRed.withOpacity(0.4))
               : null,
         ),
@@ -120,7 +121,7 @@ class _BriefingCard extends StatelessWidget {
                           shape: BoxShape.circle,
                         ),
                       ),
-                    StatusBadge(level: briefing.overallStatus),
+                    StatusBadge(level: briefing.overallStatus ?? StatusLevel.unknown),
                   ],
                 ),
               ],
@@ -128,18 +129,13 @@ class _BriefingCard extends StatelessWidget {
             const SizedBox(height: AppSpacing.spaceSm),
             // 요약 텍스트
             Text(
-              briefing.summary,
+              briefing.summary ?? briefing.placeName,
               style: AppTypography.bodyLarge.copyWith(
                 color: AppColors.textPrimary,
               ),
               maxLines: 3,
               overflow: TextOverflow.ellipsis,
             ),
-            // 세부 상태 아이콘 행
-            if (briefing.details != null) ...[
-              const SizedBox(height: AppSpacing.spaceMd),
-              _DetailStatusRow(details: briefing.details!),
-            ],
           ],
         ),
       ),

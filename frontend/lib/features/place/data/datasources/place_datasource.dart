@@ -2,16 +2,21 @@ import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
+import '../../../../core/config/app_config.dart';
 import '../../../../core/network/dio_client.dart';
 import '../../domain/models/place_model.dart';
 
 part 'place_datasource.g.dart';
 
 /// Place Service DataSource
-/// Prism Mock: http://localhost:4012
+// 변경: Prism Mock(http://localhost:4010) → PLCE 서비스(http://localhost:8083/api/v1)
+// dioClientProvider(ApiService.place) 주입으로 포트 분리
+// 주의: baseUrl은 /api/v1 까지만 설정. 백엔드 컨트롤러가 @RequestMapping("/api/v1/places")를
+// 사용하므로 datasource의 /places/search 경로와 조합하면 /api/v1/places/search 가 된다.
+// baseUrl을 /api/v1/places 로 설정하면 /api/v1/places/places/search 이중 경로 발생.
 @riverpod
 PlaceDataSource placeDataSource(Ref ref) {
-  final dio = ref.watch(dioClientProvider);
+  final dio = ref.watch(dioClientProvider(ApiService.place));
   return PlaceDataSource(dio: dio);
 }
 

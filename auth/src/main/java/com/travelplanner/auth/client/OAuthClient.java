@@ -34,14 +34,15 @@ public class OAuthClient {
 
     private static final String GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token";
     private static final String GOOGLE_USERINFO_URL = "https://www.googleapis.com/oauth2/v3/userinfo";
+    private static final String GOOGLE_TOKENINFO_URL = "https://oauth2.googleapis.com/tokeninfo";
 
-    @Value("${spring.security.oauth2.client.registration.google.client-id}")
+    @Value("${oauth2.google.client-id:}")
     private String googleClientId;
 
-    @Value("${spring.security.oauth2.client.registration.google.client-secret}")
+    @Value("${oauth2.google.client-secret:}")
     private String googleClientSecret;
 
-    @Value("${spring.security.oauth2.client.registration.google.redirect-uri}")
+    @Value("${oauth2.google.redirect-uri:http://localhost:8081/login/oauth2/code/google}")
     private String googleRedirectUri;
 
     private final RestTemplate restTemplate;
@@ -82,6 +83,14 @@ public class OAuthClient {
      */
     public OAuthProfile verifyGoogle(String oauthCode) {
         try {
+            if (oauthCode.startsWith("eyJ")) {
+                // idToken(JWT) → tokeninfo로 직접 검증
+                return verifyGoogleIdToken(oauthCode);
+            } else if (oauthCode.startsWith("ya29.")) {
+                // accessToken → userinfo로 직접 조회 (웹 implicit flow)
+                return fetchGoogleUserInfo(oauthCode);
+            }
+            // authorization code → 토큰 교환 후 userinfo 조회
             String accessToken = exchangeGoogleToken(oauthCode);
             return fetchGoogleUserInfo(accessToken);
         } catch (HttpClientErrorException e) {
@@ -91,6 +100,32 @@ public class OAuthClient {
             log.error("Google OAuth API 호출 실패", e);
             throw new ExternalApiException("GOOGLE", "Google 인증 서비스와 통신에 실패했습니다.", e);
         }
+    }
+
+    /**
+     * Google ID Token을 tokeninfo 엔드포인트로 직접 검증한다.
+     * Flutter 웹의 google_sign_in은 serverAuthCode 대신 idToken을 반환하므로 이 경로를 사용한다.
+     *
+     * @param idToken Google ID Token (JWT)
+     * @return 사용자 프로파일
+     */
+    @SuppressWarnings("unchecked")
+    private OAuthProfile verifyGoogleIdToken(String idToken) {
+        String url = GOOGLE_TOKENINFO_URL + "?id_token=" + idToken;
+        ResponseEntity<Map> response = restTemplate.getForEntity(url, Map.class);
+
+        Map<String, Object> info = response.getBody();
+        if (info == null || !googleClientId.equals(info.get("aud"))) {
+            throw new BusinessException("INVALID_ID_TOKEN", "유효하지 않은 Google ID Token입니다.", 401);
+        }
+
+        String sub = (String) info.get("sub");
+        String email = (String) info.get("email");
+        String name = (String) info.getOrDefault("name", email);
+        String picture = (String) info.get("picture");
+
+        log.info("Google ID Token 검증 성공: email={}", email);
+        return new OAuthProfile(sub, email, name, picture, OAuthProvider.GOOGLE);
     }
 
     /**

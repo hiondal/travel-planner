@@ -12,8 +12,8 @@ Future<PlaceStatus> placeStatus(Ref ref, String placeId) async {
   return ref.watch(monitoringRepositoryProvider).getPlaceStatus(placeId);
 }
 
-/// 여행 전체 상태 Provider
+/// 여행 장소 배지 목록 Provider
 @riverpod
-Future<Map<String, dynamic>> tripStatus(Ref ref, String tripId) async {
-  return ref.watch(monitoringRepositoryProvider).getTripStatus(tripId);
+Future<Map<String, dynamic>> tripStatus(Ref ref, List<String> placeIds) async {
+  return ref.watch(monitoringRepositoryProvider).getBadges(placeIds);
 }

@@ -1,6 +1,9 @@
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
+
+import 'web_token_store.dart';
 
 part 'secure_storage.g.dart';
 
@@ -12,6 +15,7 @@ abstract final class _Keys {
 
 /// flutter_secure_storage 래퍼
 /// JWT 토큰의 안전한 저장/조회/삭제를 담당한다.
+/// Web에서는 localStorage를 사용한다 (crypto.subtle OperationError 우회).
 @riverpod
 SecureStorage secureStorage(Ref ref) {
   return SecureStorage();
@@ -19,29 +23,58 @@ SecureStorage secureStorage(Ref ref) {
 
 class SecureStorage {
   SecureStorage()
-      : _storage = const FlutterSecureStorage(
-          aOptions: AndroidOptions(encryptedSharedPreferences: true),
-          iOptions: IOSOptions(
-            accessibility: KeychainAccessibility.first_unlock_this_device,
-          ),
-        );
+      : _storage = kIsWeb
+            ? null
+            : const FlutterSecureStorage(
+                aOptions: AndroidOptions(encryptedSharedPreferences: true),
+                iOptions: IOSOptions(
+                  accessibility: KeychainAccessibility.first_unlock_this_device,
+                ),
+              );
 
-  final FlutterSecureStorage _storage;
+  final FlutterSecureStorage? _storage;
+
+  // ---------------------------------------------------------------------------
+  // 내부 헬퍼: 플랫폼별 분기
+  // ---------------------------------------------------------------------------
+
+  Future<void> _write(String key, String value) async {
+    if (kIsWeb) {
+      webTokenStoreWrite(key, value);
+    } else {
+      await _storage!.write(key: key, value: value);
+    }
+  }
+
+  Future<String?> _read(String key) async {
+    if (kIsWeb) {
+      return webTokenStoreRead(key);
+    }
+    return _storage!.read(key: key);
+  }
+
+  Future<void> _delete(String key) async {
+    if (kIsWeb) {
+      webTokenStoreDelete(key);
+    } else {
+      await _storage!.delete(key: key);
+    }
+  }
 
   // ---------------------------------------------------------------------------
   // 액세스 토큰
   // ---------------------------------------------------------------------------
 
   Future<void> saveAccessToken(String token) async {
-    await _storage.write(key: _Keys.accessToken, value: token);
+    await _write(_Keys.accessToken, token);
   }
 
   Future<String?> getAccessToken() async {
-    return _storage.read(key: _Keys.accessToken);
+    return _read(_Keys.accessToken);
   }
 
   Future<void> deleteAccessToken() async {
-    await _storage.delete(key: _Keys.accessToken);
+    await _delete(_Keys.accessToken);
   }
 
   // ---------------------------------------------------------------------------
@@ -49,15 +82,15 @@ class SecureStorage {
   // ---------------------------------------------------------------------------
 
   Future<void> saveRefreshToken(String token) async {
-    await _storage.write(key: _Keys.refreshToken, value: token);
+    await _write(_Keys.refreshToken, token);
   }
 
   Future<String?> getRefreshToken() async {
-    return _storage.read(key: _Keys.refreshToken);
+    return _read(_Keys.refreshToken);
   }
 
   Future<void> deleteRefreshToken() async {
-    await _storage.delete(key: _Keys.refreshToken);
+    await _delete(_Keys.refreshToken);
   }
 
   // ---------------------------------------------------------------------------

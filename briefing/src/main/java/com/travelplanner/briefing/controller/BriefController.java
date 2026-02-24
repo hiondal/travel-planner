@@ -11,7 +11,6 @@ import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import org.springframework.format.annotation.DateTimeFormat;
-import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
@@ -47,9 +46,6 @@ public class BriefController {
     public ResponseEntity<ApiResponse<BriefingDetailResponse>> getBriefing(
             @PathVariable String briefingId,
             @AuthenticationPrincipal UserPrincipal principal) {
-        if (principal == null) {
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
-        }
         Briefing briefing = briefingService.getBriefing(briefingId, principal.getUserId());
         boolean expired = briefing.isExpired();
         BriefingDetailResponse response = BriefingDetailResponse.from(briefing, expired);
@@ -68,9 +64,6 @@ public class BriefController {
     public ResponseEntity<ApiResponse<BriefingListResponse>> getBriefingList(
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date,
             @AuthenticationPrincipal UserPrincipal principal) {
-        if (principal == null) {
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
-        }
         LocalDate queryDate = date != null ? date : LocalDate.now();
         List<Briefing> briefings = briefingService.getBriefingList(principal.getUserId(), queryDate);
         BriefingListResponse response = BriefingListResponse.of(queryDate, briefings);

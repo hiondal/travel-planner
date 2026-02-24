@@ -1,0 +1,4 @@
+{
+  "provider": "google",
+  "oauth_code": "mock_google_oauth_code_for_test"
+}

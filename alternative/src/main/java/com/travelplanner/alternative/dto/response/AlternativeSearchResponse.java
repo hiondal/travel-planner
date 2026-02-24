@@ -16,7 +16,7 @@ public class AlternativeSearchResponse {
     @JsonProperty("original_place_id")
     private final String originalPlaceId;
 
-    @JsonProperty("cards")
+    @JsonProperty("alternatives")
     private final List<AlternativeCardDto> cards;
 
     @JsonProperty("radius_used")
@@ -29,9 +29,10 @@ public class AlternativeSearchResponse {
     }
 
     public static AlternativeSearchResponse of(String originalPlaceId, List<Alternative> alternatives, int radiusUsed) {
-        List<AlternativeCardDto> cards = alternatives.stream()
-                .map(AlternativeCardDto::from)
-                .collect(Collectors.toList());
+        List<AlternativeCardDto> cards = new java.util.ArrayList<>();
+        for (int i = 0; i < alternatives.size(); i++) {
+            cards.add(AlternativeCardDto.from(alternatives.get(i), i + 1));
+        }
         return new AlternativeSearchResponse(originalPlaceId, cards, radiusUsed);
     }
 }
