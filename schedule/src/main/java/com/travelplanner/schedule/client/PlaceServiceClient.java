@@ -1,5 +1,6 @@
 package com.travelplanner.schedule.client;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.travelplanner.common.response.ApiResponse;
 import lombok.Getter;
@@ -62,6 +63,7 @@ public class PlaceServiceClient {
     }
 
     @Getter
+    @JsonIgnoreProperties(ignoreUnknown = true)
     public static class PlaceDetail {
         @JsonProperty("place_id")
         private String placeId;
@@ -75,11 +77,16 @@ public class PlaceServiceClient {
         @JsonProperty("timezone")
         private String timezone;
 
-        @JsonProperty("lat")
-        private double lat;
+        @JsonProperty("coordinates")
+        private Coordinates coordinates;
 
-        @JsonProperty("lng")
-        private double lng;
+        public double getLat() {
+            return coordinates != null ? coordinates.lat : 0;
+        }
+
+        public double getLng() {
+            return coordinates != null ? coordinates.lng : 0;
+        }
 
         public static PlaceDetail unknown(String placeId) {
             PlaceDetail detail = new PlaceDetail();
@@ -92,6 +99,14 @@ public class PlaceServiceClient {
     }
 
     @Getter
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public static class Coordinates {
+        private double lat;
+        private double lng;
+    }
+
+    @Getter
+    @JsonIgnoreProperties(ignoreUnknown = true)
     public static class BusinessHour {
         @JsonProperty("day")
         private String day;

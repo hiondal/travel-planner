@@ -105,7 +105,7 @@ class PurchaseRequest {
 
   Map<String, dynamic> toJson() => {
         'plan_id': planId,
-        'receipt_data': receiptData,
-        'platform': platform,
+        'receipt': receiptData,
+        'provider': platform == 'ios' ? 'apple' : 'google',
       };
 }

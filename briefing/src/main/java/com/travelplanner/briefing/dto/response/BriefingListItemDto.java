@@ -18,6 +18,9 @@ public class BriefingListItemDto {
     @JsonProperty("type")
     private final String type;
 
+    @JsonProperty("place_id")
+    private final String placeId;
+
     @JsonProperty("place_name")
     private final String placeName;
 
@@ -30,6 +33,7 @@ public class BriefingListItemDto {
     private BriefingListItemDto(Briefing briefing) {
         this.briefingId = briefing.getId();
         this.type = briefing.getType().name();
+        this.placeId = briefing.getPlaceId();
         this.placeName = briefing.getPlaceName();
         this.createdAt = briefing.getCreatedAt();
         this.expired = briefing.isExpired();

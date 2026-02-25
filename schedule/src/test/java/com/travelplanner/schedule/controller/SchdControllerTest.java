@@ -153,7 +153,7 @@ class SchdControllerTest {
             .items(List.of(sampleItem()))
             .build();
 
-        given(tripService.getSchedule(eq(TRIP_ID), any())).willReturn(result);
+        given(tripService.getSchedule(eq(TRIP_ID), any(), any())).willReturn(result);
 
         mockMvc.perform(get("/api/v1/trips/{tripId}/schedule", TRIP_ID))
             .andExpect(status().isOk())

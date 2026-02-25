@@ -41,6 +41,8 @@ public class SecurityConfig {
             .exceptionHandling(ex ->
                 ex.authenticationEntryPoint(new JwtAuthenticationEntryPoint()))
             .authorizeHttpRequests(auth -> auth
+                // 배지 조회 — 내부 서비스 간 호출 허용 (공개 정보)
+                .requestMatchers(HttpMethod.GET, "/api/v1/badges/**").permitAll()
                 // 내부 스케줄러 호출용 (컨트롤러에서 서비스 키 검증)
                 .requestMatchers(HttpMethod.POST, "/api/v1/monitor/collect").permitAll()
                 // Swagger / Actuator

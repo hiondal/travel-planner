@@ -262,7 +262,7 @@ final tripDeleteNotifierProvider =
 
 typedef _$TripDeleteNotifier = AutoDisposeNotifier<AsyncValue<void>>;
 String _$scheduleItemAddNotifierHash() =>
-    r'26865292edd00ab2a849964c00746c93e42c7a4c';
+    r'8e9bfec370aea3ab746e8a51cd50791eb96a0746';
 
 /// 장소 추가 Notifier
 ///

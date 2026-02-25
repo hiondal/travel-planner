@@ -64,6 +64,8 @@ public class SecurityConfig {
                 // 인증 불필요 엔드포인트
                 .requestMatchers(HttpMethod.POST, "/api/v1/auth/social-login").permitAll()
                 .requestMatchers(HttpMethod.POST, "/api/v1/auth/token/refresh").permitAll()
+                // 테스트 전용 엔드포인트 (dev 프로파일에서만 활성화)
+                .requestMatchers("/api/v1/test/**").permitAll()
                 // Swagger UI / OpenAPI 문서
                 .requestMatchers(
                     "/swagger-ui/**",

@@ -1,11 +1,25 @@
 -- MONITOR 서비스 테스트 초기 데이터
 -- 멱등성 보장: TRUNCATE → INSERT 순서
+-- 실제 테이블: monitoring_targets, collected_data, status_history
 
-TRUNCATE TABLE place_statuses;
+TRUNCATE TABLE status_history;
+TRUNCATE TABLE collected_data;
+TRUNCATE TABLE monitoring_targets;
 
--- 테스트 장소 상태
-INSERT INTO place_statuses (id, place_id, place_name, overall_status, business_status, congestion_status, congestion_value, congestion_is_unknown, weather_status, weather_value, precipitation_prob, walking_minutes, transit_minutes, distance_m, reason, updated_at)
+-- 테스트 모니터링 대상
+INSERT INTO monitoring_targets (id, user_id, trip_id, schedule_item_id, place_id, lat, lng, category, visit_datetime, current_status, current_status_updated_at, consecutive_failure_count, created_at)
 VALUES
-    ('ps_test001', 'place_abc123', '이치란 라멘 시부야', 'GREEN', 'NORMAL', 'NORMAL', '보통', FALSE, 'NORMAL', '맑음', 10, 15, NULL, 420, NULL, NOW()),
-    ('ps_test002', 'place_def456', '시부야 스크램블 교차로', 'YELLOW', 'NORMAL', 'WARNING', '혼잡', FALSE, 'NORMAL', '맑음', 15, 20, 8, 620, '혼잡도 높음', NOW()),
-    ('ps_test003', 'place_xyz789', '후쿠로쿠 라멘', 'GREY', 'NORMAL', 'NORMAL', '보통', TRUE, 'NORMAL', '맑음', 5, 5, NULL, 320, '데이터 미확인', NOW());
+    ('mt_test001', 'usr_test001', 'trip_001', 'si_test001', 'place_abc123', 35.6595000, 139.7004000, '라멘', NOW() + INTERVAL '2 hours', 'GREEN', NOW(), 0, NOW()),
+    ('mt_test002', 'usr_test001', 'trip_001', 'si_test002', 'place_def456', 35.6594000, 139.7005000, '관광지', NOW() + INTERVAL '4 hours', 'YELLOW', NOW(), 0, NOW());
+
+-- 테스트 수집 데이터
+INSERT INTO collected_data (id, place_id, business_status, congestion_level, weather_condition, precipitation_prob, walking_minutes, transit_minutes, distance_m, has_fallback, collected_at)
+VALUES
+    ('cd_test001', 'place_abc123', 'OPEN', 'LOW', '맑음', 10, 15, NULL, 420, FALSE, NOW()),
+    ('cd_test002', 'place_def456', 'OPEN', 'HIGH', '맑음', 15, 20, 8, 620, FALSE, NOW());
+
+-- 테스트 상태 이력
+INSERT INTO status_history (id, place_id, schedule_item_id, status, confidence_score, reason, judgment_at)
+VALUES
+    ('sh_test001', 'place_abc123', 'si_test001', 'GREEN', 0.95, NULL, NOW()),
+    ('sh_test002', 'place_def456', 'si_test002', 'YELLOW', 0.75, '혼잡도 높음', NOW());

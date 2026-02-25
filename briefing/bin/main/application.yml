@@ -43,6 +43,12 @@ monitor-service:
 payment-service:
   base-url: ${PAYMENT_SERVICE_URL:http://localhost:8087}
 
+place-service:
+  base-url: ${PLACE_SERVICE_URL:http://localhost:8083}
+
+internal:
+  service-key: ${INTERNAL_SERVICE_KEY:}
+
 briefing:
   free-tier-daily-limit: 1
 
@@ -65,6 +71,18 @@ springdoc:
 
 logging:
   level:
-    com.travelplanner.briefing: ${LOG_LEVEL:INFO}
+    root: ${LOG_LEVEL_ROOT:INFO}
+    com.travelplanner.briefing: ${LOG_LEVEL_APP:INFO}
     org.springframework.security: WARN
     org.hibernate.SQL: ${LOG_LEVEL_SQL:INFO}
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss} - %msg%n"
+    file: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"
+  file:
+    name: ${LOG_FILE_PATH:logs/briefing.log}
+  logback:
+    rollingpolicy:
+      file-name-pattern: ${LOG_ROLLING_FILE_PATTERN:logs/briefing.%d{yyyy-MM-dd}.%i.log}
+      max-file-size: ${LOG_MAX_FILE_SIZE:100MB}
+      max-history: ${LOG_MAX_HISTORY:30}
+      total-size-cap: ${LOG_TOTAL_SIZE_CAP:1GB}

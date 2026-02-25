@@ -56,6 +56,7 @@ class ScheduleRepository {
     required String placeId,
     required DateTime scheduledAt,
     required int durationMinutes,
+    bool force = false,
   }) async {
     return dataSource.addScheduleItem(
       tripId,
@@ -63,6 +64,7 @@ class ScheduleRepository {
         placeId: placeId,
         scheduledAt: scheduledAt,
         durationMinutes: durationMinutes,
+        force: force,
       ),
     );
   }

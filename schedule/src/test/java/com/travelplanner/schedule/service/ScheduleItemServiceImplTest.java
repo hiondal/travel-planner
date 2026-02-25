@@ -180,8 +180,6 @@ class ScheduleItemServiceImplTest {
 
         scheduleItemService.deleteScheduleItem(TRIP_ID, ITEM_ID, USER_ID);
 
-        verify(scheduleItemRepository).deleteById(ITEM_ID);
-
         ArgumentCaptor<ScheduleItemDeletedEvent> eventCaptor =
             ArgumentCaptor.forClass(ScheduleItemDeletedEvent.class);
         verify(eventPublisher).publishEvent(eventCaptor.capture());

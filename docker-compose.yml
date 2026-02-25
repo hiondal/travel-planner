@@ -6,7 +6,7 @@ services:
 
   # 기본 서비스 (항상 기동)
   postgres:
-    image: postgres:16
+    image: postgres:17
     environment:
       POSTGRES_USER: ${DB_USER:-travel}
       POSTGRES_PASSWORD: ${DB_PASSWORD:-P@ssw0rd$}

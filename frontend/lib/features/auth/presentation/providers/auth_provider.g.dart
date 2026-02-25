@@ -43,5 +43,25 @@ final logoutNotifierProvider =
 );
 
 typedef _$LogoutNotifier = AutoDisposeNotifier<AsyncValue<void>>;
+String _$testLoginNotifierHash() => r'9be2cd31dec8ee2de4de04e660290f85e4876940';
+
+/// dev 환경 전용 테스트 로그인 AsyncNotifier
+/// POST /test/login — TestAuthController (@Profile("dev"))
+/// 실제 백엔드에서 JWT를 발급받아 저장하므로 토큰 갱신 흐름도 정상 동작
+///
+/// Copied from [TestLoginNotifier].
+@ProviderFor(TestLoginNotifier)
+final testLoginNotifierProvider =
+    AutoDisposeNotifierProvider<TestLoginNotifier, AsyncValue<void>>.internal(
+  TestLoginNotifier.new,
+  name: r'testLoginNotifierProvider',
+  debugGetCreateSourceHash: const bool.fromEnvironment('dart.vm.product')
+      ? null
+      : _$testLoginNotifierHash,
+  dependencies: null,
+  allTransitiveDependencies: null,
+);
+
+typedef _$TestLoginNotifier = AutoDisposeNotifier<AsyncValue<void>>;
 // ignore_for_file: type=lint
 // ignore_for_file: subtype_of_sealed_class, invalid_use_of_internal_member, invalid_use_of_visible_for_testing_member, deprecated_member_use_from_same_package

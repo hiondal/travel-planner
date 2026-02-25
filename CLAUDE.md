@@ -102,3 +102,42 @@ QA 엔지니어
 ### 보고 시 체크리스트
 1. 이 단계의 "완료 기준"이 무엇인지 먼저 확인
 2. 그 기준을 실제로 충족했는지 증거(로그, 응답, 스크린샷) 확인
+
+## NPD 워크플로우 상태
+### develop
+- 진행 모드: 단계별 승인
+- 개발 범위: Phase 1 (MVP) — 일정 등록, 배지 표시, 브리핑 Push, 대안 카드 3장
+- AI 서비스: SKIP
+- 마지막 완료 Step: Step 4-4
+
+### 스킬부스팅 규칙
+SKILL.md 또는 대화에서 아래 키워드가 나오면 **반드시 Skill 도구를 호출**하여 해당 스킬을 실행한다.
+텍스트 출력으로 대체하거나, 키워드를 무시하는 것은 금지한다.
+
+| 키워드 (어느 형태든 매칭) | Skill 도구 호출 |
+|--------------------------|----------------|
+| `/plan`, `plan 모드`, `plan 스킬` | `Skill("oh-my-claudecode:plan")` |
+| `/ralplan`, `ralplan 모드`, `ralplan 스킬` | `Skill("oh-my-claudecode:ralplan")` |
+| `/ralph`, `ralph 모드`, `ralph 스킬` | `Skill("oh-my-claudecode:ralph")` |
+| `/build-fix`, `build-fix 모드` | `Skill("oh-my-claudecode:build-fix")` |
+| `/ultraqa`, `ultraqa 모드`, `ultraqa 스킬` | `Skill("oh-my-claudecode:ultraqa")` |
+| `/review`, `review 모드` | `Skill("oh-my-claudecode:review")` |
+| `/analyze`, `analyze 모드` | `Skill("oh-my-claudecode:analyze")` |
+| `/code-review`, `code-review 모드` | `Skill("oh-my-claudecode:code-review")` |
+| `/security-review`, `security-review 모드` | `Skill("oh-my-claudecode:security-review")` |
+| `ulw` | `Skill("oh-my-claudecode:ultrawork")` |
+
+## Lessons Learned
+> skill/agent 실행 중 확인된 시행착오와 교훈을 기록한다.
+> 모든 에이전트는 작업 전 이 섹션을 반드시 참고한다.
+
+### 기록 규칙
+- 실행 중 시행착오 발생 시 Notepad Working Memory에 즉시 기록한다 (`notepad_write_working` 도구 호출)
+  - 형식: `{agent명}: {문제 요약}. {해결 방법}. {관련 파일}`
+- 반복 검증된 핵심 교훈만 이 섹션(CLAUDE.md)에 승격한다 (Edit 도구로 추가)
+  - 형식: `- [HIGH/MED] {교훈 한 줄} — {출처: agent명/단계명}`
+- 최대 20항목 유지, 넘으면 오래된 MED부터 정리
+- 기존 항목과 중복되는 내용은 기록하지 않음
+
+### 교훈 목록
+(아직 없음)

@@ -40,6 +40,9 @@ iap:
     package-name: ${GOOGLE_PACKAGE_NAME:}
     credentials-path: ${GOOGLE_PLAY_CREDENTIALS_PATH:}
 
+internal:
+  service-key: ${INTERNAL_SERVICE_KEY:}
+
 auth-service:
   base-url: ${AUTH_SERVICE_BASE_URL:http://localhost:8081}
 
@@ -69,6 +72,18 @@ springdoc:
 
 logging:
   level:
+    root: ${LOG_LEVEL_ROOT:INFO}
     com.travelplanner: ${LOG_LEVEL_APP:DEBUG}
     org.springframework.web: ${LOG_LEVEL_WEB:INFO}
     org.hibernate.SQL: ${LOG_LEVEL_SQL:INFO}
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss} - %msg%n"
+    file: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"
+  file:
+    name: ${LOG_FILE_PATH:logs/payment.log}
+  logback:
+    rollingpolicy:
+      file-name-pattern: ${LOG_ROLLING_FILE_PATTERN:logs/payment.%d{yyyy-MM-dd}.%i.log}
+      max-file-size: ${LOG_MAX_FILE_SIZE:100MB}
+      max-history: ${LOG_MAX_HISTORY:30}
+      total-size-cap: ${LOG_TOTAL_SIZE_CAP:1GB}

@@ -142,17 +142,19 @@ class StatusItem {
 }
 
 /// 대안 장소 모델 (ALTN 서비스)
+// 변경: rating nullable 처리 — 백엔드 AlternativeCardDto.rating은 Float (래퍼 타입, nullable)
 class Alternative {
   const Alternative({
     required this.alternativeId,
     required this.placeId,
     required this.placeName,
     required this.category,
-    required this.rating,
+    this.rating,
     required this.reviewCount,
     required this.reason,
     required this.distanceKm,
     required this.estimatedMinutes,
+    this.rank,
     this.imageUrl,
     this.status,
   });
@@ -161,11 +163,14 @@ class Alternative {
   final String placeId;
   final String placeName;
   final String category;
-  final double rating;
+  // 변경: non-nullable double → double? (백엔드 nullable 반영)
+  final double? rating;
   final int reviewCount;
   final String reason;
   final double distanceKm;
   final int estimatedMinutes;
+  // 추가: rank 필드 (int, 1~3) — 백엔드 AlternativeCardDto.rank 반영
+  final int? rank;
   final String? imageUrl;
   final StatusLevel? status;
 
@@ -185,11 +190,13 @@ class Alternative {
       placeName: json['place_name'] as String? ??
           json['name'] as String? ?? '',
       category: json['category'] as String? ?? '',
-      rating: (json['rating'] as num? ?? 0).toDouble(),
+      // 변경: nullable — 백엔드가 null을 반환할 수 있음
+      rating: (json['rating'] as num?)?.toDouble(),
       reviewCount: json['review_count'] as int? ?? 0,
       reason: json['reason'] as String? ?? '',
       distanceKm: distanceKm.toDouble(),
       estimatedMinutes: json['estimated_minutes'] as int? ?? walkingMin ?? 0,
+      rank: json['rank'] as int?,
       imageUrl: json['image_url'] as String?,
       status: json['status'] != null || json['status_label'] != null
           ? StatusLevel.fromString(

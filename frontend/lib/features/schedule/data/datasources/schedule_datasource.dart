@@ -63,6 +63,7 @@ class ScheduleDataSource {
 
   /// POST /trips/{tripId}/schedule-items
   /// 장소 추가 (백엔드: SCHD-04)
+  /// 영업시간 외 방문 시 warning 응답 → BusinessHoursWarningException
   Future<ScheduleItem> addScheduleItem(
     String tripId,
     AddScheduleItemRequest request,
@@ -71,7 +72,15 @@ class ScheduleDataSource {
       '/trips/$tripId/schedule-items',
       data: request.toJson(),
     );
-    return ScheduleItem.fromJson(response.data!);
+    final data = response.data!;
+    // 영업시간 외 경고 응답 감지 (ApiResponse 래핑 없이 warning 필드만 반환)
+    if (data.containsKey('warning')) {
+      throw BusinessHoursWarningException(
+        message: data['message'] as String? ?? '',
+        businessHours: data['business_hours'] as String? ?? '',
+      );
+    }
+    return ScheduleItem.fromJson(data);
   }
 
   /// DELETE /trips/{tripId}/schedule-items/{scheduleItemId}

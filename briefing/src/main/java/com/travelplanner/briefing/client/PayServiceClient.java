@@ -10,11 +10,14 @@ import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.ParameterizedTypeReference;
+import org.springframework.http.HttpEntity;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClientException;
 import org.springframework.web.client.RestTemplate;
+import org.springframework.web.util.UriComponentsBuilder;
 
 /**
  * PAY 서비스 HTTP 클라이언트.
@@ -31,6 +34,9 @@ public class PayServiceClient {
     @Value("${payment-service.base-url:http://localhost:8087}")
     private String baseUrl;
 
+    @Value("${internal.service-key:}")
+    private String internalServiceKey;
+
     /**
      * 사용자 구독 정보를 조회한다.
      *
@@ -43,11 +49,17 @@ public class PayServiceClient {
     public SubscriptionInfo getSubscriptionInfo(String userId) {
         log.debug("PAY 서비스 구독 정보 조회 요청: userId={}", userId);
         try {
-            String url = baseUrl + "/api/v1/subscriptions/status?userId=" + userId;
+            String url = UriComponentsBuilder.fromHttpUrl(baseUrl)
+                    .path("/api/v1/subscriptions/status")
+                    .queryParam("userId", userId)
+                    .toUriString();
+            HttpHeaders headers = new HttpHeaders();
+            headers.set("X-Internal-Service-Key", internalServiceKey);
+            HttpEntity<Void> entity = new HttpEntity<>(headers);
             ResponseEntity<ApiResponse<SubscriptionStatusDto>> response = restTemplate.exchange(
                 url,
                 HttpMethod.GET,
-                null,
+                entity,
                 new ParameterizedTypeReference<ApiResponse<SubscriptionStatusDto>>() {}
             );
             if (response.getStatusCode().is2xxSuccessful()

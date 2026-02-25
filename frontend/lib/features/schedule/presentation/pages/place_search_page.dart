@@ -12,6 +12,7 @@ import '../../../../shared/widgets/app_bottom_sheet.dart';
 import '../../../../shared/widgets/app_skeleton.dart';
 import '../../../place/domain/models/place_model.dart';
 import '../../../place/presentation/providers/place_provider.dart';
+import '../providers/trip_provider.dart';
 
 /// 장소 검색 화면 (SCR-014)
 /// UFR-SCHD-020, UFR-PLCE-010: 장소 검색 및 일정 추가
@@ -52,6 +53,12 @@ class _PlaceSearchPageState extends ConsumerState<PlaceSearchPage> {
     super.dispose();
   }
 
+  String _getTripCity() {
+    final trips = ref.read(tripListProvider).valueOrNull ?? [];
+    final trip = trips.where((t) => t.tripId == widget.tripId).firstOrNull;
+    return trip?.city ?? '';
+  }
+
   void _onSearch(String keyword) {
     _debounce?.cancel();
     if (keyword.length < 2) {
@@ -59,7 +66,10 @@ class _PlaceSearchPageState extends ConsumerState<PlaceSearchPage> {
       return;
     }
     _debounce = Timer(const Duration(milliseconds: 500), () {
-      ref.read(placeSearchProvider.notifier).search(keyword: keyword);
+      ref.read(placeSearchProvider.notifier).search(
+            keyword: keyword,
+            city: _getTripCity(),
+          );
     });
   }
 

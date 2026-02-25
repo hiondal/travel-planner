@@ -33,6 +33,9 @@ public class PayController {
 
     private final SubscriptionService subscriptionService;
 
+    @org.springframework.beans.factory.annotation.Value("${internal.service-key:}")
+    private String internalServiceKey;
+
     /**
      * 구독 플랜 목록을 조회한다.
      *
@@ -58,8 +61,11 @@ public class PayController {
             @AuthenticationPrincipal UserPrincipal principal,
             @Valid @RequestBody PurchaseRequest request) {
 
-        // Phase 1: 인증 미적용 — userId 하드코딩
-        String userId = (principal != null) ? principal.getUserId() : "user-test-001";
+        if (principal == null) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                    .body(ApiResponse.error("UNAUTHORIZED", "인증이 필요합니다."));
+        }
+        String userId = principal.getUserId();
 
         PurchaseResult result = subscriptionService.purchaseSubscription(
                 userId, request.getPlanId(), request.getReceipt(), request.getProvider());
@@ -76,10 +82,24 @@ public class PayController {
      */
     @GetMapping("/status")
     public ResponseEntity<ApiResponse<SubscriptionStatusResponse>> getSubscriptionStatus(
-            @AuthenticationPrincipal UserPrincipal principal) {
+            @AuthenticationPrincipal UserPrincipal principal,
+            @RequestParam(required = false) String userId,
+            @RequestHeader(value = "X-Internal-Service-Key", required = false) String serviceKey) {
 
-        // Phase 1: 인증 미적용 — userId 하드코딩
-        String userId = (principal != null) ? principal.getUserId() : "user-test-001";
+        // 내부 서비스 호출: X-Internal-Service-Key + userId 쿼리 파라미터
+        if (userId != null && !userId.isBlank()) {
+            if (internalServiceKey.isEmpty() || !internalServiceKey.equals(serviceKey)) {
+                return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                        .body(ApiResponse.error("UNAUTHORIZED", "유효하지 않은 서비스 키입니다."));
+            }
+        } else if (principal != null) {
+            // 외부 호출: JWT 인증
+            userId = principal.getUserId();
+        } else {
+            // 인증 정보 없음
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                    .body(ApiResponse.error("UNAUTHORIZED", "인증이 필요합니다."));
+        }
 
         SubscriptionStatus status = subscriptionService.getSubscriptionStatus(userId);
         return ResponseEntity.ok(ApiResponse.ok(SubscriptionStatusResponse.from(status)));

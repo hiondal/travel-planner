@@ -51,10 +51,11 @@ class BriefingRepository {
     required String alternativeId,
     required String tripId,
     required String scheduleItemId,
+    required String originalPlaceId,
   }) async {
     return alternativeDataSource.selectAlternative(
       altId: alternativeId,
-      originalPlaceId: '',
+      originalPlaceId: originalPlaceId,
       scheduleItemId: scheduleItemId,
       tripId: tripId,
       selectedRank: 1,

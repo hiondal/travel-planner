@@ -9,6 +9,7 @@ import '../../../../core/routing/app_routes.dart';
 import '../../../../shared/providers/app_user_provider.dart';
 import '../../../../shared/widgets/app_skeleton.dart';
 import '../../../../shared/widgets/app_snack_bar.dart';
+import '../../../schedule/presentation/providers/trip_provider.dart';
 import '../../domain/models/briefing_model.dart';
 import '../providers/briefing_provider.dart';
 
@@ -38,6 +39,9 @@ class AlternativeCardPage extends ConsumerWidget {
 
     // briefing 상세가 아직 로딩 중이면 tripId를 알 수 없으므로 스켈레톤 표시
     final briefing = briefingAsync.valueOrNull;
+    // tripId 조회: trip list에서 첫 번째 trip 사용 (MVP)
+    final trips = ref.watch(tripListProvider).valueOrNull ?? [];
+    final tripId = trips.isNotEmpty ? trips.first.tripId : '';
 
     return Scaffold(
       appBar: AppBar(title: const Text('대안 장소')),
@@ -68,7 +72,8 @@ class AlternativeCardPage extends ConsumerWidget {
                   : _AlternativeListView(
                       alternatives: alternatives,
                       briefingId: briefingId,
-                      tripId: '',
+                      tripId: tripId,
+                      originalPlaceId: briefing.placeId ?? '',
                     ),
             ),
     );
@@ -80,11 +85,13 @@ class _AlternativeListView extends ConsumerWidget {
     required this.alternatives,
     required this.briefingId,
     required this.tripId,
+    required this.originalPlaceId,
   });
 
   final List<Alternative> alternatives;
   final String briefingId;
   final String tripId;
+  final String originalPlaceId;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -131,6 +138,7 @@ class _AlternativeListView extends ConsumerWidget {
       alternativeId: alt.alternativeId,
       tripId: tripId,
       scheduleItemId: alt.placeId,
+      originalPlaceId: originalPlaceId,
     );
     if (!context.mounted) return;
     if (result != null) {
@@ -252,8 +260,11 @@ class _AlternativeCard extends StatelessWidget {
                       color: AppColors.accentAmber,
                     ),
                     const SizedBox(width: 2),
+                    // 변경: rating nullable 처리 — 백엔드가 null 반환 가능
                     Text(
-                      '${alternative.rating} (${alternative.reviewCount})',
+                      alternative.rating != null
+                          ? '${alternative.rating!.toStringAsFixed(1)} (${alternative.reviewCount})'
+                          : '(${alternative.reviewCount})',
                       style: AppTypography.bodySmall.copyWith(
                         color: AppColors.textSecondary,
                       ),

@@ -457,7 +457,7 @@ class _AlternativeListProviderElement
 }
 
 String _$applyAlternativeNotifierHash() =>
-    r'899b6e72b4c2d97039e6c24832a17fc0e6355bf2';
+    r'412254c01d399cc456398151a6bbe647a11163b8';
 
 /// 대안 적용 Notifier
 ///

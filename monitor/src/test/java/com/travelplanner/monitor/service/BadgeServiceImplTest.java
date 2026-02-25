@@ -3,6 +3,7 @@ package com.travelplanner.monitor.service;
 import com.travelplanner.common.exception.ResourceNotFoundException;
 import com.travelplanner.monitor.domain.*;
 import com.travelplanner.monitor.dto.internal.StatusDetail;
+import com.travelplanner.monitor.repository.CollectedDataRepository;
 import com.travelplanner.monitor.repository.MonitoringRepository;
 import com.travelplanner.monitor.repository.StatusHistoryRepository;
 import org.junit.jupiter.api.BeforeEach;
@@ -41,6 +42,9 @@ class BadgeServiceImplTest {
 
     @Mock
     private StatusHistoryRepository statusHistoryRepository;
+
+    @Mock
+    private CollectedDataRepository collectedDataRepository;
 
     @Mock
     private RedisTemplate<String, String> mntrRedisTemplate;
@@ -111,8 +115,10 @@ class BadgeServiceImplTest {
     @Test
     @DisplayName("상태 상세 조회 - 성공")
     void getStatusDetail_success() {
-        given(monitoringRepository.findByPlaceId(PLACE_ID))
+        given(monitoringRepository.findTopByPlaceIdOrderByVisitDatetimeDesc(PLACE_ID))
             .willReturn(Optional.of(sampleTarget));
+        given(collectedDataRepository.findLatestByPlaceId(any(), any()))
+            .willReturn(List.of());
 
         StatusDetail result = badgeService.getStatusDetail(PLACE_ID);
 
@@ -125,8 +131,10 @@ class BadgeServiceImplTest {
     @DisplayName("상태 상세 조회 - RED 상태면 대안 버튼 표시")
     void getStatusDetail_red_showAlternativeButton() {
         sampleTarget.updateStatus(PlaceStatusEnum.RED);
-        given(monitoringRepository.findByPlaceId(PLACE_ID))
+        given(monitoringRepository.findTopByPlaceIdOrderByVisitDatetimeDesc(PLACE_ID))
             .willReturn(Optional.of(sampleTarget));
+        given(collectedDataRepository.findLatestByPlaceId(any(), any()))
+            .willReturn(List.of());
 
         StatusDetail result = badgeService.getStatusDetail(PLACE_ID);
 
@@ -137,7 +145,7 @@ class BadgeServiceImplTest {
     @Test
     @DisplayName("상태 상세 조회 - 없는 장소면 ResourceNotFoundException")
     void getStatusDetail_notFound() {
-        given(monitoringRepository.findByPlaceId(PLACE_ID))
+        given(monitoringRepository.findTopByPlaceIdOrderByVisitDatetimeDesc(PLACE_ID))
             .willReturn(Optional.empty());
 
         assertThatThrownBy(() -> badgeService.getStatusDetail(PLACE_ID))

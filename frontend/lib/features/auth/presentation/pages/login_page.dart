@@ -10,9 +10,6 @@ import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_spacing.dart';
 import '../../../../core/constants/app_typography.dart';
 import '../../../../core/routing/app_routes.dart';
-import '../../../../core/utils/secure_storage.dart';
-import '../../../../shared/models/subscription_tier.dart';
-import '../../../../shared/providers/app_user_provider.dart';
 import '../../../../shared/widgets/app_snack_bar.dart';
 import '../providers/auth_provider.dart';
 
@@ -106,21 +103,27 @@ class _LoginPageState extends ConsumerState<LoginPage> {
     }
   }
 
-  /// 개발 환경 전용: 유효한 JWT로 바이패스
+  /// 개발 환경 전용: POST /test/login API 호출로 실제 JWT 발급
+  /// TestAuthController (@Profile("dev")) 에서 처리
+  /// 하드코딩 토큰 제거 → 실제 백엔드에서 토큰 발급받아 저장
   Future<void> _handleDevBypass() async {
-    // HS256 JWT signed with dev secret, 1-year expiry
-    const devToken = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.'
-        'eyJzdWIiOiJkZXYtdXNlciIsImVtYWlsIjoiZGV2QHRlc3QuY29tIiwidGllciI6IlBSTyIsImlhdCI6MTc3MTkzNjk4OSwiZXhwIjoxODAzNDcyOTg5fQ.'
-        '0v53MnXAf5_u1iSpHrvBBRG-PnWXFdHAn29u3pJVVog';
-    final storage = ref.read(secureStorageProvider);
-    await storage.saveAccessToken(devToken);
-    await storage.saveRefreshToken(devToken);
-    ref.read(appUserProvider.notifier).signIn(
-      userId: 'dev-user',
-      email: 'dev@test.com',
-      tier: SubscriptionTier.pro,
-    );
-    if (mounted) context.goNamed(AppRoutes.tripListName);
+    setState(() => _isGoogleLoading = true);
+    try {
+      final notifier = ref.read(testLoginNotifierProvider.notifier);
+      final isNewUser = await notifier.login('usr_test001');
+      if (!mounted) return;
+      if (isNewUser) {
+        context.goNamed(AppRoutes.onboardingName);
+      } else {
+        context.goNamed(AppRoutes.tripListName);
+      }
+    } catch (e) {
+      if (mounted) {
+        AppSnackBar.showError(context, '[DEV] 테스트 로그인 실패: $e');
+      }
+    } finally {
+      if (mounted) setState(() => _isGoogleLoading = false);
+    }
   }
 
   @override

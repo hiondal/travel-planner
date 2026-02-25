@@ -149,23 +149,39 @@ class ScheduleResponse {
   }
 }
 
+/// 영업시간 외 경고 예외
+class BusinessHoursWarningException implements Exception {
+  const BusinessHoursWarningException({
+    required this.message,
+    required this.businessHours,
+  });
+
+  final String message;
+  final String businessHours;
+
+  @override
+  String toString() => message;
+}
+
 /// 장소 추가 요청 모델
 class AddScheduleItemRequest {
   const AddScheduleItemRequest({
     required this.placeId,
     required this.scheduledAt,
     required this.durationMinutes,
+    this.force = false,
   });
 
   final String placeId;
   final DateTime scheduledAt;
   final int durationMinutes;
+  final bool force;
 
   Map<String, dynamic> toJson() => {
         'place_id': placeId,
         'visit_datetime': scheduledAt.toIso8601String(),
         'timezone': _formatTimezone(scheduledAt),
-        'force': false,
+        'force': force,
       };
 
   static String _formatTimezone(DateTime dt) {

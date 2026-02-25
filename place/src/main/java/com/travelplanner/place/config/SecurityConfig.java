@@ -6,6 +6,7 @@ import com.travelplanner.common.security.JwtProvider;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpMethod;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.Customizer;
@@ -40,12 +41,12 @@ public class SecurityConfig {
             .exceptionHandling(ex ->
                 ex.authenticationEntryPoint(new JwtAuthenticationEntryPoint()))
             .authorizeHttpRequests(auth -> auth
+                // 장소 조회 API — 내부 서비스 간 호출 허용 (공개 정보)
+                .requestMatchers(HttpMethod.GET, "/api/v1/places/**").permitAll()
                 // Swagger / Actuator
                 .requestMatchers("/swagger-ui/**", "/swagger-ui.html",
                     "/v3/api-docs/**", "/api-docs/**").permitAll()
                 .requestMatchers("/actuator/health", "/actuator/info").permitAll()
-                // 서비스 간 내부 호출 — 인증 없이 허용
-                .requestMatchers("/api/v1/places/**").permitAll()
                 // 나머지 모든 요청은 인증 필요
                 .anyRequest().authenticated()
             )

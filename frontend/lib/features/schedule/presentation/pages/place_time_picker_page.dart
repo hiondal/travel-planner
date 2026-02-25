@@ -7,7 +7,9 @@ import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_spacing.dart';
 import '../../../../core/constants/app_typography.dart';
 import '../../../../core/routing/app_routes.dart';
+import '../../../../shared/widgets/app_alert_dialog.dart';
 import '../../../../shared/widgets/app_snack_bar.dart';
+import '../../domain/models/trip_model.dart';
 import '../providers/trip_provider.dart';
 
 /// 장소 시간 지정 화면 (SCR-015)
@@ -88,7 +90,7 @@ class _PlaceTimePickerPageState extends ConsumerState<PlaceTimePickerPage> {
     if (picked != null) setState(() => _selectedTime = picked);
   }
 
-  Future<void> _submit() async {
+  Future<void> _submit({bool force = false}) async {
     if (widget.placeId == null) {
       AppSnackBar.showError(context, '장소 정보가 없습니다.');
       return;
@@ -108,9 +110,28 @@ class _PlaceTimePickerPageState extends ConsumerState<PlaceTimePickerPage> {
       placeId: widget.placeId!,
       scheduledAt: scheduledAt,
       durationMinutes: _durationMinutes,
+      force: force,
     );
 
     if (!mounted) return;
+
+    // 영업시간 외 경고 처리
+    final addState = ref.read(scheduleItemAddNotifierProvider);
+    if (item == null && addState.hasError && addState.error is BusinessHoursWarningException) {
+      final warning = addState.error as BusinessHoursWarningException;
+      final confirmed = await AppAlertDialog.show(
+        context,
+        title: '영업시간 외 방문',
+        content: '${warning.message}\n그래도 추가하시겠습니까?',
+        confirmLabel: '강제 추가',
+        cancelLabel: '취소',
+      );
+      if (confirmed == true && mounted) {
+        await _submit(force: true);
+      }
+      return;
+    }
+
     if (item != null) {
       AppSnackBar.show(context, '일정에 추가되었습니다.');
       final params = [

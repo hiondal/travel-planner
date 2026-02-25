@@ -101,6 +101,7 @@ class ScheduleItemAddNotifier extends _$ScheduleItemAddNotifier {
     required String placeId,
     required DateTime scheduledAt,
     required int durationMinutes,
+    bool force = false,
   }) async {
     state = const AsyncValue.loading();
     final result = await AsyncValue.guard(() async {
@@ -109,6 +110,7 @@ class ScheduleItemAddNotifier extends _$ScheduleItemAddNotifier {
             placeId: placeId,
             scheduledAt: scheduledAt,
             durationMinutes: durationMinutes,
+            force: force,
           );
       final targetDate = DateTime(scheduledAt.year, scheduledAt.month, scheduledAt.day);
       ref.invalidate(scheduleProvider(tripId, targetDate: targetDate));

@@ -4,6 +4,7 @@ import com.travelplanner.briefing.client.EventPublisher;
 import com.travelplanner.briefing.client.FcmClient;
 import com.travelplanner.briefing.client.MonitorServiceClient;
 import com.travelplanner.briefing.client.PayServiceClient;
+import com.travelplanner.briefing.client.PlaceServiceClient;
 import com.travelplanner.briefing.domain.*;
 import com.travelplanner.briefing.dto.internal.BriefingCreatedEvent;
 import com.travelplanner.briefing.dto.internal.GenerateBriefingResult;
@@ -47,6 +48,7 @@ public class BriefingServiceImpl implements BriefingService {
     private final BriefingLogRepository briefingLogRepository;
     private final BriefingTextGenerator briefingTextGenerator;
     private final MonitorServiceClient monitorServiceClient;
+    private final PlaceServiceClient placeServiceClient;
     private final PayServiceClient payServiceClient;
     private final FcmClient fcmClient;
     private final EventPublisher eventPublisher;
@@ -111,7 +113,10 @@ public class BriefingServiceImpl implements BriefingService {
                 monitorData.getDistanceM()
         );
 
-        String placeName = monitorData.getPlaceName() != null ? monitorData.getPlaceName() : request.getPlaceId();
+        String placeName = placeServiceClient.getPlaceName(request.getPlaceId());
+        if (placeName == null) {
+            placeName = request.getPlaceId();
+        }
         Briefing briefing = Briefing.create(briefingId, request.getUserId(), request.getScheduleItemId(),
                 request.getPlaceId(), placeName, type, request.getDepartureTime(),
                 idempotencyKey, briefingText.getText(), statusLevel, content, riskItems);

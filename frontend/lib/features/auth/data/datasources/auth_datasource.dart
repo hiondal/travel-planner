@@ -51,6 +51,34 @@ class AuthDataSource {
     );
   }
 
+  /// POST /test/login
+  /// dev 환경 전용 토큰 발급 (TestAuthController @Profile("dev"))
+  /// 실제 OAuth 없이 userId만으로 JWT 발급
+  /// 주의: dev 환경에서만 사용, staging/prod 불가
+  /// TestAuthController 응답 포맷: {accessToken, refreshToken, userId, tier} (camelCase, flat)
+  Future<AuthTokenResponse> testLogin(String userId) async {
+    final response = await dio.post<Map<String, dynamic>>(
+      '/test/login',
+      data: {'userId': userId},
+    );
+    final data = response.data!;
+    // TestAuthController의 flat 응답을 AuthTokenResponse 형식으로 변환
+    return AuthTokenResponse(
+      accessToken: data['accessToken'] as String,
+      refreshToken: data['refreshToken'] as String,
+      userProfile: UserProfile(
+        userId: data['userId'] as String,
+        nickname: data['userId'] as String,
+        tier: data['tier'] as String,
+        isNewUser: false,
+      ),
+    );
+  }
+
+  /// POST /auth/social-login
+  /// Google OAuth 인증 코드 → JWT 발급
+  /// 주의: provider는 'google'만 지원 (Apple 미구현)
+
   /// POST /users/consent
   /// 사용자 위치정보/Push 동의 저장
   /// 주의: 백엔드에 /auth/me 엔드포인트 없음

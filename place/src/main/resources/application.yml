@@ -60,6 +60,18 @@ springdoc:
 
 logging:
   level:
-    com.travelplanner.place: ${LOG_LEVEL:INFO}
+    root: ${LOG_LEVEL_ROOT:INFO}
+    com.travelplanner.place: ${LOG_LEVEL_APP:INFO}
     org.springframework.security: WARN
     org.hibernate.SQL: ${LOG_LEVEL_SQL:INFO}
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss} - %msg%n"
+    file: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"
+  file:
+    name: ${LOG_FILE_PATH:logs/place.log}
+  logback:
+    rollingpolicy:
+      file-name-pattern: ${LOG_ROLLING_FILE_PATTERN:logs/place.%d{yyyy-MM-dd}.%i.log}
+      max-file-size: ${LOG_MAX_FILE_SIZE:100MB}
+      max-history: ${LOG_MAX_HISTORY:30}
+      total-size-cap: ${LOG_TOTAL_SIZE_CAP:1GB}

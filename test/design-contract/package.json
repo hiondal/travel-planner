@@ -1,0 +1,27 @@
+{
+  "name": "design-contract-tests",
+  "version": "1.0.0",
+  "description": "Design contract tests generated from PlantUML sequence diagrams and OpenAPI specs",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "jest --verbose",
+    "test:auth": "jest --verbose auth/",
+    "test:schd": "jest --verbose schd/",
+    "test:plce": "jest --verbose plce/",
+    "test:mntr": "jest --verbose mntr/",
+    "test:brif": "jest --verbose brif/",
+    "test:altn": "jest --verbose altn/",
+    "test:pay": "jest --verbose pay/",
+    "test:integration": "jest --verbose integration/"
+  },
+  "devDependencies": {
+    "@types/jest": "^29.5.0",
+    "@types/node": "^20.11.0",
+    "@types/supertest": "^6.0.0",
+    "jest": "^29.7.0",
+    "supertest": "^6.3.0",
+    "ts-jest": "^29.1.0",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.4.0"
+  }
+}

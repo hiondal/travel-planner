@@ -4,6 +4,7 @@ import com.travelplanner.briefing.client.EventPublisher;
 import com.travelplanner.briefing.client.FcmClient;
 import com.travelplanner.briefing.client.MonitorServiceClient;
 import com.travelplanner.briefing.client.PayServiceClient;
+import com.travelplanner.briefing.client.PlaceServiceClient;
 import com.travelplanner.briefing.domain.*;
 import com.travelplanner.briefing.dto.internal.GenerateBriefingResult;
 import com.travelplanner.briefing.dto.internal.MonitorData;
@@ -60,6 +61,9 @@ class BriefingServiceImplTest {
     private PayServiceClient payServiceClient;
 
     @Mock
+    private PlaceServiceClient placeServiceClient;
+
+    @Mock
     private FcmClient fcmClient;
 
     @Mock
@@ -100,6 +104,7 @@ class BriefingServiceImplTest {
             MonitorData monitorData = createMonitorData("SAFE");
             given(monitorServiceClient.getLatestStatus(anyString())).willReturn(monitorData);
             given(briefingTextGenerator.generate(any())).willReturn(new BriefingText("현재까지 모든 항목 정상입니다. 예정대로 출발하세요."));
+            given(placeServiceClient.getPlaceName(anyString())).willReturn("테스트 장소");
             given(briefingRepository.save(any())).willAnswer(inv -> inv.getArgument(0));
             given(briefingLogRepository.save(any())).willAnswer(inv -> inv.getArgument(0));
 
@@ -176,6 +181,7 @@ class BriefingServiceImplTest {
             monitorData.setCongestion("혼잡");
             given(monitorServiceClient.getLatestStatus(anyString())).willReturn(monitorData);
             given(briefingTextGenerator.generate(any())).willReturn(new BriefingText("혼잡도이(가) 감지되었습니다. 대안을 확인해보세요."));
+            given(placeServiceClient.getPlaceName(anyString())).willReturn("테스트 장소");
             given(briefingRepository.save(any())).willAnswer(inv -> inv.getArgument(0));
             given(briefingLogRepository.save(any())).willAnswer(inv -> inv.getArgument(0));
 

@@ -34,6 +34,7 @@ class ApplyAlternativeNotifier extends _$ApplyAlternativeNotifier {
     required String alternativeId,
     required String tripId,
     required String scheduleItemId,
+    required String originalPlaceId,
   }) async {
     state = const AsyncValue.loading();
     final result = await AsyncValue.guard(() {
@@ -41,6 +42,7 @@ class ApplyAlternativeNotifier extends _$ApplyAlternativeNotifier {
             alternativeId: alternativeId,
             tripId: tripId,
             scheduleItemId: scheduleItemId,
+            originalPlaceId: originalPlaceId,
           );
     });
     state = result;

@@ -17,6 +17,7 @@ import org.springframework.context.annotation.Import;
 import org.springframework.test.context.TestPropertySource;
 import org.springframework.http.MediaType;
 import org.springframework.security.test.context.support.WithMockUser;
+import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.test.web.servlet.MockMvc;
 
 import java.time.LocalDateTime;
@@ -54,6 +55,9 @@ class MntrControllerTest {
 
     @MockBean
     private DataCollectionService dataCollectionService;
+
+    @MockBean
+    private RedisTemplate<String, String> mntrRedisTemplate;
 
     private static final String PLACE_ID = "place_abc123";
 

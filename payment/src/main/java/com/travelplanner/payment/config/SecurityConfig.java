@@ -42,6 +42,8 @@ public class SecurityConfig {
             .authorizeHttpRequests(auth -> auth
                 // 구독 플랜 목록은 공개 엔드포인트
                 .requestMatchers(HttpMethod.GET, "/api/v1/subscriptions/plans").permitAll()
+                // 구독 상태 조회 — 내부 서비스 간 호출 허용
+                .requestMatchers(HttpMethod.GET, "/api/v1/subscriptions/status").permitAll()
                 // Swagger / Actuator
                 .requestMatchers("/swagger-ui/**", "/swagger-ui.html",
                     "/v3/api-docs/**", "/api-docs/**").permitAll()

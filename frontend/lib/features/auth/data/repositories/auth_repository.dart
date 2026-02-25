@@ -47,6 +47,22 @@ class AuthRepository {
     }
   }
 
+  /// dev 환경 전용 테스트 로그인
+  /// POST /test/login — TestAuthController (@Profile("dev"))
+  /// 실제 OAuth 없이 userId만으로 JWT 발급
+  Future<UserProfile> testLogin(String userId) async {
+    try {
+      final response = await dataSource.testLogin(userId);
+      await Future.wait([
+        secureStorage.saveAccessToken(response.accessToken),
+        secureStorage.saveRefreshToken(response.refreshToken),
+      ]);
+      return response.userProfile;
+    } on ApiException {
+      rethrow;
+    }
+  }
+
   /// 로그아웃
   /// 서버 토큰 폐기 후 로컬 토큰 삭제
   Future<void> logout() async {
